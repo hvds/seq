@@ -6,11 +6,14 @@
 #include <string.h>
 
 #define DEBUG_CMAX 0
-
 #define MAXN 16
+#define MAX_ULONG 0xfffffffful
 
 /* global */
 mpz_t total, pmax;
+
+/* storage for count_* */
+mpz_t tz;
 
 /* variables for calc_max() */
 mpz_t chigh, clow, t1, t2;
@@ -28,6 +31,10 @@ A118085_r_varstack_t va[MAXN];
 unsigned long small_factor[PLIM];
 unsigned long prime[PLIM];	/* overkill */
 int pz = 0;
+
+unsigned long *divisors = (unsigned long *)NULL;
+int zdivisors = 0;
+int ndivisors;
 
 #define DEBUG_LOOP 1000000
 int debug_counter = DEBUG_LOOP;
@@ -70,7 +77,7 @@ void initp(void) {
 	
 void initz(void) {
 	int i;
-	mpz_init(total);
+	mpz_init(total); mpz_init(tz);
 	mpz_init(chigh); mpz_init(clow); mpz_init(t1); mpz_init(t2);
 	mpz_init(d); mpz_init(tempz); mpz_init(cur); mpz_init(cmax);
 	mpz_init(g); mpz_init(p2); mpz_init(q2); mpz_init(minf);
@@ -84,7 +91,7 @@ void initz(void) {
 
 void cleanz(void) {
 	int i;
-	mpz_clear(total);
+	mpz_clear(total); mpz_clear(tz);
 	mpz_clear(chigh); mpz_clear(clow); mpz_clear(t1); mpz_clear(t2);
 	mpz_clear(d); mpz_clear(tempz); mpz_clear(cur); mpz_clear(cmax);
 	mpz_clear(g); mpz_clear(p2); mpz_clear(q2); mpz_clear(minf);
@@ -96,71 +103,233 @@ void cleanz(void) {
 	}
 }
 
-int tau(mpz_t n) {
-	int k = 1, pi = 0, pow;
-	unsigned long un;
-	if (!mpz_fits_ulong_p(n)) {
-		while (1) {
-			if (pi == pz) {
-				if (mpz_cmp(n, pmax) < 0) {
-					pow = 2;
-					goto tau_final;
-				}
-				gmp_fprintf(stderr, "tau(%Zdz) out of range\n", n);
-				exit(1);
+/*
+  find the next prime power prime[pi]^k dividing *n0, pi >= *pi0
+  returns k, and sets *pi0 = pi, *n0 = *n0 / prime[pi]^k
+  if n is a prime > PLIM, returns 1 and sets *pi0 = -1, n = prime
+*/
+int nextpp_i(unsigned long *n0, int *pi0) {
+	int pi = *pi0, k;
+	unsigned long n = *n0;
+	while (pi < pz) {
+		if ((n % prime[pi]) == 0) {
+			k = 1;
+			n /= prime[pi];
+			while ((n % prime[pi]) == 0) {
+				++k;
+				n /= prime[pi];
 			}
-			if (mpz_divisible_ui_p(n, prime[pi])) {
-				pow = 2;
-				mpz_divexact_ui(n, n, prime[pi]);
-				while (mpz_divisible_ui_p(n, prime[pi])) {
-					++pow;
-					mpz_divexact_ui(n, n, prime[pi]);
-				}
-				k *= pow;
-				if (mpz_fits_ulong_p(n)) {
-					++pi;
-					break;
-				}
-			}
-			++pi;
-		}
-	}
-	un = mpz_get_ui(n);
-	while (un > PLIM) {
-		if (pi == pz) {
-			/* PLIM >= 2^16 guarantees un is prime */
-			pow = 2;
-			goto tau_final;
-		}
-		if ((un % prime[pi]) == 0) {
-			pow = 2;
-			un /= prime[pi];
-			while ((un % prime[pi]) == 0) {
-				++pow;
-				un /= prime[pi];
-			}
-			k *= pow;
-		}
-		if (prime[pi] * prime[pi] > un) {
-			if (un > 1) k *= 2;
+			*pi0 = pi;
+			*n0 = n;
 			return k;
 		}
 		++pi;
 	}
-	pi = 0;
+	/* assert PLIM * PLIM > MAX_ULONG */
+	*pi0 = -1;
+	return 1;
+}
+
+/*
+  find the next prime power prime[pi]^k dividing n, pi >= *pi0
+  returns k, and sets *pi0 = pi, n = n / prime[pi]^k
+  if n is a prime > PLIM, returns 1 and sets *pi0 = -1, n = prime
+*/
+int nextpp_z(mpz_t n, int *pi0) {
+	int pi = *pi0, k;
+	while (pi < pz) {
+		if (mpz_divisible_ui_p(n, prime[pi])) {
+			k = 1;
+			mpz_divexact_ui(n, n, prime[pi]);
+			while (mpz_divisible_ui_p(n, prime[pi])) {
+				++k;
+				mpz_divexact_ui(n, n, prime[pi]);
+			}
+			*pi0 = pi;
+			return k;
+		}
+		++pi;
+	}
+	if (mpz_cmp(n, pmax) < 0) {
+		*pi0 = -1;
+		return 1;
+	}
+	gmp_fprintf(stderr, "nextpp_z(%Zd) out of range\n", n);
+}
+
+void resize_divisors(int size) {
+	divisors = (unsigned long *)realloc((void *)divisors, size * sizeof(unsigned long));
+	zdivisors = size;
+}
+
+void init_divisors(void) {
+	if (!divisors) {
+		resize_divisors(100);
+	}
+	divisors[0] = 1;
+	ndivisors = 1;
+}
+
+/*
+  combine current list of divisors with prime powers (p^0 .. p^k)
+  ignores multiples that exceed maxf
+*/
+void append_divisors_pp(int k, unsigned long p, unsigned long maxf) {
+	int i = 0, x, y;
+	int maxd = ndivisors * (k + 1);
+	unsigned long maxn = maxf / p;
+	int divc = ndivisors;
+	if (zdivisors < maxd) resize_divisors(maxd * 2);
+	for (x = 0; x < k; ++x) {
+		for (y = divc; y > 0; --y) {
+			if (divisors[i] <= maxn) {
+				divisors[ndivisors++] = divisors[i] * p;
+			} else {
+				--divc;
+			}
+			++i;
+		}
+	}
+}
+
+/*
+  combine current list of divisors with all divisors of n
+  ignores multiples that exceed maxf
+*/
+void append_divisors(mpz_t n, unsigned long maxf) {
+	int k, pi = 0, lastp = 0;
+	unsigned long un;
+	while (!mpz_fits_ulong_p(n)) {
+		k = nextpp_z(n, &pi);
+		if (pi < 0) return;	/* the remaining prime is already > MAX_ULONG */
+		append_divisors_pp(k, prime[pi], maxf);
+		++pi;
+	}
+	un = mpz_get_ui(n);
+	while (un > PLIM) {
+		k = nextpp_i(&un, &pi);
+		if (pi < 0) {
+			append_divisors_pp(k, un, maxf);
+			return;
+		}
+		append_divisors_pp(k, prime[pi], maxf);
+		++pi;
+	}
+	k = 0;
+	while (un > 1) {
+		if (lastp == small_factor[un]) {
+			++k;
+		} else {
+			if (k) append_divisors_pp(k, lastp, maxf);
+			k = 1;
+			lastp = small_factor[un];
+		}
+		un /= lastp;
+	}
+	if (k) append_divisors_pp(k, lastp, maxf);
+}
+
+/*
+  count the number of divisors of n
+  modifies n
+*/
+int tau(mpz_t n) {
+	int k = 1, pi = 0, lastp = 0, pow;
+	unsigned long un;
+	while (!mpz_fits_ulong_p(n)) {
+		k *= 1 + nextpp_z(n, &pi);
+		if (pi < 0) return k;
+		++pi;
+	}
+	un = mpz_get_ui(n);
+	while (un > PLIM) {
+		k *= 1 + nextpp_i(&un, &pi);
+		if (pi < 0) return k;
+	}
 	pow = 1;
 	while (un > 1) {
-		if (pi == small_factor[un]) {
+		if (lastp == small_factor[un]) {
 			++pow;
 		} else {
 			k *= pow;
 			pow = 2;
-			pi = small_factor[un];
+			lastp = small_factor[un];
 		}
-		un /= pi;
+		un /= lastp;
 	}
-  tau_final:
 	return k * pow;
+}
+
+/*
+	add to total the number of divisors <= sqrt(pq)
+*/
+void count_all(mpz_t p, mpz_t q) {
+	mpz_set_ui(tz, tau(p));
+	mpz_mul_ui(tz, tz, tau(q));
+	mpz_add_ui(tz, tz, 1);
+	mpz_fdiv_q_2exp(tz, tz, 1);
+	mpz_add(total, total, tz);
+}
+
+/*
+	add to total the number of divisors <= sqrt(pq) that are == -q (mod d)
+*/
+void count_mod(mpz_t p, mpz_t q, mpz_t d) {
+	int c = 0, i;
+	unsigned long maxf;
+	mpz_mul(tz, p, q);
+	mpz_sqrt(tz, tz);
+	maxf = mpz_fits_ulong_p(d) ? mpz_get_ui(d) : MAX_ULONG;
+	init_divisors();
+	append_divisors(p, maxf);
+	mpz_set(tz, q);
+	append_divisors(tz, maxf);
+	for (i = 0; i < ndivisors; ++i) {
+		mpz_add_ui(tz, q, divisors[i]);
+		mpz_fdiv_r(tz, tz, d);
+		if (mpz_cmp_ui(tz, 0) == 0) ++c;
+	}
+	if (c) mpz_add_ui(total, total, c);
+}
+
+/*
+	add to total the number of divisors iminf <= d <= sqrt(pq) that are == -q (mod d)
+*/
+void count_min_mod(mpz_t p, mpz_t q, mpz_t d, unsigned long minf) {
+	int c = 0, i;
+	unsigned long maxf;
+	mpz_mul(tz, p, q);
+	mpz_sqrt(tz, tz);
+	maxf = mpz_fits_ulong_p(tz) ? mpz_get_ui(tz) : MAX_ULONG;
+	init_divisors();
+	append_divisors(p, maxf);
+	mpz_set(tz, q);
+	append_divisors(tz, maxf);
+	for (i = 0; i < ndivisors; ++i) {
+		if (divisors[i] < minf) continue;
+		mpz_add_ui(tz, q, divisors[i]);
+		mpz_fdiv_r(tz, tz, d);
+		if (mpz_cmp_ui(tz, 0) == 0) ++c;
+	}
+	if (c) mpz_add_ui(total, total, c);
+}
+
+/*
+	add to total the number of divisors iminf <= d <= sqrt(pq)
+*/
+void count_min(mpz_t p, mpz_t q, mpz_t d, unsigned long minf) {
+	int c = 0, i;
+	unsigned long maxf;
+	mpz_mul(tz, p, q);
+	mpz_sqrt(tz, tz);
+	maxf = mpz_fits_ulong_p(tz) ? mpz_get_ui(tz) : MAX_ULONG;
+	init_divisors();
+	append_divisors(p, maxf);
+	append_divisors(q, maxf);
+	for (i = 0; i < ndivisors; ++i) {
+		if (divisors[i] >= minf) ++c;
+	}
+	if (c) mpz_add_ui(total, total, c);
 }
 
 void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
@@ -233,6 +402,8 @@ void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
 }
 
 void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
+	int i;
+	unsigned long iminf, imaxf;
 	  /* p, q /= gcd(p, q) */
 	mpz_gcd(g, p, q);
 	if (mpz_cmp_ui(g, 1) > 0) {
@@ -288,33 +459,18 @@ void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 /* gmp_printf("%Zd/%Zd (%Zd) f>%Zd\n", p2, q2, d, minf); continue; */
 		if (mpz_cmp_ui(minf, 1) <= 0) {
 			if (mpz_cmp_ui(d, 1) > 0) {
-/* fmax = (1 + #p2 = divisors(p2)) \ 2;
-/* q2 = (-q2) % d;
-/* total += sum(i = 1, fmax, q2 == p2[i] % d & 1);
- */
+				count_mod(p2, q2, d);
 			} else {
-				  /* total += ceil( || f: f | p.q || / 2 ) */
-				mpz_set_ui(d, tau(p2));
-				mpz_mul_ui(d, d, tau(q2));
-				mpz_add_ui(d, d, 1);
-				mpz_fdiv_q_2exp(d, d, 1);
-				mpz_add(total, total, d);
+				count_all(p2, q2);
 			}
 		} else {
-/* fmax = (1 + #p2 = divisors(p2)) \ 2;
-/* vmin = 1;
-/* vmax = min(minf, fmax);
-/* while (vmin < vmax,
-/*   vmed = (vmin + vmax) \ 2;
-/*   if (p2[vmed] < minf, vmin = vmed + 1, vmax = vmed);
-/* );
-/* if (d > 1, /* else d==1 since we know d>0 */
-/*   q2 = (-q2) % d;
-/*   sum(i = vmin, fmax, q2 == p2[i] % d & 1);
-/* , 
-/*   fmax + 1 - vmin;
-/* );
- */
+			if (!mpz_fits_ulong_p(minf)) continue;
+			iminf = mpz_get_ui(minf);
+			if (mpz_cmp_ui(d, 1) > 0) {
+				count_min_mod(p2, q2, d, iminf);
+			} else {
+				count_min(p2, q2, d, iminf);
+			}
 		}
 	}
 }
@@ -384,5 +540,8 @@ int main(int argc, char** argv) {
   parameters a_1, a_2, ... and counts the number of distinct n-element
   multisets satisfying the above property, with any specified a_i fixed,
   and with all new a_i greater than or equal to the largest specified a_i.
+
+count A118085(n=7, p=2, q=1, cmin=0)
+result: 6910688 (2.38)  
 
 */
