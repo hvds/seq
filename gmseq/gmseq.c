@@ -9,6 +9,8 @@
 #define MAXN 16
 #define MAX_ULONG 0xfffffffful
 
+int opt_v = 0;	/* print info on matching multisets if set */
+
 /* global */
 mpz_t total, pmax;
 
@@ -26,6 +28,7 @@ typedef struct A118085_r_varstack {
 	mpz_t cur, cmax, p2, q2;
 } A118085_r_varstack_t;
 A118085_r_varstack_t va[MAXN];
+int van;
 
 #define PLIM 100000
 unsigned long small_factor[PLIM];
@@ -47,9 +50,20 @@ void debug_clear(void) {
 	}
 }
 
+int print_set(int n) {
+	int i = 0, size = 0;
+	for (i = van; i > n; --i) {
+		if (i < van) size += printf(" ");
+		size += gmp_printf("%Zd", va[i - 1].cur);
+	}
+	return size;
+}
+
 void debug_print(int n, mpz_t p, mpz_t q, mpz_t cmax, mpz_t cur) {
+	int i;
 	debug_clear();
-	debug_size = gmp_printf("%d %Zd %Zd %Zd %Zd ", n, p, q, cmax, cur);
+	debug_size += print_set(n);
+	debug_size += gmp_printf(" %Zd: %d %Zd %Zd %Zd ", cur, n, p, q, cmax);
 }
 
 void initp(void) {
@@ -261,7 +275,47 @@ int tau(mpz_t n) {
 }
 
 /*
+  count the number of divisors of n, and accumulate actual divisors <= maxf
+  modifies n
+*/
+int tau_max(mpz_t n, unsigned long maxf) {
+	int k = 1, pi = 0, lastp = 0, pow;
+	unsigned long un;
+	while (!mpz_fits_ulong_p(n)) {
+		pow = nextpp_z(n, &pi);
+		k *= pow + 1;
+		if (pi < 0) return k;
+		append_divisors_pp(pow, prime[pi], maxf);
+		++pi;
+	}
+	un = mpz_get_ui(n);
+	while (un > PLIM) {
+		pow = nextpp_i(&un, &pi);
+		k *= pow + 1;
+		append_divisors_pp(pow, pi < 0 ? un : prime[pi], maxf);
+		if (pi < 0) return k;
+	}
+	pow = 0;
+	while (un > 1) {
+		if (lastp == small_factor[un]) {
+			++pow;
+		} else {
+			if (pow) {
+				k *= pow + 1;
+				append_divisors_pp(pow, lastp, maxf);
+			}
+			pow = 1;
+			lastp = small_factor[un];
+		}
+		un /= lastp;
+	}
+	if (pow) append_divisors_pp(pow, lastp, maxf);
+	return k * (pow + 1);
+}
+
+/*
 	add to total the number of divisors <= sqrt(pq)
+	== floor((tau(p) * tau(q) + 1) / 2)
 */
 void count_all(mpz_t p, mpz_t q) {
 	mpz_set_ui(tz, tau(p));
@@ -269,17 +323,58 @@ void count_all(mpz_t p, mpz_t q) {
 	mpz_add_ui(tz, tz, 1);
 	mpz_fdiv_q_2exp(tz, tz, 1);
 	mpz_add(total, total, tz);
+	if (opt_v) {
+		debug_clear();
+		print_set(2);
+		gmp_printf(": %Zd (A)\n", tz);
+	}
+}
+
+/*
+	add to total the number of divisors minf <= d <= sqrt(pq)
+	== count_all(p, q) - || d: d | pq, d < minf ||
+*/
+void count_min(mpz_t p, mpz_t q, mpz_t d, unsigned long minf) {
+	init_divisors();
+	mpz_set_ui(tz, tau_max(p, minf - 1));
+	mpz_mul_ui(tz, tz, tau_max(q, minf - 1));
+	mpz_add_ui(tz, tz, 1);
+	mpz_fdiv_q_2exp(tz, tz, 1);
+	mpz_sub_ui(tz, tz, ndivisors);
+	mpz_add(total, total, tz);
+	if (opt_v && mpz_cmp_ui(tz, 0) > 0) {
+		debug_clear();
+		print_set(2);
+		gmp_printf(": %Zd (B >= %lu)\n", tz, minf);
+	}
 }
 
 /*
 	add to total the number of divisors <= sqrt(pq) that are == -q (mod d)
+
+	for small d, it may be most efficient to use append_divisors_mod
+	via append_divisors_pp_mod:
+		for (i = 0; i < mod; ++i) {
+			if (!amod[i]) continue;
+			vmod = i;
+			for (j = 0; j <= pow; ++j) {
+				newamod[vmod] += amod[i];
+				vmod = (vmod * p) % mod;
+			}
+		}
+		amod = newmod;
+	init_divisors_mod(mod);
+	append_divisors_mod(p, mod);
+	mpz_set(tz, q);
+	append_divisors_mod(tz, mod);
+	total += ceil(amod[(-q) % mod] / 2);
 */
 void count_mod(mpz_t p, mpz_t q, mpz_t d) {
 	int c = 0, i;
 	unsigned long maxf;
 	mpz_mul(tz, p, q);
 	mpz_sqrt(tz, tz);
-	maxf = mpz_fits_ulong_p(d) ? mpz_get_ui(d) : MAX_ULONG;
+	maxf = mpz_fits_ulong_p(tz) ? mpz_get_ui(tz) : MAX_ULONG;
 	init_divisors();
 	append_divisors(p, maxf);
 	mpz_set(tz, q);
@@ -289,11 +384,18 @@ void count_mod(mpz_t p, mpz_t q, mpz_t d) {
 		mpz_fdiv_r(tz, tz, d);
 		if (mpz_cmp_ui(tz, 0) == 0) ++c;
 	}
-	if (c) mpz_add_ui(total, total, c);
+	if (c) {
+		if (opt_v) {
+			debug_clear();
+			print_set(2);
+			gmp_printf(": %d (C %Zd%%%Zd)\n", c, q, d);
+		}
+		mpz_add_ui(total, total, c);
+	}
 }
 
 /*
-	add to total the number of divisors iminf <= d <= sqrt(pq) that are == -q (mod d)
+	add to total the number of divisors minf <= d <= sqrt(pq) that are == -q (mod d)
 */
 void count_min_mod(mpz_t p, mpz_t q, mpz_t d, unsigned long minf) {
 	int c = 0, i;
@@ -311,25 +413,14 @@ void count_min_mod(mpz_t p, mpz_t q, mpz_t d, unsigned long minf) {
 		mpz_fdiv_r(tz, tz, d);
 		if (mpz_cmp_ui(tz, 0) == 0) ++c;
 	}
-	if (c) mpz_add_ui(total, total, c);
-}
-
-/*
-	add to total the number of divisors iminf <= d <= sqrt(pq)
-*/
-void count_min(mpz_t p, mpz_t q, mpz_t d, unsigned long minf) {
-	int c = 0, i;
-	unsigned long maxf;
-	mpz_mul(tz, p, q);
-	mpz_sqrt(tz, tz);
-	maxf = mpz_fits_ulong_p(tz) ? mpz_get_ui(tz) : MAX_ULONG;
-	init_divisors();
-	append_divisors(p, maxf);
-	append_divisors(q, maxf);
-	for (i = 0; i < ndivisors; ++i) {
-		if (divisors[i] >= minf) ++c;
+	if (c) {
+		if (opt_v) {
+			debug_clear();
+			print_set(2);
+			gmp_printf(": %d (D %Zd%%%Zd > %lu)\n", c, q, d, minf);
+		}
+		mpz_add_ui(total, total, c);
 	}
-	if (c) mpz_add_ui(total, total, c);
 }
 
 void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
@@ -425,7 +516,7 @@ void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 #endif
 
 	if (n > 3) {
-		A118085_r_varstack_t *v = &va[n];
+		A118085_r_varstack_t *v = &va[n - 1];
 		mpz_set(v->cur, cur);
 		mpz_set(v->cmax, cmax);
 		for (; mpz_cmp(v->cur, v->cmax) <= 0; mpz_add_ui(v->cur, v->cur, 1)) {
@@ -441,6 +532,7 @@ void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 		return;
 	}
 	for (; mpz_cmp(cur, cmax) <= 0; mpz_add_ui(cur, cur, 1)) {
+		if (opt_v) mpz_set(va[2].cur, cur);
 		if (!--debug_counter) {
 			debug_counter = DEBUG_LOOP;
 			debug_print(n, p, q, cmax, cur);
@@ -476,16 +568,32 @@ void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 }
 
 int main(int argc, char** argv) {
-	int i, n;
+	int i, n, arg = 1;
 	long clock_tick;
 	mpz_t p, q, cur, tempz;
 	clock_t t0;
 
-	if (argc < 2) {
-		fprintf(stderr, "Usage: gmseq <n> [ <a_1> <a_2> ... ]\n");
+	while (arg < argc && argv[arg][0] == '-') {
+		if (strcmp(argv[arg], "-v") == 0) {
+			opt_v = 1 - opt_v;
+		} else if (strcmp(argv[arg], "--") == 0) {
+			++arg;
+			break;
+		} else if (strcmp(argv[arg], "-?") == 0 || strcmp(argv[arg], "-h") == 0) {
+			printf("Usage: %s [ -v ] <n> [ <a_1> <a_2> ... ]\n", argv[0]);
+			printf("Calculates A118085(n), the number of n-element multisets with prod{1+1/a_i}=2\nAny specified a_i are fixed in the ordered list of elements\nIf -v is specified, information on matching multisets is also printed\n");
+			exit(0);
+		} else {
+			fprintf(stderr, "Unknown option '%s'\n", argv[arg]);
+			exit(-1);
+		}
+		++arg;
+	}
+	if (!(arg < argc)) {
+		fprintf(stderr, "Usage: %s [ -v ] <n> [ <a_1> <a_2> ... ]\n", argv[0]);
 		exit(-1);
 	}
-	n = atoi(argv[1]);
+	n = atoi(argv[arg++]);
 	if (n < 1 || n > MAXN) {
 		fprintf(stderr, "Error: 1 <= n <= %d required (got n = %d)\n", MAXN, n);
 		exit(-1);
@@ -500,20 +608,23 @@ int main(int argc, char** argv) {
 	mpz_init_set_ui(q, 1);
 	mpz_init_set_ui(cur, 0);
 	mpz_init(tempz);
-	for (i = 2; i < argc; ++i) {
-		if (mpz_set_str(tempz, argv[i], 10) != 0) {
-			fprintf(stderr, "Error parsing argument '%s'\n", argv[i]);
+	van = n;
+	while (arg < argc) {
+		if (mpz_set_str(tempz, argv[arg], 10) != 0) {
+			fprintf(stderr, "Error parsing argument '%s'\n", argv[arg]);
 			exit(-1);
 		}
 		if (mpz_cmp(cur, tempz) > 0) {
-			fprintf(stderr, "Argument '%s' is smaller than a previous value\n", argv[i]);
+			fprintf(stderr, "Argument '%s' is smaller than a previous value\n", argv[arg]);
 			exit(-1);
 		}
 		mpz_set(cur, tempz);
 		mpz_mul(p, p, cur);
 		mpz_add_ui(tempz, tempz, 1);
 		mpz_mul(q, q, tempz);
+		mpz_set(va[n - 1].cur, cur);
 		--n;
+		++arg;
 	}
 	gmp_fprintf(stderr, "count A118085(n=%d, p=%Zd, q=%Zd, cmin=%Zd)\n",
 			n, p, q, cur);
@@ -542,6 +653,6 @@ int main(int argc, char** argv) {
   and with all new a_i greater than or equal to the largest specified a_i.
 
 count A118085(n=7, p=2, q=1, cmin=0)
-result: 6910688 (2.38)  
+result: 7625453 (72.82) 
 
 */
