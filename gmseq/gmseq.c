@@ -9,7 +9,8 @@
 #define MAXN 16
 #define MAX_ULONG 0xfffffffful
 
-int opt_v = 0;	/* print info on matching multisets if set */
+int opt_v = 0;	/* (verbose) print info on matching multisets if set */
+int opt_q = 0;	/* (quiet) don't print progress diagnostics */
 
 /* global */
 mpz_t total, pmax;
@@ -45,7 +46,7 @@ int ndivisors;
 unsigned long *udivisors = (unsigned long *)NULL;
 int zudivisors = 0;
 
-#define SMALLMOD 32
+#define SMALLMOD 49
 unsigned long modlist_0[SMALLMOD];
 unsigned long modlist_1[SMALLMOD];
 unsigned long *modlist = modlist_0;
@@ -212,21 +213,25 @@ void init_udivisors(void) {
   ignores multiples that exceed maxf
 */
 void append_zdivisors_pp(int k, unsigned long p, mpz_t maxf) {
-	int i = 0, x, y;
+	int x, y;
 	int maxd = ndivisors * (k + 1);
 	int divc = ndivisors;
+	mpz_t *dps, *dpd;
 	mpz_fdiv_q_ui(maxn, maxf, p);
 	if (zzdivisors < maxd) resize_zdivisors(maxd * 2);
+	dps = zdivisors;
+	dpd = &zdivisors[ndivisors];
 	for (x = 0; x < k; ++x) {
 		for (y = divc; y > 0; --y) {
-			if (mpz_cmp(maxn, zdivisors[i]) >= 0) {
-				mpz_mul_ui(zdivisors[ndivisors++], zdivisors[i], p);
+			if (mpz_cmp(maxn, *dps) >= 0) {
+				mpz_mul_ui(*dpd++, *dps, p);
 			} else {
 				--divc;
 			}
-			++i;
+			++dps;
 		}
 	}
+	ndivisors = dpd - zdivisors;
 }
 
 void append_udivisors_pp(int k, unsigned long p, unsigned long maxf) {
@@ -507,7 +512,6 @@ void count_all(mpz_t p, mpz_t q) {
 	mpz_fdiv_q_2exp(tz, tz, 1);
 	mpz_add(total, total, tz);
 	if (opt_v) {
-		debug_clear();
 		print_set(2);
 		gmp_printf(": %Zd (A)\n", tz);
 	}
@@ -534,7 +538,6 @@ void count_min(mpz_t p, mpz_t q, mpz_t d, mpz_t minf) {
 	mpz_sub_ui(tz, tz, ndivisors);
 	mpz_add(total, total, tz);
 	if (opt_v && mpz_cmp_ui(tz, 0) > 0) {
-		debug_clear();
 		print_set(2);
 		gmp_printf(": %Zd (B >= %Zd+1)\n", tz, minf);
 	}
@@ -591,7 +594,6 @@ void count_mod(mpz_t p, mpz_t q, mpz_t d) {
 	}
 	if (c) {
 		if (opt_v) {
-			debug_clear();
 			print_set(2);
 			gmp_printf(": %d (C %Zd%%%Zd)\n", c, q, d);
 		}
@@ -604,7 +606,7 @@ void count_mod(mpz_t p, mpz_t q, mpz_t d) {
 */
 void count_min_mod(mpz_t p, mpz_t q, mpz_t d, mpz_t minf) {
 	int c = 0, i;
-	unsigned long uminf, umaxf;
+	unsigned long uminf, umaxf, ud, qmod;
 	mpz_mul(cm_maxf, p, q);
 	mpz_sqrt(cm_maxf, cm_maxf);
 	mpz_set(tz, q);
@@ -615,10 +617,20 @@ void count_min_mod(mpz_t p, mpz_t q, mpz_t d, mpz_t minf) {
 		init_udivisors();
 		append_udivisors(p, umaxf);
 		append_udivisors(tz, umaxf);
-		for (i = 0; i < ndivisors; ++i) {
-			if (uminf > udivisors[i]) continue;
-			mpz_add_ui(tz, q, udivisors[i]);
-			if (mpz_divisible_p(tz, d)) ++c;
+		if (mpz_fits_ulong_p(d)) {
+			ud = mpz_get_ui(d);
+			mpz_neg(tz, q);
+			qmod = mpz_fdiv_ui(tz, ud);
+			for (i = 0; i < ndivisors; ++i) {
+				if (uminf > udivisors[i]) continue;
+				if (qmod == udivisors[i] % ud) ++c;
+			}
+		} else {
+			for (i = 0; i < ndivisors; ++i) {
+				if (uminf > udivisors[i]) continue;
+				mpz_add_ui(tz, q, udivisors[i]);
+				if (mpz_divisible_p(tz, d)) ++c;
+			}
 		}
 	} else {
 		init_zdivisors();
@@ -641,7 +653,6 @@ void count_min_mod(mpz_t p, mpz_t q, mpz_t d, mpz_t minf) {
 	}
 	if (c) {
 		if (opt_v) {
-			debug_clear();
 			print_set(2);
 			gmp_printf(": %d (D %Zd%%%Zd > %Zd)\n", c, q, d, minf);
 		}
@@ -744,7 +755,7 @@ void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 		mpz_set(v->cur, cur);
 		mpz_set(v->cmax, cmax);
 		for (; mpz_cmp(v->cur, v->cmax) <= 0; mpz_add_ui(v->cur, v->cur, 1)) {
-			if (!--debug_counter && !opt_v) {
+			if (!--debug_counter && !opt_q) {
 				debug_counter = DEBUG_LOOP;
 				debug_print(n, p, q, cmax, cur);
 			}
@@ -757,7 +768,7 @@ void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 	}
 	for (; mpz_cmp(cur, cmax) <= 0; mpz_add_ui(cur, cur, 1)) {
 		if (opt_v) mpz_set(va[2].cur, cur);
-		if (!--debug_counter && !opt_v) {
+		if (!--debug_counter && !opt_q) {
 			debug_counter = DEBUG_LOOP;
 			debug_print(n, p, q, cmax, cur);
 		}
@@ -798,12 +809,14 @@ int main(int argc, char** argv) {
 	while (arg < argc && argv[arg][0] == '-') {
 		if (strcmp(argv[arg], "-v") == 0) {
 			opt_v = 1 - opt_v;
+		} else if (strcmp(argv[arg], "-q") == 0) {
+			opt_q = 1 - opt_q;
 		} else if (strcmp(argv[arg], "--") == 0) {
 			++arg;
 			break;
 		} else if (strcmp(argv[arg], "-?") == 0 || strcmp(argv[arg], "-h") == 0) {
-			printf("Usage: %s [ -v ] <n> [ <a_1> <a_2> ... ]\n", argv[0]);
-			printf("Calculates A118085(n), the number of n-element multisets with prod{1+1/a_i}=2\nAny specified a_i are fixed in the ordered list of elements\nIf -v is specified, information on matching multisets is also printed\n");
+			printf("Usage: %s [ -q ] [ -v ] <n> [ <a_1> <a_2> ... ]\n", argv[0]);
+			printf("Calculates A118085(n), the number of n-element multisets with prod{1+1/a_i}=2\nAny specified a_i are fixed in the ordered list of elements\nIf -v is specified, information on matching multisets is also printed\nIf neither -v nor -q is specified, reports progress every %u iterations\n", DEBUG_LOOP);
 			exit(0);
 		} else {
 			fprintf(stderr, "Unknown option '%s'\n", argv[arg]);
@@ -811,6 +824,7 @@ int main(int argc, char** argv) {
 		}
 		++arg;
 	}
+	if (opt_v) opt_q = 1;
 	if (!(arg < argc)) {
 		fprintf(stderr, "Usage: %s [ -v ] <n> [ <a_1> <a_2> ... ]\n", argv[0]);
 		exit(-1);
@@ -820,7 +834,7 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "Error: 1 <= n <= %d required (got n = %d)\n", MAXN, n);
 		exit(-1);
 	}
-	if (!opt_v) {
+	if (!opt_q) {
 		if (setvbuf(stdout, (char*)NULL, _IONBF, (size_t)0)) {
 			fprintf(stderr, "setvbuf failed\n");
 			exit(-1);
@@ -876,50 +890,62 @@ int main(int argc, char** argv) {
   multisets satisfying the above property, with any specified a_i fixed,
   and with all new a_i greater than or equal to the largest specified a_i.
 
+  Timings marked 'v<n>:' are from version n/100 of the code.
+
 gmseq 3 - result: 5 (0.00)
 gmseq 4 - result: 43 (0.00)
 gmseq 5 - result: 876 (0.00)
-gmseq 6 - result: 49513 (0.06)
-gmseq 7 - result: 13005235 (171.21)
+gmseq 6 - result: 49513 (0.03)
+gmseq 7 - result: 13005235 (65.22)
 gmseq 8 - (est. 12000000)
 
 gmseq 8 11 - result: 0 (0.00)
 gmseq 8 10 - result: 0 (0.00)
 gmseq 8 9 - result: 9 (0.00)
-gmseq 8 8 - result: 130 (0.01)
-gmseq 8 7 - result: 1683 (0.03)
-gmseq 8 6 - result: 59606 (0.34)
-gmseq 8 5 - result: 1470772 (14.11)
+gmseq 8 8 - result: 130 (0.00)
+gmseq 8 7 - result: 1683 (0.02)
+gmseq 8 6 - result: 59606 (0.11)
+gmseq 8 5 - result: 1470772 (4.69)
 gmseq 8 4 - (est. 360000)
 gmseq 8 3 - (est. 1250000)
-gmseq 8 2 - (est. 10500000)
+gmseq 8 2 - (est. 1225000000)
 
 gmseq 8 4 14 - result: 0 (0.00)
 gmseq 8 4 13 - result: 0 (0.00)
 gmseq 8 4 12 - result: 5 (0.00)
 gmseq 8 4 11 - result: 17 (0.00)
 gmseq 8 4 10 - result: 345 (0.00)
-gmseq 8 4 9 - result: 1159 (0.03)
-gmseq 8 4 8 - result: 7169 (0.08)
-gmseq 8 4 7 - result: 105009 (0.43)
-gmseq 8 4 6 - result: 3881067 (560.24)
-gmseq 8 4 5 - result: 3250390 (15.14)
+gmseq 8 4 9 - result: 1159 (0.01)
+gmseq 8 4 8 - result: 7169 (0.03)
+gmseq 8 4 7 - result: 105009 (0.17)
+gmseq 8 4 6 - result: 3881067 (497.62) (v4:560.24)
+gmseq 8 4 5 - result: 3250390 (5.46)
 gmseq 8 4 4 - (est. 360000)
+[... 8 4 4 (23..4) ...]
+[gmseq 8 4 4 6 - result: 3549078 (19.64)]
+[gmseq 8 4 4 5 - result: 8013817 (56.96)]
+[gmseq 8 4 4 4 - (est. 360000)]
 
 gmseq 8 3 16 - result: 0 (0.00)
 gmseq 8 3 15 - result: 2 (0.00)
 gmseq 8 3 14 - result: 12 (0.00)
-gmseq 8 3 13 - result: 28 (0.01)
+gmseq 8 3 13 - result: 28 (0.00)
 gmseq 8 3 12 - result: 263 (0.00)
-gmseq 8 3 11 - result: 708 (0.03)
-gmseq 8 3 10 - result: 5616 (0.06)
-gmseq 8 3 9 - result: 29605 (0.23)
-gmseq 8 3 8 - result: 251077 (0.80)
-gmseq 8 3 7 - result: 3443209 (401.17)
-gmseq 8 3 6 - result: 18632445 (1504.26)
-gmseq 8 3 5 - result: 55759629 (3316.43)
-gmseq 8 3 4 - result: 159867712 (30100.49)
+gmseq 8 3 11 - result: 708 (0.01)
+gmseq 8 3 10 - result: 5616 (0.03)
+gmseq 8 3 9 - result: 29605 (0.10)
+gmseq 8 3 8 - result: 251077 (0.31)
+gmseq 8 3 7 - result: 3443209 (318.44) (v4:401.17)
+gmseq 8 3 6 - result: 18632445 (v5:1078.53) (v4:1504.26)
+gmseq 8 3 5 - result: 55759629 (v4:3316.43)
+gmseq 8 3 4 - result: 159867712 (v4:30100.49)
 gmseq 8 3 3 - (est. 1200000)
+[... 8 3 3 (50..9) ...]
+[gmseq 8 3 3 19 - result: 1613078 (11.64)]
+[gmseq 8 3 3 18 - result: 2718281 (16.08)]
+[gmseq 8 3 3 17 - result: 9038231 (110.58)]
+[gmseq 8 3 3 16 - result: 12260996 (221.82)]
+[gmseq 8 3 3 15 - result: 18280089 (v5:1066.00)]
 
 gmseq 8 2 23 - result: 0 (0.00)
 gmseq 8 2 22 - result: 0 (0.00)
@@ -927,19 +953,19 @@ gmseq 8 2 21 - result: 3 (0.00)
 gmseq 8 2 20 - result: 13 (0.00)
 gmseq 8 2 19 - result: 8 (0.00)
 gmseq 8 2 18 - result: 232 (0.01)
-gmseq 8 2 17 - result: 236 (0.05)
-gmseq 8 2 16 - result: 1201 (0.18)
-gmseq 8 2 15 - result: 7452 (0.21)
-gmseq 8 2 14 - result: 19715 (0.69)
-gmseq 8 2 13 - result: 71988 (1.47)
-gmseq 8 2 12 - result: 234759 (3.53)
-gmseq 8 2 11 - result: 907158 (7.83)
-gmseq 8 2 10 - result: 10998677 (3562.45)
-gmseq 8 2 9 - result: 18352365 (569.73)
-gmseq 8 2 8 - (est. 8400)
-gmseq 8 2 7 - (est. 34000)
-gmseq 8 2 6 - (est. 170000)
-gmseq 8 2 5 - (est. 1700000)
-gmseq 8 2 4 - (est. 8400000)
+gmseq 8 2 17 - result: 236 (0.03)
+gmseq 8 2 16 - result: 1201 (0.05)
+gmseq 8 2 15 - result: 7452 (0.06)
+gmseq 8 2 14 - result: 19715 (0.19)
+gmseq 8 2 13 - result: 71988 (0.39)
+gmseq 8 2 12 - result: 234759 (0.88)
+gmseq 8 2 11 - result: 907158 (2.83)
+gmseq 8 2 10 - result: 10998677 (v4:3562.45)
+gmseq 8 2 9 - result: 18352365 (319.19) (v4:569.73)
+gmseq 8 2 8 - (est. 100000)
+gmseq 8 2 7 - (est. 400000)
+gmseq 8 2 6 - (est. 2000000)
+gmseq 8 2 5 - (est. 20000000)
+gmseq 8 2 4 - (est. 100000000)
 
 */
