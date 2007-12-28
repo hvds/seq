@@ -45,6 +45,13 @@ int ndivisors;
 unsigned long *udivisors = (unsigned long *)NULL;
 int zudivisors = 0;
 
+#define SMALLMOD 32
+unsigned long modlist_0[SMALLMOD];
+unsigned long modlist_1[SMALLMOD];
+unsigned long *modlist = modlist_0;
+unsigned long *newmodlist = modlist_1;
+unsigned long modulus;
+
 #define DEBUG_LOOP 100000
 int debug_counter = DEBUG_LOOP;
 int debug_size = 0;
@@ -66,7 +73,6 @@ int print_set(int n) {
 }
 
 void debug_print(int n, mpz_t p, mpz_t q, mpz_t cmax, mpz_t cur) {
-	int i;
 	debug_clear();
 	debug_size += print_set(n);
 	debug_size += gmp_printf(" %Zd: %d %Zd %Zd %Zd ", cur, n, p, q, cmax);
@@ -80,7 +86,7 @@ void initp(void) {
 		small_factor[lastp] = lastp;
 		prime[pz++] = lastp;
 		for (i = lastp * lastp; i < PLIM; i += lastp) {
-			small_factor[i] || (small_factor[i] = lastp);
+			if (!small_factor[i]) small_factor[i] = lastp;
 		}
 		for (++lastp; small_factor[lastp]; ++lastp)
 			;
@@ -121,6 +127,7 @@ void cleanz(void) {
 		mpz_clear(va[i].p2);
 		mpz_clear(va[i].q2);
 	}
+	for (i = 0; i < zzdivisors; ++i) mpz_clear(zdivisors[i]);
 }
 
 /*
@@ -175,6 +182,7 @@ int nextpp_z(mpz_t n, int *pi0) {
 		return 1;
 	}
 	gmp_fprintf(stderr, "nextpp_z(%Zd) out of range\n", n);
+	exit(-1);
 }
 
 void resize_zdivisors(int size) {
@@ -222,21 +230,24 @@ void append_zdivisors_pp(int k, unsigned long p, mpz_t maxf) {
 }
 
 void append_udivisors_pp(int k, unsigned long p, unsigned long maxf) {
-	int i = 0, x, y;
+	int x, y;
 	int maxd = ndivisors * (k + 1);
 	int divc = ndivisors;
 	unsigned long umaxn = maxf / p;
+	unsigned long *dps, *dpd, f;
 	if (zudivisors < maxd) resize_udivisors(maxd * 2);
+	dps = udivisors;
+	dpd = &udivisors[ndivisors];
 	for (x = 0; x < k; ++x) {
 		for (y = divc; y > 0; --y) {
-			if (umaxn >= udivisors[i]) {
-				udivisors[ndivisors++] = udivisors[i] * p;
+			if (umaxn >= (f = *dps++)) {
+				*dpd++ = f * p;
 			} else {
 				--divc;
 			}
-			++i;
 		}
 	}
+	ndivisors = dpd - udivisors;
 }
 
 /*
@@ -312,6 +323,70 @@ void append_udivisors(mpz_t n, unsigned long maxf) {
 	if (k) append_udivisors_pp(k, lastp, maxf);
 }
 
+void init_udivisors_mod(unsigned long mod) {
+	modulus = mod;
+	memset((void*)modlist, 0, mod * sizeof(unsigned long));
+	modlist[1] = 1;
+}
+
+void append_udivisors_pp_mod(int k, unsigned long p) {
+	int i, j, count;
+	unsigned long vmod, *temp;
+/*
+	// This check is worth doing if gcd() is fast enough, and given
+	// modulus <= SMALLMOD, it should be (we could even use a lookup table)
+	if (p <= modulus && gcd(p, modulus) > 1) return;
+*/
+	p = p % modulus;
+	memcpy((void*)newmodlist, (const void *)modlist, modulus * sizeof(unsigned long));
+	for (i = 0; i < modulus; ++i) {
+		if (!(count = modlist[i])) continue;
+		vmod = i;
+		for (j = 1; j <= k; ++j) {
+			vmod = (vmod * p) % modulus;
+			newmodlist[vmod] += count;
+		}
+	}
+	temp = modlist; modlist = newmodlist; newmodlist = temp;
+}
+
+void append_udivisors_mod(mpz_t n) {
+	int k, pi = 0, lastp = 0;
+	unsigned long un;
+	while (!mpz_fits_ulong_p(n)) {
+		k = nextpp_z(n, &pi);
+		if (pi < 0) {
+			un = mpz_fdiv_ui(n, modulus);
+			append_udivisors_pp_mod(k, un);
+			return;
+		}
+		append_udivisors_pp_mod(k, prime[pi]);
+		++pi;
+	}
+	un = mpz_get_ui(n);
+	while (un > PLIM) {
+		k = nextpp_i(&un, &pi);
+		if (pi < 0) {
+			append_udivisors_pp_mod(k, un);
+			return;
+		}
+		append_udivisors_pp_mod(k, prime[pi]);
+		++pi;
+	}
+	k = 0;
+	while (un > 1) {
+		if (lastp == small_factor[un]) {
+			++k;
+		} else {
+			if (k) append_udivisors_pp_mod(k, lastp);
+			k = 1;
+			lastp = small_factor[un];
+		}
+		un /= lastp;
+	}
+	if (k) append_udivisors_pp_mod(k, lastp);
+}
+
 /*
   count the number of divisors of n
   modifies n
@@ -355,7 +430,7 @@ int tau_zmax(mpz_t n, mpz_t maxf) {
 		k *= pow + 1;
 		if (pi < 0) {
 			if (mpz_cmp(n, maxf) > 0) return k;
-			fprintf(stderr, "tau_zmax: prime %Zd lost as factor\n");
+			gmp_fprintf(stderr, "tau_zmax: lost prime factor %Zd\n", n);
 			exit(-1);
 		}
 		append_zdivisors_pp(pow, prime[pi], maxf);
@@ -467,41 +542,47 @@ void count_min(mpz_t p, mpz_t q, mpz_t d, mpz_t minf) {
 
 /*
 	add to total the number of divisors <= sqrt(pq) that are == -q (mod d)
-
-	for small d, it may be most efficient to use append_divisors_mod
-	via append_divisors_pp_mod:
-		for (i = 0; i < mod; ++i) {
-			if (!amod[i]) continue;
-			vmod = i;
-			for (j = 0; j <= pow; ++j) {
-				newamod[vmod] += amod[i];
-				vmod = (vmod * p) % mod;
-			}
-		}
-		amod = newmod;
-	init_zdivisors_mod(mod);
-	append_zdivisors_mod(p, mod);
-	mpz_set(tz, q);
-	append_zdivisors_mod(tz, mod);
-	total += ceil(amod[(-q) % mod] / 2);
 */
 void count_mod(mpz_t p, mpz_t q, mpz_t d) {
 	int c = 0, i;
+	unsigned long umaxf, ud, qmod;
 	mpz_mul(cm_maxf, p, q);
 	mpz_sqrt(cm_maxf, cm_maxf);
-	mpz_set(tz, q);
 	if (mpz_fits_ulong_p(cm_maxf)) {
-		unsigned long umaxf = mpz_get_ui(cm_maxf);
-		init_udivisors();
-		append_udivisors(p, umaxf);
-		append_udivisors(tz, umaxf);
-		for (i = 0; i < ndivisors; ++i) {
-			mpz_add_ui(tz, q, udivisors[i]);
-			if (mpz_divisible_p(tz, d)) ++c;
+		umaxf = mpz_get_ui(cm_maxf);
+		if (mpz_fits_ulong_p(d)) {
+			ud = mpz_get_ui(d);
+			mpz_neg(tz, q);
+			qmod = mpz_fdiv_ui(tz, ud);
+			if (ud <= SMALLMOD) {
+				init_udivisors_mod(ud);
+				append_udivisors_mod(p);
+				mpz_set(tz, q);
+				append_udivisors_mod(tz);
+				c = (modlist[qmod] + 1) >> 1;
+			} else {
+				init_udivisors();
+				append_udivisors(p, umaxf);
+				mpz_set(tz, q);
+				append_udivisors(tz, umaxf);
+				for (i = 0; i < ndivisors; ++i) {
+					if (qmod == (udivisors[i] % ud)) ++c;
+				}
+			}
+		} else {
+			init_udivisors();
+			append_udivisors(p, umaxf);
+			mpz_set(tz, q);
+			append_udivisors(tz, umaxf);
+			for (i = 0; i < ndivisors; ++i) {
+				mpz_add_ui(tz, q, udivisors[i]);
+				if (mpz_divisible_p(tz, d)) ++c;
+			}
 		}
 	} else {
 		init_zdivisors();
 		append_zdivisors(p, cm_maxf);
+		mpz_set(tz, q);
 		append_zdivisors(tz, cm_maxf);
 		for (i = 0; i < ndivisors; ++i) {
 			mpz_add(tz, q, zdivisors[i]);
@@ -523,16 +604,19 @@ void count_mod(mpz_t p, mpz_t q, mpz_t d) {
 */
 void count_min_mod(mpz_t p, mpz_t q, mpz_t d, mpz_t minf) {
 	int c = 0, i;
+	unsigned long uminf, umaxf;
 	mpz_mul(cm_maxf, p, q);
 	mpz_sqrt(cm_maxf, cm_maxf);
 	mpz_set(tz, q);
 	if (mpz_fits_ulong_p(cm_maxf)) {
-		unsigned long umaxf = mpz_get_ui(cm_maxf);
+		if (!mpz_fits_ulong_p(minf)) return;	/* minf > maxf */
+		umaxf = mpz_get_ui(cm_maxf);
+		uminf = mpz_get_ui(minf);
 		init_udivisors();
 		append_udivisors(p, umaxf);
 		append_udivisors(tz, umaxf);
 		for (i = 0; i < ndivisors; ++i) {
-			if (mpz_cmp_ui(minf, udivisors[i]) > 0) continue;
+			if (uminf > udivisors[i]) continue;
 			mpz_add_ui(tz, q, udivisors[i]);
 			if (mpz_divisible_p(tz, d)) ++c;
 		}
@@ -540,10 +624,19 @@ void count_min_mod(mpz_t p, mpz_t q, mpz_t d, mpz_t minf) {
 		init_zdivisors();
 		append_zdivisors(p, cm_maxf);
 		append_zdivisors(tz, cm_maxf);
-		for (i = 0; i < ndivisors; ++i) {
-			if (mpz_cmp(minf, zdivisors[i]) > 0) continue;
-			mpz_add(tz, q, zdivisors[i]);
-			if (mpz_divisible_p(tz, d)) ++c;
+		if (mpz_fits_ulong_p(minf)) {
+			uminf = mpz_get_ui(minf);
+			for (i = 0; i < ndivisors; ++i) {
+				if (mpz_cmp_ui(zdivisors[i], uminf) < 0) continue;
+				mpz_add(tz, q, zdivisors[i]);
+				if (mpz_divisible_p(tz, d)) ++c;
+			}
+		} else {
+			for (i = 0; i < ndivisors; ++i) {
+				if (mpz_cmp(minf, zdivisors[i]) > 0) continue;
+				mpz_add(tz, q, zdivisors[i]);
+				if (mpz_divisible_p(tz, d)) ++c;
+			}
 		}
 	}
 	if (c) {
@@ -581,11 +674,11 @@ void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
 				/* cmin is exactly right, return cmid == cmin */
 				return;
 			} else {
-				/* cmin is low, mark it and enter doubling phase */
+				/* cmin is low, mark it and enter multiplying phase */
 				mpz_set(clow, cmid);
 			}
 			state = 1;
-			mpz_mul_2exp(cmid, cmid, 1);
+			mpz_mul_2exp(cmid, cmid, 2);
 			break;
 		  case 1:
 			if (cmp > 0) {
@@ -600,7 +693,7 @@ void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
 			} else {
 				/* still too low, mark and continue */
 				mpz_set(clow, cmid);
-				mpz_mul_2exp(cmid, cmid, 1);
+				mpz_mul_2exp(cmid, cmid, 2);
 			}
 			break;
 		  case 2:
@@ -626,8 +719,6 @@ void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
 }
 
 void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
-	int i;
-	unsigned long iminf, imaxf;
 	  /* p, q /= gcd(p, q) */
 	mpz_gcd(g, p, q);
 	if (mpz_cmp_ui(g, 1) > 0) {
@@ -699,7 +790,7 @@ void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 }
 
 int main(int argc, char** argv) {
-	int i, n, arg = 1;
+	int n, arg = 1;
 	long clock_tick;
 	mpz_t p, q, cur, tempz;
 	clock_t t0;
@@ -790,7 +881,7 @@ gmseq 4 - result: 43 (0.00)
 gmseq 5 - result: 876 (0.00)
 gmseq 6 - result: 49513 (0.06)
 gmseq 7 - result: 13005235 (171.21)
-gmseq 8 - (est. 11500000)
+gmseq 8 - (est. 12000000)
 
 gmseq 8 11 - result: 0 (0.00)
 gmseq 8 10 - result: 0 (0.00)
@@ -800,7 +891,7 @@ gmseq 8 7 - result: 1683 (0.03)
 gmseq 8 6 - result: 59606 (0.34)
 gmseq 8 5 - result: 1470772 (14.11)
 gmseq 8 4 - (est. 360000)
-gmseq 8 3 - (est. 690000)
+gmseq 8 3 - (est. 1250000)
 gmseq 8 2 - (est. 10500000)
 
 gmseq 8 4 14 - result: 0 (0.00)
@@ -827,8 +918,8 @@ gmseq 8 3 8 - result: 251077 (0.80)
 gmseq 8 3 7 - result: 3443209 (401.17)
 gmseq 8 3 6 - result: 18632445 (1504.26)
 gmseq 8 3 5 - result: 55759629 (3316.43)
-gmseq 8 3 4 - (est. 16500)
-gmseq 8 3 3 - (est. 660000)
+gmseq 8 3 4 - result: 159867712 (30100.49)
+gmseq 8 3 3 - (est. 1200000)
 
 gmseq 8 2 23 - result: 0 (0.00)
 gmseq 8 2 22 - result: 0 (0.00)
@@ -842,7 +933,7 @@ gmseq 8 2 15 - result: 7452 (0.21)
 gmseq 8 2 14 - result: 19715 (0.69)
 gmseq 8 2 13 - result: 71988 (1.47)
 gmseq 8 2 12 - result: 234759 (3.53)
-gmseq 8 2 11 - result: 907158 (12.33)
+gmseq 8 2 11 - result: 907158 (7.83)
 gmseq 8 2 10 - result: 10998677 (3562.45)
 gmseq 8 2 9 - result: 18352365 (569.73)
 gmseq 8 2 8 - (est. 8400)

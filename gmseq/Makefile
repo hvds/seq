@@ -1,11 +1,18 @@
-gmseq: gmseq.o
-	gcc -o gmseq gmseq.o -L/opt/gmp/lib -Wl,--rpath -Wl,/opt/gmp/lib -lgmp
+LIBS=-lgmp
+LIBOPTS=-L/opt/gmp/lib -Wl,--rpath -Wl,/opt/gmp/lib
+INCS=-I/opt/gmp/include
 
-gmseq.o: gmseq.c
-	gcc -c -g -O0 -I/opt/gmp/include -o gmseq.o gmseq.c
+all: gmseq ogmseq pg-ogmseq
+	-@true
 
-ogmseq: ogmseq.o
-	gcc -o ogmseq ogmseq.o -L/opt/gmp/lib -Wl,--rpath -Wl,/opt/gmp/lib -lgmp
+# unoptimised: for debugging
+gmseq: gmseq.c
+	gcc -g -O0 -Wall ${INCS} -o gmseq gmseq.c ${LIBOPTS} ${LIBS}
 
-ogmseq.o: gmseq.c
-	gcc -c -g -O6 -I/opt/gmp/include -o ogmseq.o gmseq.c
+# optimised: for real use
+ogmseq: gmseq.c
+	gcc -g -O6 ${INCS} -o ogmseq gmseq.c ${LIBOPTS} ${LIBS}
+
+# instrumented for profiling with gprof
+pg-ogmseq: gmseq.c
+	gcc -g -pg -O6 ${INCS} -o pg-ogmseq gmseq.c ${LIBOPTS} ${LIBS}

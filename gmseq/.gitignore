@@ -1,4 +1,5 @@
 gmseq
 ogmseq
+pg-ogmseq
 *.o
 core
