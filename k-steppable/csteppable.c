@@ -43,12 +43,12 @@ ulong upow(ulong b, ulong n) {
 	return p;
 }
 
-ulong advance(ctx_t *ctx) {
+ulong advance(ctx_t *ctx, ulong offset) {
 	int i;
 	ulong lim = ctx->b;
-	for (i = ctx->n - 1; i >= 0; --i) {
+	for (i = ctx->n - offset; i >= 0; --i) {
 		if (++ctx->s[i] != lim) {
-			return 1;
+			return ctx->n - i;
 		}
 		ctx->s[i] = 0;
 	}
@@ -110,13 +110,12 @@ void disp (char* s, ulong n, char* msg) {
 }
 
 ctx_t *steppable(ulong b, ulong k, ulong n) {
-	int undone, match_to;
+	int zeroes, match_to;
 	ctx_t *ctx = (ctx_t *)malloc(sizeof(ctx_t) + n);
 
 	ctx->b = b;
 	ctx->k = k;
 	ctx->n = n;
-	ctx->good = 0;
 	ctx->bad = 0;
 	ctx->lim = upow(b, n);	/* verify b^m fits in sizeof(ulong) */
 
@@ -129,18 +128,16 @@ ctx_t *steppable(ulong b, ulong k, ulong n) {
 	}
 
 	memset(ctx->s, 0, n);
-	undone = 1;
-	while (undone) {
-		match_to = try_match(ctx);
-		if (match_to > 0) {
-			if (DEBUG) disp(ctx->s, n, "good");
-			++ctx->good;
-		} else {
+	zeroes = 1;
+	while (zeroes) {
+		if (!try_match(ctx)) {
 			if (DEBUG) disp(ctx->s, n, "bad");
 			++ctx->bad;
+			zeroes = 1;
 		}
-		undone = advance(ctx);
+		zeroes = advance(ctx, zeroes);
 	}
+	ctx->good = ctx->lim - ctx->bad;
 	return ctx;
 }
 
@@ -158,7 +155,7 @@ int main(int argc, char** argv) {
 	n = strtoul(argv[3], NULL, 10);
 	t0 = timer();
 	ctx = steppable(b, k, n);
-	printf("%lu %lu %lu %lu %lu (%.3f)\n",
+	printf("%lu %lu %lu %lu %lu (%.2f)\n",
 			b, k, n, ctx->good, ctx->bad, timer() - t0);
 	free(ctx);
 	return 0;
