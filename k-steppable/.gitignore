@@ -1,0 +1,4 @@
+core
+core.*
+csteppable
+*.o
