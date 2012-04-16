@@ -1,0 +1,7 @@
+A selection of programs that relate to potential or actual sequences
+in the OEIS (<http://www.oeis.org>).
+
+k-steppable:
+  How many of the b^n strings of length n, base b can be partitioned in at
+  least one way into k non-empty substrings such that the substrings appear
+  in lexical order?

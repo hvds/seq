@@ -1,0 +1,7 @@
+How many of the b^n strings of length n, base b can be partitioned in at least
+one way into k non-empty substrings such that the substrings appear in lexical
+order?
+
+Code calculates the two 3-argument functions good(b, k, n) and bad(b, k, n)
+which represent the count of the b^n strings that (respectively) can and
+cannot be partitioned in at least one such way.
