@@ -7,16 +7,18 @@ my($b, $k, $n) = @ARGV;
 my $s = '0' x $n;
 my $endb = $b - 1;
 our($succeed, $fail) = (qr{}, qr{(?!)});
-my $re = join '', '^(.+)', map(
-	sprintf('(.+)(??{ ($%s lt $%s) ? $succeed : $fail })', $_ - 1, $_), 2 .. $k
-), '\z';
+my $re = join '', '^(.+?)', map sprintf(
+	'(.+?)(??{ ($%s lt $%s) ? $succeed : $fail })', $_ - 1, $_
+), 2 .. $k;
 our $good = qr{$re};
 
 my($good_count, $bad_count) = (0, 0);
+my $tail;
 my $t0 = (times)[0];
 while (1) {
 	if ($s =~ $good) {
-		++$good_count;
+		$tail = $n - $+[0];
+		substr($s, -$tail) = $endb x $tail if $tail;
 	} else {
 		++$bad_count;
 	}
@@ -24,5 +26,7 @@ while (1) {
 		($1 + 1) . ('0' x length($2))
 	}e;
 }
+$good_count = ($b ** $n) - $bad_count;
 my $t1 = (times)[0];
-printf "%s %s %s %s %s (%.2f)\n", $b, $k, $n, $good_count, $bad_count, $t1 - $t0;
+printf "%s %s %s %s %s (%.2f)\n",
+		$b, $k, $n, $good_count, $bad_count, $t1 - $t0;
