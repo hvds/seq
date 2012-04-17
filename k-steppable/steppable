@@ -4,10 +4,27 @@ use re 'eval';
 
 my($b, $k, $n) = @ARGV;
 
+=head1 DESCRIPTION
+
+How many of the b^n strings of length n, base b can be partitioned in at least
+one way into k non-empty substrings such that the substrings appear in lexical
+order?
+
+Input is the 3 arguments (b, k, n); output is (b, k, n, good, bad, time)
+where 'good' is the number of strings that can be partitioned in at least
+one way as described above; 'bad' is the number that cannot be so
+partitioned (and so good + bad = b^n); 'time' is the CPU time taken for
+the calculation.
+
+=cut
+
 my $s = '0' x $n;
 my $endb = $b - 1;
 our($succeed, $fail) = (qr{}, qr{(?!)});
+
+# Create a single regular expression to match good strings
 my $re = join '', '^(.+?)', map sprintf(
+	# each repeated fragment must sort later than the preceding fragment
 	'(.+?)(??{ ($%s lt $%s) ? $succeed : $fail })', $_ - 1, $_
 ), 2 .. $k;
 our $good = qr{$re};
@@ -17,6 +34,10 @@ my $tail;
 my $t0 = (times)[0];
 while (1) {
 	if ($s =~ $good) {
+		# If the regexp matches all the constraints on a prefix of the
+		# full string, we can skip all other strings with that prefix.
+		# To save calculating $good_count += $b ** $tail, we just keep
+		# track of $bad_count and recover the $good_count at the end.
 		$tail = $n - $+[0];
 		substr($s, -$tail) = $endb x $tail if $tail;
 	} else {
@@ -31,11 +52,3 @@ my $t1 = (times)[0];
 printf "%s %s %s %s %s (%.2f)\n",
 		$b, $k, $n, $good_count, $bad_count, $t1 - $t0;
 
-__END__
-
-How many of the b^n strings of length n, base b can be partitioned in at least
-one way into k non-empty substrings such that the substrings appear in lexical
-order?
-
-10s timings:
-% ( ulimit -t 10 ; perl -we 'my $result; for my $b (2..4) { K: for my $k (2..5) { for my $n ($k .. 16) { $result = `./steppable $b $k $n`; next K if $?; print $result }}}' )
