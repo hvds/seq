@@ -5,3 +5,6 @@ k-steppable:
   How many of the b^n strings of length n, base b can be partitioned in at
   least one way into k non-empty substrings such that the substrings appear
   in lexical order?
+
+A001055:
+  Number of ways of factoring n with all factors >1, focusing on records.
