@@ -1,5 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
+use lib 'lib';
+use H::Heap;
 
 =head1 Number of ways of factoring n with all factors >1
 
@@ -16,10 +18,12 @@ preserve order, eg abcd = ac/bd.)
 
 my %seen;
 my $max = 0;			# greatest pf(n) seen so far
-my @pend = (['', 1]);	# start from 1, which has '' as its factor string
+
+my $pend = H::Heap->new('$a->[1] <=> $b->[1]');
+$pend->insert(['', 1]);	# start from 1, which has '' as its factor string
 
 while (1) {
-	my($s, $n) = @{ shift @pend };
+	my($s, $n) = @{ $pend->fetch or die "heap empty" };
 	my $count = A001055($s);
 	if ($count > $max) {
 		my $t = mytime();
@@ -32,8 +36,7 @@ while (1) {
 	# Find all ways to insert one additional factor into the string we just
 	# tried; put each on the pending stack.
 
-	# FIXME: this is slow; should fetch last char and inc that instead
-	my $l = 'b';	# Will become "first unused character", to append
+	$seen{$_}++ || $pend->insert([ $_, number($_) ]) for "a$s";
 
 	# Find each location in which we can validly insert another factor:
 	# if we find fggghhhi, we can insert an h iff we have more g than h.
@@ -41,23 +44,15 @@ while (1) {
 		if (length($4) < length($2)) {
 			my $u = $s;
 			substr($u, $+[0], 0) = $3;
-			push @pend, [ $u, number($u) ] unless $seen{$u}++;
+			$seen{$u}++ || $pend->insert([ $u, number($u) ]);
 		}
+	}
+
+	if (length $s) {
+		my $l = substr $s, -1;
 		++$l;
+		$seen{$_}++ || $pend->insert([ $_, number($_) ]) for "$s$l";
 	}
-
-	# We can always append a "never seen before" character; and we can
-	# always prepend an "a". (But if $s eq '', the effect is the same.)
-	for ("a$s", length($s) ? "$s$l" : ()) {
-		push @pend, [ $_, number($_) ] unless $seen{$_}++;
-	}
-
-	# Finally, sort the list by numeric value.
-	# FIXME: this is silly, we only need the min, since we'll sort again
-	# the next time round the loop. Further, if we put "a$s" before the
-	# insertion loop instead of after, we'd be appending a sorted set.
-	# We should just use a min-heap instead.
-	@pend = sort { $a->[1] <=> $b->[1] } @pend;
 }
 exit 0;
 
