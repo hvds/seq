@@ -16,7 +16,6 @@ preserve order, eg abcd = ac/bd.)
 
 =cut
 
-my %seen;
 my $max = 0;			# greatest pf(n) seen so far
 
 my $pend = H::Heap->new('$a->[1] <=> $b->[1]');
@@ -33,26 +32,23 @@ while (1) {
 #		print "$n: $count ($s)\n";
 	}
 
-	# Find all ways to insert one additional factor into the string we just
-	# tried; put each on the pending stack.
+	# Record the ways we can extend the string we just tried with
+	# an additional factor
 
-	$seen{$_}++ || $pend->insert([ $_, number($_) ]) for "a$s";
-
-	# Find each location in which we can validly insert another factor:
-	# if we find fggghhhi, we can insert an h iff we have more g than h.
-	while ($s =~ /(.)(\1*)(?=(.)(\3*))/g) {
-		if (length($4) < length($2)) {
-			my $u = $s;
-			substr($u, $+[0], 0) = $3;
-			$seen{$u}++ || $pend->insert([ $u, number($u) ]);
-		}
+	my @new;
+	if (length($s) == 0) {
+		push @new, 'a';
+	} elsif ($s =~ /a$/) {
+		push @new, ("${s}a", "${s}b");
+	} else {
+		my $c = substr $s, -1;
+		push @new, "$s$c" if $s =~ /(?:^|(.)(?!\1))((.)\3*)((.)\5*)\z/
+				&& length($2) > length($4);
+		++$c;
+		push @new, "$s$c";
 	}
 
-	if (length $s) {
-		my $l = substr $s, -1;
-		++$l;
-		$seen{$_}++ || $pend->insert([ $_, number($_) ]) for "$s$l";
-	}
+	$pend->insert([ $_, number($_) ]) for @new;
 }
 exit 0;
 
