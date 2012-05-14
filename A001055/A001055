@@ -2,10 +2,14 @@
 use strict;
 use lib 'lib';
 use H::Heap;
+use H::Partition;
 
 =head1 Number of ways of factoring n with all factors >1
 
-To solve: does there exist n : pf(n) >= n - 1?
+A001055(n) is the number of ways n can be factored;
+A033834() gives the record values of A001055(), and A033833() the
+corresponding n at which those values are reached.
+A088887() is also related: see comments below.
 
 We represent n by abstracting its factors, so that n = 7560 = 2^4.3^3.5^2.7
 is represented by the string aaaabbbccd.
@@ -14,9 +18,19 @@ The string aaab can be partitioned as a/a/a/b, a/a/ab, a/aa/b, a/aab, aa/ab,
 aaa/b, aaab for 7 partitions, so pf(24) = 7. (Note that not all partitions
 preserve order, eg abcd = ac/bd.)
 
+Simple cases:
+- A prime power counts only partitions: A001055(p^k) = A000041(k)
+- A primorial yields Bell numbers: A001055(A002110(n)) = A000110(n)
+
 =cut
 
 my $max = 0;			# greatest pf(n) seen so far
+
+# The binary heap in $pend consists of tuples (factorstring, number), where
+# the factor string represents a list of powers in descending order, and
+# the number is the least positive integer with that prime signature.
+# Each time we check the tuple with the lowest number, and insert back
+# into the heap the 1 or 2 tuples reachable by appending another factor.
 
 my $pend = H::Heap->new('$a->[1] <=> $b->[1]');
 $pend->insert(['', 1]);	# start from 1, which has '' as its factor string
@@ -26,7 +40,7 @@ while (1) {
 	my $count = A001055($s);
 	if ($count > $max) {
 		my $t = mytime();
-		print "$n: $count ($s) [$t]\n";
+		printf "%s: %s (%vd) [%s]\n", $n, $count, $s, $t;
 		$max = $count;
 #	} else {
 #		print "$n: $count ($s)\n";
@@ -36,72 +50,206 @@ while (1) {
 	# an additional factor
 
 	my @new;
-	if (length($s) == 0) {
-		push @new, 'a';
-	} elsif ($s =~ /a$/) {
-		push @new, ("${s}a", "${s}b");
+	my $ls = length $s;
+	if ($ls == 0) {
+		push @new, chr(1);
+	} elsif ($ls == 1) {
+		push @new, (chr(ord($s) + 1), $s . chr(1));
 	} else {
-		my $c = substr $s, -1;
-		push @new, "$s$c" if $s =~ /(?:^|(.)(?!\1))((.)\3*)((.)\5*)\z/
-				&& length($2) > length($4);
-		++$c;
-		push @new, "$s$c";
+		--$ls;
+		# Assume we won't get past 6^256
+		my $last = vec($s, $ls, 8);
+		if ($last < vec($s, $ls - 1, 8)) {
+			my $s2 = $s;
+			++vec($s2, $ls, 8);
+			push @new, $s2;
+		}
+		push @new, $s . chr(1);
 	}
 
 	$pend->insert([ $_, number($_) ]) for @new;
 }
 exit 0;
 
-# Given a string $s, return all the distinct partitionings, represented
-# as ;-separated substrings. Called in scalar mode will supply just the
-# count. Removal of duplicates is achieved by having the substrings
-# sorted in lexical order.
-# The input string must be sorted in lexical order.
 sub A001055 {
-	my $s = shift;
-	my $t = chop $s or return wantarray ? ('') : 1;
-	my @next = A001055($s);
-	my %seen;
-	my @new;
-	# Given the single prime factor $t, and all partitions of the other factors
-	for (@next) {
-		# - $t can be included as a standalone factor
-		my $u = join ';', sort $t, split /;/;
-		push @new, $u unless $seen{$u}++;
+	my($s) = @_;
+	my $cl = composed_list([ map ord($_), split //, $s ]);
+	my $count = 0;
+	$count += ord($_) for @$cl;
+	return $count;
+}
 
-		# - or $t can be included in any one of the other factors
-		my $prev = '';
-		while (/\G;?(\w+)/gc) {
-			# no point including in more than one of a set of duplicate factors
-			next if $1 eq $prev;
-			$prev = $1;
-			my $u = $_;
-			# since the input string is sorted, $t is the greatest factor,
-			# so appending always gives a sorted substring
-			substr($u, $+[0], 0) = $t;
-			$u = join ';', sort split /;/, $u;
-			push @new, $u unless $seen{$u}++;
+{
+	my $cache_root; BEGIN { $cache_root = [ [ ] ] }
+
+	# Note that size of @{ $cache[$n] } is A088887($n); see also A140312.
+	sub packed_partition {
+		my($n) = @_;
+		return $cache_root->[$n][0] ||= do {
+			my %count;
+			my $unpacked = H::Partition->strings($n);
+			for my $s (@$unpacked) {
+				my %factor_count;
+				++$factor_count{$_} for split //, $s;
+				my $repacked = join '', map chr($_),
+						sort { $b <=> $a } values %factor_count;
+				++$count{$repacked};
+			}
+			# note max(count) : n is not in OEIS
+			# It starts: 1,1,1,1,2,2,3,3,4,4,7,8,11,11,17,17,23,23,30,36
+			# .. 44,56,65,79,91,110,124,146,165,189 (n=1..30)
+			[ map join('', chr($count{$_}), $_), sort keys %count ];
+		};
+	}
+
+	sub composed_list {
+		my($list) = @_;
+		my $cur = $cache_root;
+		for my $n (@$list) {
+			$cur = $cur->[$n] ||= [
+				compose_pack_pack($cur->[0], packed_partition($n))
+			];
+		}
+		return $cur->[0];
+	}
+}
+
+sub compose_pack_pack {
+	my($left, $right) = @_;
+	($left, $right) = ($right, $left) if @$left < @$right;
+	return $left unless @$right;
+
+	my %count;
+	for my $s (@$right) {
+		my $single = compose_pack_string($left, $s);
+		$count{$_} += $single->{$_} for keys %$single;
+	}
+	no warnings 'utf8';	# starts warning of UTF-16 surrogates around n=5e7
+	return [ map join('', chr($count{$_}), $_), sort keys %count ];
+}
+
+sub compose_pack_string {
+	my($packed_set, $right) = @_;
+	my $right_count = ord $right;
+	my $right_factors = substr $right, 1;
+	my %count;
+	for my $left (@$packed_set) {
+		my $multiple = $right_count * ord($left);
+		my $left_factors = substr $left, 1;
+		my $raw_counts = compose_factors($left_factors, $right_factors);
+		$count{$_} += $multiple * $raw_counts->{$_}
+				for keys %$raw_counts;
+	}
+	return \%count;
+}
+
+{
+	my %cache_factors;
+	sub compose_factors {
+		my($left, $right) = @_;
+		($left, $right) = ($right, $left) if (
+			length($left) <=> length($right)
+			|| $left cmp $right
+		) < 0;
+		return $cache_factors{$left}{$right} ||= (
+			(! length $right) ? { $left => 1 } : do {
+				my $counts = {};
+				my $lhead = ord $left;
+				my $ltail = substr $left, 1;
+				accumulate_partial_r(
+					$counts, $ltail, $right, 0, $lhead, 0, 0, 0, {},
+				);
+				$counts;
+			}
+		);
+	}
+}
+
+sub accumulate_partial_r {
+	my(
+		$counts, $left, $right, $lgused, $lgsize, $thislr,
+		$rindex, $roffset, $produced,
+	) = @_;
+
+	if ($lgused == $lgsize ){
+		# all off the first group of left accounted for
+		my $subfactors = compose_factors($left, $right);
+		my @produced = (
+			($thislr ? chr($thislr) : ()),
+			map +((chr $_) x $produced->{$_}), keys %$produced
+		);
+		for my $partial (keys %$subfactors) {
+			my $whole = join '', sort @produced, split //, $partial;
+			$counts->{$whole} += $subfactors->{$partial};
+		}
+		return;
+	}
+
+	# try assigning another of the same right group to this left group
+	if ($roffset) {
+		my $r2 = $right;
+		my $nextlr = $thislr + 1;
+		if (--vec($r2, $rindex, 8)) {
+			accumulate_partial_r(
+				$counts, $left, $r2, $lgused + 1, $lgsize, $nextlr,
+				$rindex, $roffset + 1, $produced,
+			);
+		} else {
+			substr($r2, $rindex, 1) = '';
+			local $produced->{$nextlr} = ($produced->{$nextlr} || 0) + 1;
+			accumulate_partial_r(
+				$counts, $left, $r2, $lgused + 1, $lgsize, 0,
+				$rindex, 0, $produced,
+			);
+		}
+		++$rindex;
+	}
+
+	local $produced->{$thislr} = ($produced->{$thislr} || 0) + 1
+			if $thislr;
+
+	# try assigning something from any later group
+	for my $r2index ($rindex .. length($right) - 1) {
+		my $r2 = $right;
+		if (--vec($r2, $r2index, 8)) {
+			accumulate_partial_r(
+				$counts, $left, $r2, $lgused + 1, $lgsize, 1,
+				$r2index, 1, $produced,
+			);
+		} else {
+			substr($r2, $r2index, 1) = '';
+			local $produced->{1} = ($produced->{1} || 0) + 1;
+			accumulate_partial_r(
+				$counts, $left, $r2, $lgused + 1, $lgsize, 0,
+				$r2index, 0, $produced,
+			);
 		}
 	}
-#print join ' ', @new, "\n";
-	@new;
+
+	# or try assigning nothing at all
+	my $rest = $lgsize - $lgused;
+	local $produced->{$rest} = ($produced->{$rest} || 0) + 1;
+	accumulate_partial_r(
+		$counts, $left, $right, $lgsize, $lgsize, 0,
+		undef, undef, $produced,
+	);
 }
 
 {
 	# return the least integer with the given factor signature (ie the
-	# element of A25487 with this signature)
-	my @p; BEGIN { @p = (2, 3, 5, 7, 11, 13, 17, 19, 23) }
+	# element of A025487 with this signature)
+	my @p; BEGIN { @p = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31) }
 	my $ord_a; BEGIN { $ord_a = ord('a') }
 	sub number {
 		my $s = shift;
-		my $p = 1;
+		my $n = 1;
 		# No rush to check for overflow here: the numbers are used only for
 		# ordering, it's the factor lists that are canonical.
 		# We do not risk an ordering failure until substantially after 2^32,
 		# since we will have 2^k in the mix for some relatively high k.
-		$p *= $p[ord($_) - $ord_a] || die("'$_' too high")
-				for split //, $s;
-		$p;
+		$n *= ($p[$_] || die("'$_' too high")) ** ord(substr $s, $_, 1)
+				for 0 .. length($s) - 1;
+		return $n;
 	}
 }
 
