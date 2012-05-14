@@ -3,6 +3,7 @@ use strict;
 use lib 'lib';
 use H::Heap;
 use H::Partition;
+use H::Prime;
 
 =head1 Number of ways of factoring n with all factors >1
 
@@ -235,22 +236,14 @@ sub accumulate_partial_r {
 	);
 }
 
-{
-	# return the least integer with the given factor signature (ie the
-	# element of A025487 with this signature)
-	my @p; BEGIN { @p = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31) }
-	my $ord_a; BEGIN { $ord_a = ord('a') }
-	sub number {
-		my $s = shift;
-		my $n = 1;
-		# No rush to check for overflow here: the numbers are used only for
-		# ordering, it's the factor lists that are canonical.
-		# We do not risk an ordering failure until substantially after 2^32,
-		# since we will have 2^k in the mix for some relatively high k.
-		$n *= ($p[$_] || die("'$_' too high")) ** ord(substr $s, $_, 1)
-				for 0 .. length($s) - 1;
-		return $n;
+sub number {
+	my($powers) = @_;
+	my $n = 1;
+	for (0 .. length($powers) - 1) {
+		my $power = ord(substr $powers, $_, 1) or next;
+		$n *= H::Prime::prime_i($_) ** $power;
 	}
+	return $n;
 }
 
 {
