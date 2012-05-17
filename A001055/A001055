@@ -12,30 +12,36 @@ A033834() gives the record values of A001055(), and A033833() the
 corresponding n at which those values are reached.
 A088887() is also related: see comments below.
 
-We represent n by abstracting its factors, so that n = 7560 = 2^4.3^3.5^2.7
-is represented by the string aaaabbbccd.
-
-The string aaab can be partitioned as a/a/a/b, a/a/ab, a/aa/b, a/aab, aa/ab,
-aaa/b, aaab for 7 partitions, so pf(24) = 7. (Note that not all partitions
-preserve order, eg abcd = ac/bd.)
+A001055(n) is the number of distinguishable ways of taking otherwise
+indistinguishable balls labelled with the prime factors of n, and
+distributing them across a large number of indistinguishable buckets.
+Thus given the prime signature of n, we must compose the partitions
+of each of the powers in the signature.
 
 Simple cases:
 - A prime power counts only partitions: A001055(p^k) = A000041(k)
 - A primorial yields Bell numbers: A001055(A002110(n)) = A000110(n)
+- A001055(p^k.q) = A000070(k); A001055(p^k.q^2) = A000291(k);
+- A001055(p^k.q.r) = A082775(k)
+
+Since we need consider only the signature, 
 
 =cut
 
 my $max = 0;			# greatest pf(n) seen so far
 
-# The binary heap in $pend consists of tuples (factorstring, number), where
-# the factor string represents a list of powers in descending order, and
-# the number is the least positive integer with that prime signature.
-# Each time we check the tuple with the lowest number, and insert back
-# into the heap the 1 or 2 tuples reachable by appending another factor.
-
+# The binary heap in $pend consists of tuples (signature, number), where
+# the signature is a string of powers in descending order, and the number
+# is the least positive integer with that prime signature.
 my $pend = H::Heap->new('$a->[1] <=> $b->[1]');
-$pend->insert(['', 1]);	# start from 1, which has '' as its factor string
 
+# start from 1, which has an empty prime signature
+$pend->insert(['', 1]);
+
+
+# Each time round the loop we check the tuple with the lowest number,
+# and insert back into the heap the 1 or 2 tuples (newly) reachable by
+# appending another factor.
 while (1) {
 	my($s, $n) = @{ $pend->fetch or die "heap empty" };
 	my $count = A001055($s);
@@ -43,26 +49,32 @@ while (1) {
 		my $t = mytime();
 		printf "%s: %s (%vd) [%s]\n", $n, $count, $s, $t;
 		$max = $count;
+# Uncomment the next two lines to show more than just the new records.
 #	} else {
-#		print "$n: $count ($s)\n";
+#		printf "%s: %s (%vd)\n", $n, $count, $s;
 	}
 
 	# Record the ways we can extend the string we just tried with
 	# an additional factor
 
 	my @new;
-	my $ls = length $s;
-	if ($ls == 0) {
+	my $len = length $s;
+	if ($len == 0) {
 		push @new, chr(1);
-	} elsif ($ls == 1) {
+	} elsif ($len == 1) {
+		# From a^k we get a^{k+1} and a^k.b^1
 		push @new, (chr(ord($s) + 1), $s . chr(1));
 	} else {
-		--$ls;
-		# Assume we won't get past 6^256
-		my $last = vec($s, $ls, 8);
-		if ($last < vec($s, $ls - 1, 8)) {
+		# From a^k...x^m.y^n we get a^k...x^m.y^{n+1} and a^k...x^m.y^n.z^1;
+		# but the first is valid only if m > n.
+
+		--$len;
+		# Note this will silently fail when we have a prime power 256 or more,
+		# ie from 2^256.3 onwards, approx 3.5e77.
+		my $last = vec($s, $len, 8);
+		if ($last < vec($s, $len - 1, 8)) {
 			my $s2 = $s;
-			++vec($s2, $ls, 8);
+			++vec($s2, $len, 8);
 			push @new, $s2;
 		}
 		push @new, $s . chr(1);
@@ -72,21 +84,39 @@ while (1) {
 }
 exit 0;
 
+# Given a prime signature packed into a string, return the corresponding
+# value of A001055.
 sub A001055 {
 	my($s) = @_;
+
+	# Fetch the arrayref of packed strings, each representing a count and
+	# a partition
 	my $cl = composed_list([ map ord($_), split //, $s ]);
+
+	# Ignore the partitions, just sum the counts
 	my $count = 0;
 	$count += ord($_) for @$cl;
 	return $count;
 }
 
 {
+	# We cache a composition of the partitions of, eg, [6, 5, 3] undef
+	# $cache_root->[6]->[5]->[3]->[0]. Each such cached composition is
+	# itself an arrayref of strings, where each string consists of a count
+	# as the first character, followed by a sequence of counts k in descending
+	# order representing a group of k indistinguishable items.
+	# Thus if we have 5 partitions of the form aabbcd, we represent it as
+	# [ 5, 2, 2, 1, 1 ], and pack those values into the string "\5\2\2\1\1".
+
 	my $cache_root; BEGIN { $cache_root = [ [ ] ] }
 
-	# Note that size of @{ $cache[$n] } is A088887($n); see also A140312.
+	# Given an integer n, returns an arrayref of the partitions of n packed
+	# as per the cache.
+	# Note that the number of elements in packed_partition($n) is A088887($n);
+	# and see also A140312.
 	sub packed_partition {
 		my($n) = @_;
-		return $cache_root->[$n][0] ||= do {
+		return $cache_root->[$n]->[0] ||= do {
 			my %count;
 			my $unpacked = H::Partition->strings($n);
 			for my $s (@$unpacked) {
@@ -99,10 +129,16 @@ sub A001055 {
 			# note max(count) : n is not in OEIS
 			# It starts: 1,1,1,1,2,2,3,3,4,4,7,8,11,11,17,17,23,23,30,36
 			# .. 44,56,65,79,91,110,124,146,165,189 (n=1..30)
-			[ map join('', chr($count{$_}), $_), sort keys %count ];
+			[ map chr($count{$_}) . $_, sort keys %count ];
 		};
 	}
 
+	# Given an arrayref of integers n_0, n_1 ..., returns an arrayref of
+	# the composition of the partitions of n_0, n_1, ... packed as per
+	# the cache.
+	# Note that composition is symmetric, so order of composition does not
+	# matter; it is assumed the inputs are given in descending order, which
+	# (I think) is likely to give best overall performance.
 	sub composed_list {
 		my($list) = @_;
 		my $cur = $cache_root;
@@ -115,9 +151,15 @@ sub A001055 {
 	}
 }
 
+# Given two arrayrefs of packed partitions, returns an arrayref of the
+# composition of the two by composing each element of one with each
+# element of the other, and then recombining.
+# FIXME: passing \%count in to compose_pack_string would avoid the need
+# to merge lots of count hashrefs together.
 sub compose_pack_pack {
 	my($left, $right) = @_;
 	($left, $right) = ($right, $left) if @$left < @$right;
+	# compose(X, 0) == X
 	return $left unless @$right;
 
 	my %count;
@@ -129,8 +171,13 @@ sub compose_pack_pack {
 	return [ map join('', chr($count{$_}), $_), sort keys %count ];
 }
 
+# Given an arrayref of packed partitions and a single packed partition,
+# composes the latter with each element of the former. Returns a hashref
+# in which key is a raw partition and the corresponding value is the number
+# of occurrences of that partition.
 sub compose_pack_string {
 	my($packed_set, $right) = @_;
+	# CHECKME: $count = ord(substr $right, 0, 1, '') may be faster
 	my $right_count = ord $right;
 	my $right_factors = substr $right, 1;
 	my %count;
@@ -145,9 +192,17 @@ sub compose_pack_string {
 }
 
 {
+	# A cache of the compositions of pairs of raw partitions.
+	# $cache{$left}{$right} is a hashref in which each key is a raw
+	# partition and the corresponding value is the number of occurrences
+	# of that partition.
 	my %cache_factors;
+
+	# Given two raw partitions, compose them. Returns a hashref of the
+	# composition as per the cache.
 	sub compose_factors {
 		my($left, $right) = @_;
+		# Canonicalize the order to avoid duplication in the cache.
 		($left, $right) = ($right, $left) if (
 			length($left) <=> length($right)
 			|| $left cmp $right
@@ -166,17 +221,51 @@ sub compose_pack_string {
 	}
 }
 
+#
+# The guts: recursive function to progress the partial composition
+# of two raw partitions to the point we can accumulate the results
+# in the supplied hashref.
+# Inputs:
+#   counts: a hashref of results, in which keys are partitions and values counts
+#   left: a partial raw partition to compose; the first group has been removed,
+#     and will be handled separately
+#   right: a partial raw partition to compose
+#   lgused: the number already handled from the removed first group of 'left'
+#   lgsize: the number originally in the removed first group of 'left'
+#   thislr: the number of those already handled in 'lgused' that are paired with
+#     the current group from 'right'
+#   rindex: the group from 'right' currently being considered; for this call,
+#     no earlier group in 'right' will have further pairings with the removed
+#     first group from 'left'
+#   roffset: the number of elements from the current group from 'right' that
+#     are already paired with the removed first group from 'left'
+#     (this parameter may be redundant)
+#   produced: a hashref representing the completed sets generated by pairings
+#     against the removed first group from 'left'. Keys are integers n
+#     representing a group of n indistinguishable elements; values are
+#     integers representing the number of groups of that size.
+#
+# Returns: nothing.
+#
+# Side-effects: 'counts' is updated with any results generated.
+#
 sub accumulate_partial_r {
 	my(
 		$counts, $left, $right, $lgused, $lgsize, $thislr,
 		$rindex, $roffset, $produced,
 	) = @_;
 
+	# Once all of the first group of $left are accounted for, we can rely on
+	# the cache to account for the rest, and just combine the results.
 	if ($lgused == $lgsize ){
 		# all off the first group of left accounted for
 		my $subfactors = compose_factors($left, $right);
+
+		# determine the additional sets we must combine
 		my @produced = (
+			# if we have an outstanding current group, account for it
 			($thislr ? chr($thislr) : ()),
+			# account for any previously generated groups
 			map +((chr $_) x $produced->{$_}), keys %$produced
 		);
 		for my $partial (keys %$subfactors) {
@@ -191,11 +280,15 @@ sub accumulate_partial_r {
 		my $r2 = $right;
 		my $nextlr = $thislr + 1;
 		if (--vec($r2, $rindex, 8)) {
+			# This does not empty the current $right group, so use it.
 			accumulate_partial_r(
 				$counts, $left, $r2, $lgused + 1, $lgsize, $nextlr,
 				$rindex, $roffset + 1, $produced,
 			);
 		} else {
+			# This empties the current $right group, so splice it out.
+			# We cannot have more identical pairings, so account it
+			# as 'produced' and start counting $thislr from 0 again.
 			substr($r2, $rindex, 1) = '';
 			local $produced->{$nextlr} = ($produced->{$nextlr} || 0) + 1;
 			accumulate_partial_r(
@@ -206,6 +299,8 @@ sub accumulate_partial_r {
 		++$rindex;
 	}
 
+	# if we won't assign more identical pairings, account the current group
+	# (if there is one) as 'produced'.
 	local $produced->{$thislr} = ($produced->{$thislr} || 0) + 1
 			if $thislr;
 
@@ -213,11 +308,13 @@ sub accumulate_partial_r {
 	for my $r2index ($rindex .. length($right) - 1) {
 		my $r2 = $right;
 		if (--vec($r2, $r2index, 8)) {
+			# This does not empty the current $right group, so use it.
 			accumulate_partial_r(
 				$counts, $left, $r2, $lgused + 1, $lgsize, 1,
 				$r2index, 1, $produced,
 			);
 		} else {
+			# This empties the current $right group, so splice it out.
 			substr($r2, $r2index, 1) = '';
 			local $produced->{1} = ($produced->{1} || 0) + 1;
 			accumulate_partial_r(
@@ -236,6 +333,8 @@ sub accumulate_partial_r {
 	);
 }
 
+# Given a prime signature packed into a string, returns the corresponding
+# member of A025487, the least positive integer with that signature.
 sub number {
 	my($powers) = @_;
 	my $n = 1;
@@ -251,6 +350,7 @@ sub number {
 	sub mytime {
 		my $thistime = (times())[0];
 		my $result = sprintf '%.2f', $thistime - ($lasttime || 0);
+		# uncomment assignment to show relative times rather than absolute
 		#$lasttime = $thistime;
 		return $result;
 	}
