@@ -154,8 +154,6 @@ sub A001055 {
 # Given two arrayrefs of packed partitions, returns an arrayref of the
 # composition of the two by composing each element of one with each
 # element of the other, and then recombining.
-# FIXME: passing \%count in to compose_pack_string would avoid the need
-# to merge lots of count hashrefs together.
 sub compose_pack_pack {
 	my($left, $right) = @_;
 	($left, $right) = ($right, $left) if @$left < @$right;
@@ -163,10 +161,8 @@ sub compose_pack_pack {
 	return $left unless @$right;
 
 	my %count;
-	for my $s (@$right) {
-		my $single = compose_pack_string($left, $s);
-		$count{$_} += $single->{$_} for keys %$single;
-	}
+	accumulate_pack_string(\%count, $left, $_) for @$right;
+
 	no warnings 'utf8';	# starts warning of UTF-16 surrogates around n=5e7
 	return [ map join('', chr($count{$_}), $_), sort keys %count ];
 }
@@ -175,20 +171,17 @@ sub compose_pack_pack {
 # composes the latter with each element of the former. Returns a hashref
 # in which key is a raw partition and the corresponding value is the number
 # of occurrences of that partition.
-sub compose_pack_string {
-	my($packed_set, $right) = @_;
-	# CHECKME: $count = ord(substr $right, 0, 1, '') may be faster
+sub accumulate_pack_string {
+	my($counts, $packed_set, $right) = @_;
 	my $right_count = ord $right;
 	my $right_factors = substr $right, 1;
-	my %count;
 	for my $left (@$packed_set) {
 		my $multiple = $right_count * ord($left);
 		my $left_factors = substr $left, 1;
 		my $raw_counts = compose_factors($left_factors, $right_factors);
-		$count{$_} += $multiple * $raw_counts->{$_}
+		$counts->{$_} += $multiple * $raw_counts->{$_}
 				for keys %$raw_counts;
 	}
-	return \%count;
 }
 
 {
