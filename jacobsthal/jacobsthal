@@ -1,5 +1,6 @@
 #!/opt/maths/bin/perl -w
 use strict;
+$| = 1;
 
 =head1 A048669 - the Jacobsthal function
 
@@ -22,7 +23,7 @@ my $t0 = (times)[0];
 my $result = Jd($sorted);
 my $t1 = (times)[0];
 
-printf "[%.3f] Jd = %s\n", $t1 - $t0, $result;
+printf "[%.2f] Jd = %s\n", $t1 - $t0, $result;
 exit 0;
 
 =head2 Jd ( primes )
@@ -51,187 +52,156 @@ sub Jd {
 		shift @$sorted;
 	}
 
-	my $k = @$sorted;
+	my @pp = map +{
+		p => $sorted->[$_],
+		remain => @$sorted - $_,
+	}, 0 .. $#$sorted;
+
+	my $best = JdFindBest(\@pp);
+	return $had_2 ? 2 * $best + 1 : $best;
+}
+
+=head2 structure
+
+{
+	# fixed for the lifetime
+	p => this prime,
+	remain => count of primes from here to end of list
+
+	# reset when k changes
+	max => maximum copies of this prime possible for this k
+	stolen => number of guaranteed collisions with first prime
+
+	# reset on every iteration, maybe tweaked when k changes
+	v => k-bit vector, bits set at each offset already hit by assigned primes
+	needed => number of bits clear in v
+	excess => maximum degrees of freedom
+
+	# reset on every iteration, no tweaks
+	offset => current assigned offset in run for first multiple of this prime
+}
+
+=cut
+
+sub JdFindBest {
+	my($pp) = @_;
+	my $k = @$pp;	# we have a simple solution with no primes fixed
+
+	my($best, $best_mod, $best_fixed) = ($k, [], 0);
+	my $index = 0;
+	@{ $pp->[0] }{qw{ offset v needed }} = (-1, '', $k);
+
 	while (1) {
-		last unless JdFindRun($k + 1, $sorted);
 		++$k;
-	}
-	return $had_2 ? 2 * $k + 1 : $k;
-}
+		JdSetPP($pp, $k, $index);
 
-=head2 JdFindRun ( k, primes )
+		SOLUTION: while ($index >= 0) {
+			my $pi = $pp->[$index];
+			my $needed = $pi->{needed};
 
-Given integer I<k> and an arrayref of distinct I<primes> (ideally sorted
-in ascending order, for best performance), searches for a way to generate
-a run of I<k> consecutive integers each of which has at least one factor
-in common with the list of primes.
+			# break out to record solution for this $k if we have at least
+			# as many unused primes as unfilled slots
+			last SOLUTION if $pi->{remain} >= $needed;
 
-If no such run is found, returns C<FALSE>; if a run is found, prints the
-list of assigned gcd values and returns C<TRUE>.
+			# for this prime, we want to try starting points from 0 to p-1
+			my $p = $pi->{p};
+			--$index, next if ++$pi->{offset} >= $p;
 
-The I<primes> are assigned in the supplied order; at the point there are
-fewer gaps than unassigned primes we short-circuit - the gaps will show
-as gcd C<1> in the printed result, and can be assigned from the remaining
-primes in any order.
+			# if this (and hence all remaining primes) can only appear once,
+			# we have no further chance to find a solution here
+			my $underflow = $pi->{max};
+			--$index, next if $underflow == 1;
 
-It is assumed trivial if needed to use CRT based on the assigned list to
-find an integer at which such a run can start.
+			my $v = $pi->{v};
+			my $excess = $pi->{excess} + $pi->{stolen};
+			for (my $offset = $pi->{offset}; $offset < $k; $offset += $p) {
+				--$underflow;
+				if (vec($v, $offset, 1)) {
+					# we collided with another prime
+					--$excess;
+				} else {
+					# we filled an empty slot
+					--$needed;
+					vec($v, $offset, 1) = 1;
+				}
+			}
+			# if we found less the max, we must also reduce the excess
+			$excess -= $underflow;
 
-=cut
+			# if we now have negative excess, no solution is possible
+			next if $excess < 0;
 
-sub JdFindRun {
-	my($k, $sorted) = @_;
-	my $excess = JdExcess($k, $sorted);
-	return 0 if $excess < 0;
-
-	# The 'excess' is the number of unexpected collisions we can sustain
-	# and still have a chance of finding a run. We use this for short-
-	# circuiting, with refinements described below.
-
-	my @complex;
-	my $firstp;
-	for my $p (@$sorted) {
-		# nothing special to do for a prime that can appear only once
-		# in the run
-		last if $p > $k;
-
-		# if p_1 * p_i >= k, we know there will some mandatory collisions
-		# when we assign p_i. We'll "steal" them from the known excess
-		# count now, and restore them only at the point we actually assign
-		# p_i - this allows us to shortcircuit earlier when we try to use
-		# up excess that we know we'll need later.
-		#
-		# We can't safely do the same for p_2 * p_i >= k, since they may
-		# end up colliding triply at p_1 * p_2 * p_i.
-		#
-		my $stolen = 0;
-		if ($firstp) {
-			$stolen = int($k / $p / $firstp);
-			$excess -= $stolen;
-		} else {
-			$firstp = $p;
+			# we've managed to assign this prime without contradiction,
+			# so let's try the next
+			my $pj = $pp->[$index + 1];
+			unless ($pj) {
+				# oh, there are no more primes to try - do we have a solution?
+				if ($needed > 0) {
+					next SOLUTION;
+				} else {
+					# we do: advance the index so we record it correctly
+					++$index, last SOLUTION;
+				}
+			}
+			@$pj{qw{ offset v excess needed }} = (-1, $v, $excess, $needed);
+			++$index;
 		}
-
-		push @complex, {
-			p => $p,
-			count => ceilDiv($k, $p),
-			stolen => $stolen,
-		};
+		last if $index < 0;
+		# we found a solution, record and try longer
+		$best = $k;
+		$best_mod = [ map $pp->[$_]{offset}, 0 .. $index - 1 ];
+		$best_fixed = $index;
+		printf(
+			"[%.2f] Jd = %s [%s] floating %s\n",
+			(times)[0], $best,
+			join(', ', map "$pp->[$_]{p}=$best_mod->[$_]", 0..$best_fixed - 1),
+			@$pp - $index,
+		);
+		if ($index == @$pp) {
+			# If we're pointing past the end of the list, we must retry
+			# the last prime at the same offset.
+			--$index;
+			--$pp->[$index]{offset};
+		}
 	}
-	# if we stole more than there was to steal, no solution is possible
-	return 0 if $excess < 0;
 
-	# This array reports the actual gcd of each offset in the run on success.
-	# The elements can be initialized to (eg) Math::BigInt objects instead
-	# if exact values are required when they get large, but for correct
-	# operation the code only needs to be able to distinguish between '1'
-	# and 'not 1'.
-	my @gcd = (1) x $k;
-
-	# recursively call the function that assigns one prime.
-	return JdFindRun_r($k, \@complex, \@gcd, {
-		count => scalar @$sorted,
-		gclear => $k,
-		excess => $excess,
-		ci => 0
-	});
+	return $best;
 }
 
-=head2 JdFindRun_r ( k, primes, gcd, args )
-
-Recursive function to find a run of I<k> consecutive integers given
-a partial match with the given characteristics. If no such run is found,
-returns C<FALSE>; if a run is found, prints the list of assigned gcd
-values and returns C<TRUE> (which short-circuits through all the
-intervening recursive calls).
-
-The initial arguments I<k>, I<primes> and I<gcd> are unchanging (though
-the contents of I<gcd> are locally modified): they could be put in global
-variables (or package lexicals) to save on argument passing for efficiency
-if reentrancy is not a worry. The final hashref I<args> is recreated
-for each recursive call.
-
-I<primes> should be an arrayref representing each prime I<p> less than
-I<k> (so that it can appear more than once in a matching run). Each
-element of the arrayref is a hashref (prepared in C<JdFindRun>) with
-keys I<p> for the prime itself, I<count> for the maximum number of
-elements of the run that can be divisible by I<p>, and I<stolen> for
-the number of guaranteed collisions, which have been subtracted from
-the I<excess> value in I<args> in advance.
-
-I<gcd> should be an arrayref containing C<1> for any element not yet
-reached by any assigned prime, and a different value for any that has
-been reached. We locally modify these values when recursing, but such
-changes are automatically undone on returning.
-
-I<args> should be a hashref with keys: I<count> for the number of primes
-not yet assigned (including "simple" ones); I<gclear> for the number
-of elements of I<gcd> not yet reached by any assigned prime; I<excess>
-for the number of collisions we can allow and still have a chance of
-success (but see comments in C<JdFindRun> for some refinements we
-apply to this number); and I<index> for the index of the next element
-of I<primes> we have not yet assigned.
-
-=cut
-
-sub JdFindRun_r {
-	my($k, $complex, $gcd, $args) = @_;
-	if ($args->{count} >= $args->{gclear}) {
-		# We have at least as many unassigned primes as unreached elements,
-		# which is a success - print the details, and return.
-		printf "[%.2f] length %s gcd [%s], %s spare for %s clear\n",
-			(times)[0] - $t0, $k,
-			join(', ', @$gcd), @$args{qw{count gclear}};
-		return 1;
+sub JdSetPP {
+	my($pp, $k, $index) = @_;
+	my $firstp = $pp->[0]{p};
+	my $excess = -$k;
+	for my $i (0 .. $#$pp) {
+		my $pi = $pp->[$i];
+		my $p = $pi->{p};
+		my $max = ceilDiv($k, $p);
+		my $stolen = $i ? int($k / $p / $firstp) : 0;
+		@$pi{qw{ max stolen }} = ($max, $stolen);
+		$excess += $max - $stolen;
 	}
 
-	# Pick up the next prime to assign. Simple primes can only appear once,
-	# so if there are no complex ones left we have no further chance to find
-	# a solution with the current assignments.
-	my $c = $complex->[$args->{ci}]
-			or return 0;
-	my($p, $count, $stolen) = @$c{qw{ p count stolen }};
+	my $v = '';
+	my $needed = $k;
+	for my $i (0 .. $index - 1) {
+		my $pi = $pp->[$i];
+		@$pi{qw{  v needed excess }} = ($v, $needed, $excess);
 
-	# Try assigning this prime at each possible location.
-	for my $start (0 .. $p - 1) {
-		# Restore the stolen excess - as we find the (guaranteed) collisions
-		# on assignment, we'll be taking them all away again.
-		my $excess = $args->{excess} + $stolen;
-		my $gclear = $args->{gclear};
-		my(@index, @value);
-		my $found = 0;
-
-		for (my $offset = $start; $offset < $k; $offset += $p) {
-			my $prev_gcd = $gcd->[$offset];
-			push @index, $offset;
-			push @value, $prev_gcd * $p;
-			++$found;
-			if ($prev_gcd == 1) {
-				# This entry hasn't been hit by a prior assignment, so
-				# the number of unreached elements goes down.
-				--$gclear;
-			} else {
-				# This entry has been hit by a prior assignment, so our
-				# capacity for additional collisions goes down.
+		my $p = $pi->{p};
+		$excess += $pi->{stolen};
+		my $underflow = $pi->{max};
+		for (my $offset = $pi->{offset}; $offset < $k; $offset += $p) {
+			--$underflow;
+			if (vec($v, $offset, 1)) {
 				--$excess;
+			} else {
+				--$needed;
+				vec($v, $offset, 1) = 1;
 			}
 		}
-
-		# If for this start point we hit the run fewer than the maximum
-		# possible number of times, that has the same effect as a collision.
-		$excess -= $count - $found;
-		next if $excess < 0;
-
-		# Locally set the modified gcd values, and recurse.
-		local @$gcd[@index] = @value;
-		return 1 if JdFindRun_r($k, $complex, $gcd, {
-			count => $args->{count} - 1,
-			gclear => $gclear,
-			excess => $excess,
-			ci => $args->{ci} + 1,
-		});
+		$excess -= $underflow;
 	}
-	return 0;
+	@{ $pp->[$index] }{qw{  v needed excess }} = ($v, $needed, $excess);
 }
 
 =head2 JdExcess ( k, primes )
@@ -266,18 +236,18 @@ sub sortedUniquedNumbers {
 
 __END__
 
-3#: [0.00] Jd = 4 [3, 1, 1, 3]
-4#: [0.00] Jd = 6 [5, 3, 1, 1, 3, 5]
-5#: [0.00] Jd = 10 [3, 7, 5, 3, 1, 1, 3, 5, 7, 3]
-6#: [0.00] Jd = 12 [11, 3, 7, 5, 3, 1, 1, 3, 5, 7, 3, 11]
-7#: [0.00] Jd = 16 [15, 13, 11, 3, 7, 5, 3, 1, 1, 3, 5, 7, 3, 11, 13, 15]
-8#: [0.04] Jd = 19 [21, 5, 11, 3, 13, 1, 15, 7, 1, 3, 1, 5, 3, 11, 7, 3, 5, 13, 3]
-9#: [0.11] Jd = 22 [21, 19, 17, 15, 13, 11, 3, 7, 5, 3, 1, 1, 3, 5, 7, 3, 11, 13, 15, 17, 19, 21]
-10#: [0.37] Jd = 28 [3, 5, 23, 21, 19, 17, 15, 13, 11, 3, 7, 5, 3, 1, 1, 3, 5, 7, 3, 11, 13, 15, 17, 19, 21, 23, 5, 3]
-11#: [2.14] Jd = 32 [21, 5, 23, 3, 13, 17, 15, 7, 11, 3, 19, 5, 3, 1, 7, 3, 5, 13, 3, 11, 1, 105, 17, 1, 3, 23, 5, 3, 7, 19, 429, 5]
-12#: [2.81] Jd = 36 [35, 33, 31, 29, 3, 5, 23, 21, 19, 17, 15, 13, 11, 3, 7, 5, 3, 1, 1, 3, 5, 7, 3, 11, 13, 15, 17, 19, 21, 23, 5, 3, 29, 31, 33, 35]
-13#: [105.73] Jd = 44 [15, 7, 13, 3, 11, 5, 3, 31, 7, 3, 5, 23, 3, 19, 17, 15015, 29, 1, 3, 1, 5, 3, 7, 1, 3, 5, 11, 3, 13, 7, 15, 17, 19, 3, 23, 5, 21, 11, 31, 3, 5, 13, 3, 7]
-14#: [1354.10] Jd = 49 [285, 7, 13, 3, 11, 5, 3, 37, 7, 3, 5, 23, 3, 1, 17, 15015, 31, 29, 3, 19, 5, 3, 7, 1, 3, 5, 11, 3, 13, 7, 15, 17, 1, 3, 23, 5, 21, 11, 19, 3, 5, 13, 3, 7, 37, 15, 29, 31, 561]
-15#: [3615.13] Jd = 52 [285, 7, 13, 3, 11, 5, 3, 37, 7, 3, 5, 23, 3, 1, 17, 15015, 31, 29, 3, 19, 5, 3, 7, 1, 3, 5, 11, 3, 13, 7, 15, 17, 1, 3, 23, 5, 21, 11, 19, 3, 5, 13, 3, 7, 37, 15, 29, 31, 561, 1, 35, 3]
-16#: [11078.16] Jd = 58 [111546435, 31, 41, 3, 43, 5, 3, 7, 29, 3, 5, 11, 3, 13, 7, 15, 37, 17, 3, 19, 5, 21, 11, 23, 3, 5, 13, 3, 7, 1, 15, 1, 31, 33, 17, 35, 3, 29, 19, 39, 5, 1, 21, 41, 11, 15, 23, 43, 3, 7, 5, 51, 13, 37, 3, 55, 7, 57]
+3#: [0.00] Jd = 4 [3=0] floating 2
+4#: [0.00] Jd = 6 [3=1, 5=0] floating 2
+5#: [0.00] Jd = 10 [3=0, 5=2, 7=1] floating 2
+6#: [0.00] Jd = 12 [3=1, 5=3, 7=2, 11=0] floating 2
+7#: [0.01] Jd = 16 [3=0, 5=0, 7=4, 11=2, 13=1] floating 2
+8#: [0.04] Jd = 19 [3=0, 5=1, 7=0, 11=2, 13=4] floating 3
+9#: [0.06] Jd = 22 [3=0, 5=3, 7=0, 11=5, 13=4, 17=2, 19=1] floating 2
+10#: [0.15] Jd = 28 [3=0, 5=1, 7=3, 11=8, 13=7, 17=5, 19=4, 23=2] floating 2
+11#: [2.13] Jd = 32 [3=0, 5=1, 7=0, 11=8, 13=4, 17=5, 19=10, 23=2] floating 3
+12#: [1.83] Jd = 36 [3=1, 5=0, 7=0, 11=1, 13=11, 17=9, 19=8, 23=6, 29=3, 31=2] floating 2
+13#: [169.50] Jd = 44 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=13, 23=11, 29=16, 31=7] floating 3
+14#: [1497.03] Jd = 49 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 3
+15#: [3347.31] Jd = 52 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 4
+16#: [11390.65] Jd = 58 [3=0, 5=0, 7=0, 11=0, 13=0, 17=0, 19=0, 23=0, 29=8, 31=1, 37=16, 41=2, 43=4] floating 3
 17#: 
