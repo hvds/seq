@@ -13,7 +13,6 @@ typedef unsigned char uchar;
 typedef struct pp_s {
 	/* fixed for life */
 	uint p;	/* this prime */
-	uint remain;	/* number of primes from here to end of list */
 	uint vecbase;	/* location of bit vector in vector stack */
 
 	/* varying when k changes */
@@ -22,6 +21,7 @@ typedef struct pp_s {
 
 	/* varying when offset changes */
 	int offset;		/* try run starting at -offset (mod p) */
+	uint symmetric;	/* all offsets up to this point are symmetric for the run */
 
 	/* varying when k or offset changes */
 	uint needed;	/* number of bits clear in the vector */
@@ -45,7 +45,7 @@ double timer(void) {
 int JdSetPP(int index) {
 	int excess = -k;
 	int i, offset, vbyte, vbit;
-	uint needed = k;
+	uint needed = k, symmetric = 1;
 	uchar w[vsize];
 	pp_t* pi;
 
@@ -62,6 +62,7 @@ int JdSetPP(int index) {
 		memcpy(v + pi->vecbase, w, vsize);
 		pi->needed = needed;
 		pi->excess = excess;
+		pi->symmetric = symmetric;
 
 		excess += pi->stolen - pi->max;
 		for (offset = pi->offset; offset < k; offset += pi->p) {
@@ -73,11 +74,22 @@ int JdSetPP(int index) {
 				w[vbyte] |= vbit;
 			}
 		}
+
+		if (symmetric) {
+			int reverse_offset = (k - 1 - pi->offset) % pi->p;
+			if (pi->offset != reverse_offset) {
+				symmetric = 0;
+				if (pi->offset > reverse_offset) {
+					index = i;
+				}
+			}
+		}
 	}
 	pi = &pp[index];
 	memcpy(v + pi->vecbase, w, vsize);
 	pi->needed = needed;
 	pi->excess = excess;
+	pi->symmetric = symmetric;
 	return index;
 }
 
@@ -104,6 +116,7 @@ uint Jd(void) {
 	k = pn;
 	pp[0].offset = -1;
 	pp[0].needed = k;
+	pp[0].symmetric = 1;
 	memset(v + pp[0].vecbase, 0, vsize);
 
 	++k;
@@ -118,9 +131,16 @@ uint Jd(void) {
 
 		/* break out to record solution for this k if we have at least
 		   as many unused primes as unfilled slots */
-		if (pi->remain >= pi->needed) {
+		if (pn - index >= pi->needed) {
 			index = JdRecordSolution(index);
 			/* retry at the next length */
+			continue;
+		}
+
+		/* if this (and hence all remaining primes) can only appear once,
+		   we have no further chance to find a solution here */
+		if (pi->max == 1) {
+			--index;
 			continue;
 		}
 
@@ -130,11 +150,17 @@ uint Jd(void) {
 			continue;
 		}
 
-		/* if this (and hence all remaining primes) can only appear once,
-		   we have no further chance to find a solution here */
-		if (pi->max == 1) {
-			--index;
-			continue;
+		if (pi->symmetric) {
+			int reverse_offset = (k - 1 - pi->offset) % pi->p;
+			if (pi->offset > reverse_offset) {
+				continue;
+			} else if (pi->offset == reverse_offset) {
+				pj->symmetric = 1;
+			} else {
+				pj->symmetric = 0;
+			}
+		} else {
+			pj->symmetric = 0;
 		}
 
 		w = v + pj->vecbase;
@@ -212,7 +238,6 @@ uint Jd_raw_sorted(uint n, uint* rawp) {
 	v = (uchar*)malloc((pn + 1) * vsize);
 
 	for (i = 0; i <= pn; ++i) {
-		pp[i].remain = pn - i;
 		pp[i].vecbase = i * vsize;
 	}
 
@@ -263,12 +288,12 @@ int main(int argc, char** argv) {
 10#: [0.00] Jd = 28 [3=0, 5=1, 7=3, 11=8, 13=7, 17=5, 19=4, 23=2] floating 2
 11#: [0.02] Jd = 32 [3=0, 5=1, 7=0, 11=8, 13=4, 17=5, 19=10, 23=2] floating 3
 12#: [0.02] Jd = 36 [3=1, 5=0, 7=0, 11=1, 13=11, 17=9, 19=8, 23=6, 29=3, 31=2] floating 2
-13#: [1.04] Jd = 44 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=13, 23=11, 29=16, 31=7] floating 3
-14#: [6.70] Jd = 49 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 3
-15#: [15.00] Jd = 52 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 4
-16#: [54.10] Jd = 58 [3=0, 5=0, 7=0, 11=0, 13=0, 17=0, 19=0, 23=0, 29=8, 31=1, 37=16, 41=2, 43=4] floating 3
-17#: [3827.42] Jd = 65 [3=0, 5=2, 7=1, 11=2, 13=1, 17=4, 19=6, 23=3, 29=5, 31=10, 37=19, 41=20, 43=16, 47=11] floating 3
-18#: [4255.09] Jd = 75 [3=1, 5=1, 7=4, 11=2, 13=7, 17=12, 19=8, 23=0, 29=9, 31=14, 37=17, 41=3, 43=5, 47=15] floating 4
-19#: [14351.82] Jd = 86 [3=0, 5=2, 7=1, 11=2, 13=5, 17=4, 19=2, 23=3, 29=16, 31=25, 37=28, 41=20, 43=10, 47=11, 53=23, 59=14, 61=19] floating 2
-20#: [59021.680] Jd = 94 [3=0, 5=1, 7=1, 11=3, 13=10, 17=2, 19=17, 23=13, 29=9, 31=3, 37=7, 41=32, 43=40, 47=5, 53=15, 59=20, 61=28, 67=35, 71=37, 73=4] floating 0
+13#: [0.52] Jd = 44 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=13, 23=11, 29=16, 31=7] floating 3
+14#: [3.50] Jd = 49 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 3
+15#: [8.98] Jd = 52 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 4
+16#: [41.22] Jd = 58 [3=0, 5=0, 7=0, 11=0, 13=0, 17=0, 19=0, 23=0, 29=8, 31=1, 37=16, 41=2, 43=4] floating 3
+17#: [*3827.42] Jd = 65 [3=0, 5=2, 7=1, 11=2, 13=1, 17=4, 19=6, 23=3, 29=5, 31=10, 37=19, 41=20, 43=16, 47=11] floating 3
+18#: [*4255.09] Jd = 75 [3=1, 5=1, 7=4, 11=2, 13=7, 17=12, 19=8, 23=0, 29=9, 31=14, 37=17, 41=3, 43=5, 47=15] floating 4
+19#: [*14351.82] Jd = 86 [3=0, 5=2, 7=1, 11=2, 13=5, 17=4, 19=2, 23=3, 29=16, 31=25, 37=28, 41=20, 43=10, 47=11, 53=23, 59=14, 61=19] floating 2
+20#: [*59021.680] Jd = 94 [3=0, 5=1, 7=1, 11=3, 13=10, 17=2, 19=17, 23=13, 29=9, 31=3, 37=7, 41=32, 43=40, 47=5, 53=15, 59=20, 61=28, 67=35, 71=37, 73=4] floating 0
 */

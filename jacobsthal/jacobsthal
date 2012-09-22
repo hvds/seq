@@ -79,6 +79,8 @@ sub Jd {
 
 	# reset on every iteration, no tweaks
 	offset => current assigned offset in run for first multiple of this prime
+	symmetric => TRUE if offsets for all preceding primes are placed
+		symmetrically within the run
 }
 
 =cut
@@ -102,14 +104,28 @@ sub JdFindBest {
 			next;
 		}
 
-		# for this prime, we want to try starting points from 0 to p-1
-		my $p = $pi->{p};
-		--$index, next if ++$pi->{offset} >= $p;
-
 		# if this (and hence all remaining primes) can only appear once,
 		# we have no further chance to find a solution here
 		my $underflow = $pi->{max};
 		--$index, next if $underflow == 1;
+
+		# for this prime, we want to try starting points from 0 to p-1
+		my $p = $pi->{p};
+		--$index, next if ++$pi->{offset} >= $p;
+
+		my $pj = $pp->[$index + 1];
+		if ($pi->{symmetric}) {
+			my $reverse_offset = ($k - 1 - $pi->{offset}) % $p;
+			if ($pi->{offset} > $reverse_offset) {
+				next;
+			} elsif ($pi->{offset} == $reverse_offset) {
+				$pj->{symmetric} = 1;
+			} else {
+				$pj->{symmetric} = 0;
+			}
+		} else {
+			$pj->{symmetric} = 0;
+		}
 
 		my $v = $pi->{v};
 		my $excess = $pi->{excess} + $pi->{stolen};
@@ -132,8 +148,7 @@ sub JdFindBest {
 
 		# we've managed to assign this prime without contradiction,
 		# so let's try the next
-		my $pj = $pp->[$index + 1];
-		unless ($pj) {
+		unless ($pj->{p}) {
 			# oh, there are no more primes to try - do we have a solution?
 			if ($needed == 0) {
 				# we do: advance the index so we record it correctly
@@ -186,9 +201,11 @@ sub JdSetPP {
 
 	my $v = '';
 	my $needed = $k;
+	my $symmetric = 1;
 	for my $i (0 .. $index - 1) {
 		my $pi = $pp->[$i];
-		@$pi{qw{  v needed excess }} = ($v, $needed, $excess);
+		@$pi{qw{ v needed excess symmetric }}
+				= ($v, $needed, $excess, $symmetric);
 
 		my $p = $pi->{p};
 		$excess += $pi->{stolen};
@@ -203,8 +220,19 @@ sub JdSetPP {
 			}
 		}
 		$excess -= $underflow;
+
+		if ($symmetric) {
+			my $reverse_offset = ($k - 1 - $pi->{offset}) % $p;
+			if ($pi->{offset} != $reverse_offset) {
+				$symmetric = 0;
+				if ($pi->{offset} > $reverse_offset) {
+					$index = $i;
+				}
+			}
+		}
 	}
-	@{ $pp->[$index] }{qw{  v needed excess }} = ($v, $needed, $excess);
+	@{ $pp->[$index] }{qw{ v needed excess symmetric }}
+			= ($v, $needed, $excess, $symmetric);
 	return $index;
 }
 
