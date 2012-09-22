@@ -86,9 +86,10 @@ sub Jd {
 sub JdFindBest {
 	my($pp) = @_;
 	my $k = @$pp + 1;	# we have a simple solution with no primes fixed
-	my $index = 0;
+	my $index;
 
-	JdSetPP($pp, $k, $index);
+	$pp->[0]{offset} = -1;
+	$index = JdSetPP($pp, $k, 0);
 	while ($index >= 0) {
 		my $pi = $pp->[$index];
 		my $needed = $pi->{needed};
@@ -96,7 +97,7 @@ sub JdFindBest {
 		# record solution for this $k if we have at least
 		# as many unused primes as unfilled slots
 		if ($pi->{remain} >= $needed) {
-			($k) = JdRecordSolution($pp, $k, $index);
+			($k, $index) = JdRecordSolution($pp, $k, $index);
 			# retry at the next length
 			next;
 		}
@@ -136,9 +137,12 @@ sub JdFindBest {
 			# oh, there are no more primes to try - do we have a solution?
 			if ($needed == 0) {
 				# we do: advance the index so we record it correctly
-				($k) = JdRecordSolution($pp, $k, $index + 1);
-				# step back to retry at new length
-				--$pi->{offset};
+				my $oldindex = $index;
+				($k, $index) = JdRecordSolution($pp, $k, $index + 1);
+				if ($index > $oldindex) {
+					--$pi->{offset};
+					$index = $oldindex;
+				}
 			}
 			next;
 		}
@@ -163,8 +167,8 @@ sub JdRecordSolution {
 
 	# now try the next length
 	++$k;
-	JdSetPP($pp, $k, $index);
-	return ($k);
+	$index = JdSetPP($pp, $k, $index);
+	return ($k, $index);
 }
 
 sub JdSetPP {
@@ -201,6 +205,7 @@ sub JdSetPP {
 		$excess -= $underflow;
 	}
 	@{ $pp->[$index] }{qw{  v needed excess }} = ($v, $needed, $excess);
+	return $index;
 }
 
 =head2 JdExcess ( k, primes )

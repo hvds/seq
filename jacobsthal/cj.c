@@ -42,7 +42,7 @@ double timer(void) {
 	return (double)tbuf.tms_utime / CLK_TCK;
 }
 
-void JdSetPP(int index) {
+int JdSetPP(int index) {
 	int excess = -k;
 	int i, offset, vbyte, vbit;
 	uint needed = k;
@@ -78,9 +78,10 @@ void JdSetPP(int index) {
 	memcpy(v + pi->vecbase, w, vsize);
 	pi->needed = needed;
 	pi->excess = excess;
+	return index;
 }
 
-__attribute__((noinline)) void JdRecordSolution(int index) {
+__attribute__((noinline)) int JdRecordSolution(int index) {
 	int i;
 	double t1;
 
@@ -94,11 +95,11 @@ __attribute__((noinline)) void JdRecordSolution(int index) {
 
 	/* now try the next length */
 	++k;
-	JdSetPP(index);
+	return JdSetPP(index);
 }
 
 uint Jd(void) {
-	int index = 0;
+	int index;
 
 	k = pn;
 	pp[0].offset = -1;
@@ -106,7 +107,7 @@ uint Jd(void) {
 	memset(v + pp[0].vecbase, 0, vsize);
 
 	++k;
-	JdSetPP(index);
+	index = JdSetPP(0);
 
 	while (index >= 0) {
 		pp_t* pi = &pp[index];
@@ -118,7 +119,7 @@ uint Jd(void) {
 		/* break out to record solution for this k if we have at least
 		   as many unused primes as unfilled slots */
 		if (pi->remain >= pi->needed) {
-			JdRecordSolution(index);
+			index = JdRecordSolution(index);
 			/* retry at the next length */
 			continue;
 		}
@@ -160,10 +161,16 @@ uint Jd(void) {
 		if (pj->p == 0) {
 			/* there are no more primes to try - do we have a solution? */
 			if (pj->needed == 0) {
+				int newindex;
 				/* we do: advance the index so we record it correctly */
-				JdRecordSolution(index + 1);
-				/* retry the same offset at the new length */
-				--pi->offset;
+				newindex = JdRecordSolution(index + 1);
+				if (newindex > index) {
+					/* retry the same offset at the new length */
+					--pi->offset;
+				} else {
+					/* we're continuing at some lower index */
+					index = newindex;
+				}
 			}
 			continue;
 		}
