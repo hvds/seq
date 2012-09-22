@@ -20,9 +20,6 @@ typedef struct pp_s {
 	uint max;	/* ceil(k / p) */
 	uint stolen;	/* floor(k / p / p_0) for primes other than first */
 
-	/* varying when new solution found */
-	int best_offset;	/* offset at which last solution was found */
-
 	/* varying when offset changes */
 	int offset;		/* try run starting at -offset (mod p) */
 
@@ -83,103 +80,100 @@ void JdSetPP(int index) {
 	pi->excess = excess;
 }
 
-uint Jd(void) {
-	uint best;
-	int index = 0;
-	uint i;
+__attribute__((noinline)) void JdRecordSolution(int index) {
+	int i;
 	double t1;
 
+	/* we found a solution, record it */
+	t1 = timer();
+	printf("[%.2f] Jd = %u [", t1 - t0, k);
+	for (i = 0; i < index; ++i) {
+		printf(i ? ", %u=%i" : "%u=%i", pp[i].p, pp[i].offset);
+	}
+	printf("] floating %u\n", pn - index);
+
+	/* now try the next length */
+	++k;
+	JdSetPP(index);
+}
+
+uint Jd(void) {
+	int index = 0;
+
 	k = pn;
-	best = k;
 	pp[0].offset = -1;
 	pp[0].needed = k;
 	memset(v + pp[0].vecbase, 0, vsize);
 
-	while (1) {
-		++k;
-		JdSetPP(index);
+	++k;
+	JdSetPP(index);
 
-		while (index >= 0) {
-			pp_t* pi = &pp[index];
-			pp_t* pj = &pp[index + 1];
-			int offset;
-			uchar* w;
-			int vbyte, vbit;
+	while (index >= 0) {
+		pp_t* pi = &pp[index];
+		pp_t* pj = &pp[index + 1];
+		int offset;
+		uchar* w;
+		int vbyte, vbit;
 
-			/* break out to record solution for this k if we have at least
-			   as many unused primes as unfilled slots */
-			if (pi->remain >= pi->needed) {
-				break;
-			}
-
-			/* for this prime, we want to try starting points from 0 to p-1 */
-			if (++pi->offset >= pi->p) {
-				--index;
-				continue;
-			}
-
-			/* if this (and hence all remaining primes) can only appear once,
-			   we have no further chance to find a solution here */
-			if (pi->max == 1) {
-				--index;
-				continue;
-			}
-
-			w = v + pj->vecbase;
-			memcpy(w, v + pi->vecbase, vsize);
-			pj->excess = pi->excess + pi->stolen - pi->max;
-			pj->needed = pi->needed;
-			for (offset = pi->offset; offset < k; offset += pi->p) {
-				vbyte = offset / 8;
-				vbit = 1 << (offset & 7);
-				if ((w[vbyte] & vbit) == 0) {
-					++pj->excess;
-					--pj->needed;
-					w[vbyte] |= vbit;
-				}
-			}
-
-			/* if we now have negative excess, no solution is possible */
-			if (pj->excess < 0) {
-				continue;
-			}
-
-			/* we've managed to assign this prime without contradiction,
-			   so let's try the next */
-			if (pj->p == 0) {
-				/* there are no more primes to try - do we have a solution? */
-				if (pj->needed > 0) {
-					continue;
-				} else {
-					/* we do: advance the index so we record it correctly */
-					++index;
-					break;
-				}
-			}
-
-			pj->offset = -1;
-			++index;
-		}
-		if (index < 0) {
-			break;
+		/* break out to record solution for this k if we have at least
+		   as many unused primes as unfilled slots */
+		if (pi->remain >= pi->needed) {
+			JdRecordSolution(index);
+			/* retry at the next length */
+			continue;
 		}
 
-		/* we found a solution, record and try longer */
-		best = k;
-		t1 = timer();
-		printf("[%.2f] Jd = %u [", t1 - t0, k);
-		for (i = 0; i < index; ++i) {
-			printf(i ? ", %u=%i" : "%u=%i", pp[i].p, pp[i].offset);
-		}
-		printf("] floating %u\n", pn - index);
-		if (index == pn) {
-			/* If we're pointing past the end of the list, we must retry
-			   the last prime at the same offset. */
+		/* for this prime, we want to try starting points from 0 to p-1 */
+		if (++pi->offset >= pi->p) {
 			--index;
-			--pp[index].offset;
+			continue;
 		}
+
+		/* if this (and hence all remaining primes) can only appear once,
+		   we have no further chance to find a solution here */
+		if (pi->max == 1) {
+			--index;
+			continue;
+		}
+
+		w = v + pj->vecbase;
+		memcpy(w, v + pi->vecbase, vsize);
+		pj->excess = pi->excess + pi->stolen - pi->max;
+		pj->needed = pi->needed;
+		for (offset = pi->offset; offset < k; offset += pi->p) {
+			vbyte = offset / 8;
+			vbit = 1 << (offset & 7);
+			if ((w[vbyte] & vbit) == 0) {
+				++pj->excess;
+				--pj->needed;
+				w[vbyte] |= vbit;
+			}
+		}
+
+		/* if we now have negative excess, no solution is possible */
+		if (pj->excess < 0) {
+			continue;
+		}
+
+		/* we've managed to assign this prime without contradiction,
+		   so let's try the next */
+		if (pj->p == 0) {
+			/* there are no more primes to try - do we have a solution? */
+			if (pj->needed == 0) {
+				/* we do: advance the index so we record it correctly */
+				JdRecordSolution(index + 1);
+				/* retry the same offset at the new length */
+				--pi->offset;
+			}
+			continue;
+		}
+
+		/* try the next prime */
+		pj->offset = -1;
+		++index;
 	}
-	return best;
+	/* we failed at length k */
+	return k - 1;
 }
 
 uint Jd_raw_sorted(uint n, uint* rawp) {

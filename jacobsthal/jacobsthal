@@ -85,87 +85,86 @@ sub Jd {
 
 sub JdFindBest {
 	my($pp) = @_;
-	my $k = @$pp;	# we have a simple solution with no primes fixed
-
-	my($best, $best_mod, $best_fixed) = ($k, [], 0);
+	my $k = @$pp + 1;	# we have a simple solution with no primes fixed
 	my $index = 0;
-	@{ $pp->[0] }{qw{ offset v needed }} = (-1, '', $k);
 
-	while (1) {
-		++$k;
-		JdSetPP($pp, $k, $index);
+	JdSetPP($pp, $k, $index);
+	while ($index >= 0) {
+		my $pi = $pp->[$index];
+		my $needed = $pi->{needed};
 
-		SOLUTION: while ($index >= 0) {
-			my $pi = $pp->[$index];
-			my $needed = $pi->{needed};
-
-			# break out to record solution for this $k if we have at least
-			# as many unused primes as unfilled slots
-			last SOLUTION if $pi->{remain} >= $needed;
-
-			# for this prime, we want to try starting points from 0 to p-1
-			my $p = $pi->{p};
-			--$index, next if ++$pi->{offset} >= $p;
-
-			# if this (and hence all remaining primes) can only appear once,
-			# we have no further chance to find a solution here
-			my $underflow = $pi->{max};
-			--$index, next if $underflow == 1;
-
-			my $v = $pi->{v};
-			my $excess = $pi->{excess} + $pi->{stolen};
-			for (my $offset = $pi->{offset}; $offset < $k; $offset += $p) {
-				--$underflow;
-				if (vec($v, $offset, 1)) {
-					# we collided with another prime
-					--$excess;
-				} else {
-					# we filled an empty slot
-					--$needed;
-					vec($v, $offset, 1) = 1;
-				}
-			}
-			# if we found less the max, we must also reduce the excess
-			$excess -= $underflow;
-
-			# if we now have negative excess, no solution is possible
-			next if $excess < 0;
-
-			# we've managed to assign this prime without contradiction,
-			# so let's try the next
-			my $pj = $pp->[$index + 1];
-			unless ($pj) {
-				# oh, there are no more primes to try - do we have a solution?
-				if ($needed > 0) {
-					next SOLUTION;
-				} else {
-					# we do: advance the index so we record it correctly
-					++$index, last SOLUTION;
-				}
-			}
-			@$pj{qw{ offset v excess needed }} = (-1, $v, $excess, $needed);
-			++$index;
+		# record solution for this $k if we have at least
+		# as many unused primes as unfilled slots
+		if ($pi->{remain} >= $needed) {
+			($k) = JdRecordSolution($pp, $k, $index);
+			# retry at the next length
+			next;
 		}
-		last if $index < 0;
-		# we found a solution, record and try longer
-		$best = $k;
-		$best_mod = [ map $pp->[$_]{offset}, 0 .. $index - 1 ];
-		$best_fixed = $index;
-		printf(
-			"[%.2f] Jd = %s [%s] floating %s\n",
-			(times)[0], $best,
-			join(', ', map "$pp->[$_]{p}=$best_mod->[$_]", 0..$best_fixed - 1),
-			@$pp - $index,
-		);
-		if ($index == @$pp) {
-			# If we're pointing past the end of the list, we must retry
-			# the last prime at the same offset.
-			--$index;
-			--$pp->[$index]{offset};
+
+		# for this prime, we want to try starting points from 0 to p-1
+		my $p = $pi->{p};
+		--$index, next if ++$pi->{offset} >= $p;
+
+		# if this (and hence all remaining primes) can only appear once,
+		# we have no further chance to find a solution here
+		my $underflow = $pi->{max};
+		--$index, next if $underflow == 1;
+
+		my $v = $pi->{v};
+		my $excess = $pi->{excess} + $pi->{stolen};
+		for (my $offset = $pi->{offset}; $offset < $k; $offset += $p) {
+			--$underflow;
+			if (vec($v, $offset, 1)) {
+				# we collided with another prime
+				--$excess;
+			} else {
+				# we filled an empty slot
+				--$needed;
+				vec($v, $offset, 1) = 1;
+			}
 		}
+		# if we found less the max, we must also reduce the excess
+		$excess -= $underflow;
+
+		# if we now have negative excess, no solution is possible
+		next if $excess < 0;
+
+		# we've managed to assign this prime without contradiction,
+		# so let's try the next
+		my $pj = $pp->[$index + 1];
+		unless ($pj) {
+			# oh, there are no more primes to try - do we have a solution?
+			if ($needed == 0) {
+				# we do: advance the index so we record it correctly
+				($k) = JdRecordSolution($pp, $k, $index + 1);
+				# step back to retry at new length
+				--$pi->{offset};
+			}
+			next;
+		}
+		@$pj{qw{ offset v excess needed }} = (-1, $v, $excess, $needed);
+		++$index;
 	}
 
-	return $best;
+	# we failed at length k
+	return $k - 1;
+}
+
+sub JdRecordSolution {
+	my($pp, $k, $index) = @_;
+
+	# we found a solution, record it
+	printf(
+		"[%.2f] Jd = %s [%s] floating %s\n",
+		(times)[0], $k, join(
+			', ', map "$pp->[$_]{p}=$pp->[$_]{offset}", 0 .. $index - 1
+		), @$pp - $index,
+	);
+
+	# now try the next length
+	++$k;
+	JdSetPP($pp, $k, $index);
+	return ($k);
 }
 
 sub JdSetPP {
