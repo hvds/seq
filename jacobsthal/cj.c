@@ -30,7 +30,7 @@ typedef struct pp_s {
 
 pp_t* pp;
 uint pn;
-uint k;
+uint k = 0;
 uchar* v;
 uint vsize;
 double t0;
@@ -113,13 +113,10 @@ __attribute__((noinline)) int JdRecordSolution(int index) {
 uint Jd(void) {
 	int index;
 
-	k = pn;
+	if (k <= pn) {
+		k = pn + 1;
+	}
 	pp[0].offset = -1;
-	pp[0].needed = k;
-	pp[0].symmetric = 1;
-	memset(v + pp[0].vecbase, 0, vsize);
-
-	++k;
 	index = JdSetPP(0);
 
 	while (index >= 0) {
@@ -257,6 +254,11 @@ int main(int argc, char** argv) {
 	uint i, result;
 	double t1;
 
+	if (argc > 1 && argv[1][0] == '-' && argv[1][1] == 'k') {
+		k = atoi(argv[1] + 2);
+		--argc;
+		++argv;
+	}
 	if (argc < 2) {
 		fprintf(stderr, "Usage: cj <p_1> <p_2> ...\n");
 		return 0;

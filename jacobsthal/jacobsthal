@@ -16,6 +16,15 @@ Note that:
 
 =cut
 
+my $k = 0;
+if (@ARGV && $ARGV[0] =~ /^-/) {
+	my $arg = shift @ARGV;
+	if ($arg =~ s/^-k//) {
+		$k = $arg || shift @ARGV;
+	} else {
+		die "Unknown option '$arg'\n";
+	}
+}
 die "Usage: $0 <p1> <p2> ...\n" unless @ARGV;
 my $sorted = sortedUniquedNumbers(\@ARGV);
 
@@ -87,11 +96,11 @@ sub Jd {
 
 sub JdFindBest {
 	my($pp) = @_;
-	my $k = @$pp + 1;	# we have a simple solution with no primes fixed
 	my $index;
+	$k ||= @$pp + 1;	# we have a simple solution with no primes fixed
 
 	$pp->[0]{offset} = -1;
-	$index = JdSetPP($pp, $k, 0);
+	$index = JdSetPP($pp, 0);
 	while ($index >= 0) {
 		my $pi = $pp->[$index];
 		my $needed = $pi->{needed};
@@ -99,7 +108,7 @@ sub JdFindBest {
 		# record solution for this $k if we have at least
 		# as many unused primes as unfilled slots
 		if ($pi->{remain} >= $needed) {
-			($k, $index) = JdRecordSolution($pp, $k, $index);
+			$index = JdRecordSolution($pp, $index);
 			# retry at the next length
 			next;
 		}
@@ -153,7 +162,7 @@ sub JdFindBest {
 			if ($needed == 0) {
 				# we do: advance the index so we record it correctly
 				my $oldindex = $index;
-				($k, $index) = JdRecordSolution($pp, $k, $index + 1);
+				$index = JdRecordSolution($pp, $index + 1);
 				if ($index > $oldindex) {
 					--$pi->{offset};
 					$index = $oldindex;
@@ -170,7 +179,7 @@ sub JdFindBest {
 }
 
 sub JdRecordSolution {
-	my($pp, $k, $index) = @_;
+	my($pp, $index) = @_;
 
 	# we found a solution, record it
 	printf(
@@ -182,12 +191,12 @@ sub JdRecordSolution {
 
 	# now try the next length
 	++$k;
-	$index = JdSetPP($pp, $k, $index);
-	return ($k, $index);
+	$index = JdSetPP($pp, $index);
+	return $index;
 }
 
 sub JdSetPP {
-	my($pp, $k, $index) = @_;
+	my($pp, $index) = @_;
 	my $firstp = $pp->[0]{p};
 	my $excess = -$k;
 	for my $i (0 .. $#$pp) {
