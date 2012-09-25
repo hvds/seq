@@ -90,6 +90,8 @@ sub Jd {
 	offset => current assigned offset in run for first multiple of this prime
 	symmetric => TRUE if offsets for all preceding primes are placed
 		symmetrically within the run
+	singleton => TRUE if we've skipped one or more offsets settings
+		a single value
 }
 
 =cut
@@ -115,45 +117,53 @@ sub JdFindBest {
 
 		# if this (and hence all remaining primes) can only appear once,
 		# we have no further chance to find a solution here
-		my $underflow = $pi->{max};
-		--$index, next if $underflow == 1;
+		--$index, next if $pi->{max} == 1;
 
 		# for this prime, we want to try starting points from 0 to p-1
 		my $p = $pi->{p};
 		--$index, next if ++$pi->{offset} >= $p;
 
 		my $pj = $pp->[$index + 1];
+		my $symmetric = 0;
 		if ($pi->{symmetric}) {
 			my $reverse_offset = ($k - 1 - $pi->{offset}) % $p;
 			if ($pi->{offset} > $reverse_offset) {
 				next;
 			} elsif ($pi->{offset} == $reverse_offset) {
-				$pj->{symmetric} = 1;
-			} else {
-				$pj->{symmetric} = 0;
+				$symmetric = 1;
 			}
-		} else {
-			$pj->{symmetric} = 0;
 		}
 
 		my $v = $pi->{v};
-		my $excess = $pi->{excess} + $pi->{stolen};
-		for (my $offset = $pi->{offset}; $offset < $k; $offset += $p) {
-			--$underflow;
-			if (vec($v, $offset, 1)) {
-				# we collided with another prime
-				--$excess;
-			} else {
-				# we filled an empty slot
-				--$needed;
+		my $found = 0;
+		if ($pi->{offset} + $p >= $k) {
+			# if max = 2, but at this offset we only hit 1, we can treat
+			# remaining offsets the same as max=1 - act as if we hit a
+			# single value, but don't set any value on the vector
+			$pi->{offset} = $p;	# bump offset to abort on backtracking
+			$found = 1;
+		} else {
+			for (my $offset = $pi->{offset}; $offset < $k; $offset += $p) {
+				next if vec($v, $offset, 1);
+				++$found;
 				vec($v, $offset, 1) = 1;
 			}
+			if ($found == 0) {
+				# that was useless, we can do better
+				next;
+			}
 		}
-		# if we found less the max, we must also reduce the excess
-		$excess -= $underflow;
+
+		if ($found == 1) {
+			next if $pi->{singleton}++;
+			$v = $pi->{v};	# unset the one found
+			$symmetric = 0;
+		}
 
 		# if we now have negative excess, no solution is possible
+		my $excess = $pi->{excess} + $pi->{stolen} - $pi->{max} + $found;
 		next if $excess < 0;
+		$needed -= $found;
 
 		# we've managed to assign this prime without contradiction,
 		# so let's try the next
@@ -170,7 +180,8 @@ sub JdFindBest {
 			}
 			next;
 		}
-		@$pj{qw{ offset v excess needed }} = (-1, $v, $excess, $needed);
+		@$pj{qw{ offset v excess needed symmetric singleton }}
+				= (-1, $v, $excess, $needed, $symmetric, 0);
 		++$index;
 	}
 
@@ -217,18 +228,31 @@ sub JdSetPP {
 				= ($v, $needed, $excess, $symmetric);
 
 		my $p = $pi->{p};
-		$excess += $pi->{stolen};
-		my $underflow = $pi->{max};
-		for (my $offset = $pi->{offset}; $offset < $k; $offset += $p) {
-			--$underflow;
-			if (vec($v, $offset, 1)) {
-				--$excess;
-			} else {
-				--$needed;
+		my $found = 0;
+		my $match;
+
+		if ($pi->{offset} + $p >= $k) {
+			# if max = 2, but at this offset we only hit 1, we can treat
+			# remaining offsets the same as max=1 - act as if we hit a
+			# single value, but don't set any value on the vector
+			$found = 1;
+			$symmetric = 0;
+			$pi->{offset} = $p;
+		} else {
+			for (my $offset = $pi->{offset}; $offset < $k; $offset += $p) {
+				next if vec($v, $offset, 1);
+				++$found;
 				vec($v, $offset, 1) = 1;
+				$match = $offset;
+			}
+			if ($found == 1) {
+				vec($v, $match, 1) = 0;
+				$symmetric = 0;
 			}
 		}
-		$excess -= $underflow;
+		$excess += $pi->{stolen} - $pi->{max} + $found;
+		$needed -= $found;
+		$pi->{singleton} = ($found == 1);
 
 		if ($symmetric) {
 			my $reverse_offset = ($k - 1 - $pi->{offset}) % $p;
@@ -240,8 +264,8 @@ sub JdSetPP {
 			}
 		}
 	}
-	@{ $pp->[$index] }{qw{ v needed excess symmetric }}
-			= ($v, $needed, $excess, $symmetric);
+	@{ $pp->[$index] }{qw{ v needed excess symmetric singleton }}
+			= ($v, $needed, $excess, $symmetric, 0);
 	return $index;
 }
 
@@ -281,14 +305,16 @@ __END__
 4#: [0.00] Jd = 6 [3=1, 5=0] floating 2
 5#: [0.00] Jd = 10 [3=0, 5=2, 7=1] floating 2
 6#: [0.00] Jd = 12 [3=1, 5=3, 7=2, 11=0] floating 2
-7#: [0.01] Jd = 16 [3=0, 5=0, 7=4, 11=2, 13=1] floating 2
-8#: [0.04] Jd = 19 [3=0, 5=1, 7=0, 11=2, 13=4] floating 3
-9#: [0.06] Jd = 22 [3=0, 5=3, 7=0, 11=5, 13=4, 17=2, 19=1] floating 2
-10#: [0.15] Jd = 28 [3=0, 5=1, 7=3, 11=8, 13=7, 17=5, 19=4, 23=2] floating 2
-11#: [2.13] Jd = 32 [3=0, 5=1, 7=0, 11=8, 13=4, 17=5, 19=10, 23=2] floating 3
-12#: [1.83] Jd = 36 [3=1, 5=0, 7=0, 11=1, 13=11, 17=9, 19=8, 23=6, 29=3, 31=2] floating 2
-13#: [169.50] Jd = 44 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=13, 23=11, 29=16, 31=7] floating 3
-14#: [1497.03] Jd = 49 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 3
-15#: [3347.31] Jd = 52 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 4
-16#: [11390.65] Jd = 58 [3=0, 5=0, 7=0, 11=0, 13=0, 17=0, 19=0, 23=0, 29=8, 31=1, 37=16, 41=2, 43=4] floating 3
-17#: 
+7#: [0.00] Jd = 16 [3=0, 5=0, 7=4, 11=2, 13=1] floating 2
+8#: [0.01] Jd = 19 [3=0, 5=1, 7=0, 11=2, 13=4] floating 3
+9#: [0.02] Jd = 22 [3=0, 5=3, 7=0, 11=5, 13=4, 17=2, 19=1] floating 2
+10#: [0.03] Jd = 28 [3=0, 5=1, 7=3, 11=8, 13=7, 17=5, 19=4, 23=2] floating 2
+11#: [0.28] Jd = 32 [3=0, 5=1, 7=0, 11=8, 13=4, 17=5, 19=10, 23=2] floating 3
+12#: [0.54] Jd = 36 [3=1, 5=0, 7=0, 11=1, 13=11, 17=9, 19=8, 23=6, 29=3, 31=2] floating 2
+13#: [7.59] Jd = 44 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=13, 23=11, 29=16, 31=7] floating 3
+14#: [46.36] Jd = 49 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 3
+15#: [84.26] Jd = 52 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 4
+16#: [470.19] Jd = 58 [3=0, 5=0, 7=0, 11=0, 13=0, 17=0, 19=0, 23=0, 29=8, 31=1, 37=16, 41=2, 43=4] floating 3
+17#: [5758.01] Jd = 65 [3=0, 5=2, 7=1, 11=2, 13=1, 17=4, 19=6, 23=3, 29=5, 31=10, 37=19, 41=20, 43=16, 47=11] floating 3
+18#: [15821.02] Jd = 75 [3=1, 5=1, 7=4, 11=2, 13=7, 17=12, 19=8, 23=0, 29=9, 31=14, 37=17, 41=3, 43=5, 47=15] floating 4
+19#: [42193.59] Jd = 86 [3=0, 5=2, 7=1, 11=2, 13=5, 17=4, 19=2, 23=3, 29=16, 31=25, 37=28, 41=20, 43=10, 47=11, 53=23, 59=14, 61=19] floating 2

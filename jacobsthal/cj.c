@@ -12,16 +12,20 @@ typedef unsigned char uchar;
 
 typedef struct pp_s {
 	/* fixed for life */
-	uint p;	/* this prime */
+	uint p;			/* this prime */
 	uint vecbase;	/* location of bit vector in vector stack */
 
 	/* varying when k changes */
-	uint max;	/* ceil(k / p) */
+	uint max;		/* ceil(k / p) */
 	uint stolen;	/* floor(k / p / p_0) for primes other than first */
 
 	/* varying when offset changes */
 	int offset;		/* try run starting at -offset (mod p) */
-	uint symmetric;	/* all offsets up to this point are symmetric for the run */
+	uint flags;
+/* set if all offsets up to this point are symmetric for the run */
+#define F_SYMMETRIC 1
+/* set if we've skipped one or more offsets setting a single value */
+#define F_SINGLETON 2
 
 	/* varying when k or offset changes */
 	uint needed;	/* number of bits clear in the vector */
@@ -45,7 +49,7 @@ double timer(void) {
 int JdSetPP(int index) {
 	int excess = -k;
 	int i, offset, vbyte, vbit;
-	uint needed = k, symmetric = 1;
+	uint needed = k, symmetric = 1, found, match;
 	uchar w[vsize];
 	pp_t* pi;
 
@@ -62,18 +66,34 @@ int JdSetPP(int index) {
 		memcpy(v + pi->vecbase, w, vsize);
 		pi->needed = needed;
 		pi->excess = excess;
-		pi->symmetric = symmetric;
+		pi->flags = (symmetric ? F_SYMMETRIC : 0)
+				| (pi->flags & F_SINGLETON);
 
-		excess += pi->stolen - pi->max;
-		for (offset = pi->offset; offset < k; offset += pi->p) {
-			vbyte = offset / 8;
-			vbit = 1 << (offset & 7);
-			if ((w[vbyte] & vbit) == 0) {
-				++excess;
-				--needed;
-				w[vbyte] |= vbit;
+		found = 0;
+		if (pi->offset + pi->p >= k) {
+			/* if max = 2, but at this offset we only hit 1, we can treat
+			   remaining offsets the same as max=1 - act as if we hit a
+			   single value, but don't set any value on the vector */
+			found = 1;
+			symmetric = 0;
+			pi->offset = pi->p;
+		} else {
+			for (offset = pi->offset; offset < k; offset += pi->p) {
+				vbyte = offset / 8;
+				vbit = 1 << (offset & 7);
+				if ((w[vbyte] & vbit) == 0) {
+					++found;
+					w[vbyte] |= vbit;
+					match = offset;
+				}
+			}
+			if (found == 1) {
+				w[match >> 3] &= ~(1 << (match & 7));
+				symmetric = 0;
 			}
 		}
+		excess += pi->stolen - pi->max + found;
+		needed -= found;
 
 		if (symmetric) {
 			int reverse_offset = (k - 1 - pi->offset) % pi->p;
@@ -89,7 +109,8 @@ int JdSetPP(int index) {
 	memcpy(v + pi->vecbase, w, vsize);
 	pi->needed = needed;
 	pi->excess = excess;
-	pi->symmetric = symmetric;
+	pi->flags = (symmetric ? F_SYMMETRIC : 0)
+			| (pi->flags & F_SINGLETON);
 	return index;
 }
 
@@ -122,6 +143,7 @@ uint Jd(void) {
 	while (index >= 0) {
 		pp_t* pi = &pp[index];
 		pp_t* pj = &pp[index + 1];
+		uint found;
 		int offset;
 		uchar* w;
 		int vbyte, vbit;
@@ -147,37 +169,56 @@ uint Jd(void) {
 			continue;
 		}
 
-		if (pi->symmetric) {
+		pj->flags = 0;	/* reset F_SYMMETRIC and F_SINGLETON */
+		if (pi->flags & F_SYMMETRIC) {
 			int reverse_offset = (k - 1 - pi->offset) % pi->p;
 			if (pi->offset > reverse_offset) {
 				continue;
 			} else if (pi->offset == reverse_offset) {
-				pj->symmetric = 1;
-			} else {
-				pj->symmetric = 0;
+				pj->flags = F_SYMMETRIC;
 			}
-		} else {
-			pj->symmetric = 0;
 		}
 
 		w = v + pj->vecbase;
-		memcpy(w, v + pi->vecbase, vsize);
-		pj->excess = pi->excess + pi->stolen - pi->max;
-		pj->needed = pi->needed;
-		for (offset = pi->offset; offset < k; offset += pi->p) {
-			vbyte = offset / 8;
-			vbit = 1 << (offset & 7);
-			if ((w[vbyte] & vbit) == 0) {
-				++pj->excess;
-				--pj->needed;
-				w[vbyte] |= vbit;
+
+		found = 0;
+		if (pi->offset + pi->p >= k) {
+			/* if max = 2, but at this offset we only hit 1, we can treat
+			   remaining offsets the same as max=1 - act as if we hit a
+			   single value, but don't set any value on the vector */
+			pi->offset = pi->p;	/* bump offset to abort on backtracking */
+			found = 1;
+			/* fall through to found == 1 case below */
+		} else {
+			memcpy(w, v + pi->vecbase, vsize);
+			for (offset = pi->offset; offset < k; offset += pi->p) {
+				vbyte = offset / 8;
+				vbit = 1 << (offset & 7);
+				if ((w[vbyte] & vbit) == 0) {
+					++found;
+					w[vbyte] |= vbit;
+				}
+			}
+			if (found == 0) {
+				/* that was useless, we can do better */
+				continue;
 			}
 		}
 
+		if (found == 1) {
+			if (pi->flags & F_SINGLETON) {
+				continue;
+			}
+			pi->flags |= F_SINGLETON;
+			memcpy(w, v + pi->vecbase, vsize);
+		}
+
 		/* if we now have negative excess, no solution is possible */
+		pj->excess = pi->excess + pi->stolen - pi->max + found;
 		if (pj->excess < 0) {
 			continue;
 		}
+		pj->needed = pi->needed - found;
 
 		/* we've managed to assign this prime without contradiction,
 		   so let's try the next */
@@ -236,6 +277,7 @@ uint Jd_raw_sorted(uint n, uint* rawp) {
 
 	for (i = 0; i <= pn; ++i) {
 		pp[i].vecbase = i * vsize;
+		pp[i].flags = 0;
 	}
 
 	result = Jd();
@@ -288,14 +330,18 @@ int main(int argc, char** argv) {
 8#: [0.00] Jd = 19 [3=0, 5=1, 7=0, 11=2, 13=4] floating 3
 9#: [0.00] Jd = 22 [3=0, 5=3, 7=0, 11=5, 13=4, 17=2, 19=1] floating 2
 10#: [0.00] Jd = 28 [3=0, 5=1, 7=3, 11=8, 13=7, 17=5, 19=4, 23=2] floating 2
-11#: [0.02] Jd = 32 [3=0, 5=1, 7=0, 11=8, 13=4, 17=5, 19=10, 23=2] floating 3
-12#: [0.02] Jd = 36 [3=1, 5=0, 7=0, 11=1, 13=11, 17=9, 19=8, 23=6, 29=3, 31=2] floating 2
-13#: [0.52] Jd = 44 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=13, 23=11, 29=16, 31=7] floating 3
-14#: [3.50] Jd = 49 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 3
-15#: [8.98] Jd = 52 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 4
-16#: [41.22] Jd = 58 [3=0, 5=0, 7=0, 11=0, 13=0, 17=0, 19=0, 23=0, 29=8, 31=1, 37=16, 41=2, 43=4] floating 3
-17#: [*3827.42] Jd = 65 [3=0, 5=2, 7=1, 11=2, 13=1, 17=4, 19=6, 23=3, 29=5, 31=10, 37=19, 41=20, 43=16, 47=11] floating 3
-18#: [*4255.09] Jd = 75 [3=1, 5=1, 7=4, 11=2, 13=7, 17=12, 19=8, 23=0, 29=9, 31=14, 37=17, 41=3, 43=5, 47=15] floating 4
-19#: [*14351.82] Jd = 86 [3=0, 5=2, 7=1, 11=2, 13=5, 17=4, 19=2, 23=3, 29=16, 31=25, 37=28, 41=20, 43=10, 47=11, 53=23, 59=14, 61=19] floating 2
-20#: [*59021.680] Jd = 94 [3=0, 5=1, 7=1, 11=3, 13=10, 17=2, 19=17, 23=13, 29=9, 31=3, 37=7, 41=32, 43=40, 47=5, 53=15, 59=20, 61=28, 67=35, 71=37, 73=4] floating 0
+11#: [0.00] Jd = 32 [3=0, 5=1, 7=0, 11=8, 13=4, 17=5, 19=10, 23=2] floating 3
+12#: [0.00] Jd = 36 [3=1, 5=0, 7=0, 11=1, 13=11, 17=9, 19=8, 23=6, 29=3, 31=2] floating 2
+13#: [0.04] Jd = 44 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=13, 23=11, 29=16, 31=7] floating 3
+14#: [0.34] Jd = 49 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 3
+15#: [0.57] Jd = 52 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 4
+16#: [2.24] Jd = 58 [3=0, 5=0, 7=0, 11=0, 13=0, 17=0, 19=0, 23=0, 29=8, 31=1, 37=16, 41=2, 43=4] floating 3
+17#: [38.40] Jd = 65 [3=0, 5=2, 7=1, 11=2, 13=1, 17=4, 19=6, 23=3, 29=5, 31=10, 37=19, 41=20, 43=16, 47=11] floating 3
+18#: [157.18] Jd = 75 [3=1, 5=1, 7=4, 11=2, 13=7, 17=12, 19=8, 23=0, 29=9, 31=14, 37=17, 41=3, 43=5, 47=15] floating 4
+19#: [480.49] Jd = 86 [3=0, 5=2, 7=1, 11=2, 13=5, 17=4, 19=2, 23=3, 29=16, 31=25, 37=28, 41=20, 43=10, 47=11, 53=23, 59=14, 61=19] floating 2
+20#: [2150.31] Jd = 94 [3=0, 5=1, 7=1, 11=3, 13=10, 17=2, 19=17, 23=13, 29=9, 31=3, 37=7, 41=32, 43=40, 47=5, 53=15, 59=20, 61=28, 67=35, 71=37, 73=4] floating 0
+21#: [10922.37] Jd = 99 [3=1, 5=0, 7=5, 11=7, 13=1, 17=6, 19=2, 23=17, 29=9, 31=10, 37=11, 41=1, 43=1, 47=24, 53=3, 59=39, 61=32, 67=2, 71=6, 73=8] floating 1
+22#: [29334.62] Jd = 107 [3=0, 5=1, 7=1, 11=3, 13=10, 17=2, 19=2, 23=9, 29=7, 31=5, 37=15, 41=38, 43=34, 47=35, 53=20, 59=44, 61=13, 67=28, 71=4, 73=4, 79=4, 83=17] floating 0
+23#: [57453.89] Jd = 116 [3=0, 5=2, 7=1, 11=2, 13=5, 17=6, 19=0, 23=11, 29=1, 31=24, 37=28, 41=20, 43=10, 47=4, 53=41, 59=14, 61=49, 67=16, 71=16, 73=16, 79=25, 83=17, 89=26] floating 0
+24#: [105569.37] Jd = 128 [3=0, 5=1, 7=3, 11=0, 13=1, 17=13, 19=5, 23=12, 29=8, 31=20, 37=23, 41=29, 43=25, 47=18, 53=19, 59=50, 61=28, 67=7, 71=32, 73=34, 79=4, 83=2] floating 2
 */
