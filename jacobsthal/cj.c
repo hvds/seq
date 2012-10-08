@@ -26,6 +26,8 @@ typedef struct pp_s {
 #define F_SYMMETRIC 1
 /* set if we've skipped one or more offsets setting a single value */
 #define F_SINGLETON 2
+/* set if we've set a single value this time through */
+#define F_IS_SINGLE 4
 
 	/* varying when k or offset changes */
 	uint needed;	/* number of bits clear in the vector */
@@ -67,7 +69,7 @@ int JdSetPP(int index) {
 		pi->needed = needed;
 		pi->excess = excess;
 		pi->flags = (symmetric ? F_SYMMETRIC : 0)
-				| (pi->flags & F_SINGLETON);
+				| (pi->flags & F_SINGLETON);	/* F_IS_SINGLE cleared */
 
 		found = 0;
 		if (pi->offset + pi->p >= k) {
@@ -77,6 +79,7 @@ int JdSetPP(int index) {
 			found = 1;
 			symmetric = 0;
 			pi->offset = pi->p;
+			pi->flags |= F_IS_SINGLE;
 		} else {
 			for (offset = pi->offset; offset < k; offset += pi->p) {
 				vbyte = offset / 8;
@@ -90,6 +93,7 @@ int JdSetPP(int index) {
 			if (found == 1) {
 				w[match >> 3] &= ~(1 << (match & 7));
 				symmetric = 0;
+				pi->flags |= F_IS_SINGLE;
 			}
 		}
 		excess += pi->stolen - pi->max + found;
@@ -110,7 +114,7 @@ int JdSetPP(int index) {
 	pi->needed = needed;
 	pi->excess = excess;
 	pi->flags = (symmetric ? F_SYMMETRIC : 0)
-			| (pi->flags & F_SINGLETON);
+			| (pi->flags & F_SINGLETON);	/* F_IS_SINGLE cleared */
 	return index;
 }
 
@@ -121,10 +125,15 @@ __attribute__((noinline)) int JdRecordSolution(int index) {
 	/* we found a solution, record it */
 	t1 = timer();
 	printf("[%.2f] Jd = %u [", t1 - t0, k);
-	for (i = 0; i < index; ++i) {
-		printf(i ? ", %u=%i" : "%u=%i", pp[i].p, pp[i].offset);
+	for (i = 0; i < pn; ++i) {
+		if (i) printf(".");
+		if (i >= index || pp[i].flags & F_IS_SINGLE) {
+			printf("*");
+		} else {
+			printf("%i", pp[i].offset);
+		}
 	}
-	printf("] floating %u\n", pn - index);
+	printf("]\n");
 
 	/* now try the next length */
 	++k;
@@ -169,7 +178,7 @@ uint Jd(void) {
 			continue;
 		}
 
-		pj->flags = 0;	/* reset F_SYMMETRIC and F_SINGLETON */
+		pj->flags = 0;	/* reset F_SYMMETRIC, F_SINGLETON and F_IS_SINGLE */
 		if (pi->flags & F_SYMMETRIC) {
 			int reverse_offset = (k - 1 - pi->offset) % pi->p;
 			if (pi->offset > reverse_offset) {
@@ -209,8 +218,10 @@ uint Jd(void) {
 			if (pi->flags & F_SINGLETON) {
 				continue;
 			}
-			pi->flags |= F_SINGLETON;
+			pi->flags |= F_SINGLETON | F_IS_SINGLE;
 			memcpy(w, v + pi->vecbase, vsize);
+		} else {
+			pi->flags &= ~F_IS_SINGLE;
 		}
 
 		/* if we now have negative excess, no solution is possible */
@@ -322,26 +333,26 @@ int main(int argc, char** argv) {
 }
 
 /*
-3#: [0.00] Jd = 4 [3=0] floating 2
-4#: [0.00] Jd = 6 [3=1, 5=0] floating 2
-5#: [0.00] Jd = 10 [3=0, 5=2, 7=1] floating 2
-6#: [0.00] Jd = 12 [3=1, 5=3, 7=2, 11=0] floating 2
-7#: [0.00] Jd = 16 [3=0, 5=0, 7=4, 11=2, 13=1] floating 2
-8#: [0.00] Jd = 19 [3=0, 5=1, 7=0, 11=2, 13=4] floating 3
-9#: [0.00] Jd = 22 [3=0, 5=3, 7=0, 11=5, 13=4, 17=2, 19=1] floating 2
-10#: [0.00] Jd = 28 [3=0, 5=1, 7=3, 11=8, 13=7, 17=5, 19=4, 23=2] floating 2
-11#: [0.00] Jd = 32 [3=0, 5=1, 7=0, 11=8, 13=4, 17=5, 19=10, 23=2] floating 3
-12#: [0.00] Jd = 36 [3=1, 5=0, 7=0, 11=1, 13=11, 17=9, 19=8, 23=6, 29=3, 31=2] floating 2
-13#: [0.04] Jd = 44 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=13, 23=11, 29=16, 31=7] floating 3
-14#: [0.34] Jd = 49 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 3
-15#: [0.57] Jd = 52 [3=0, 5=0, 7=1, 11=4, 13=2, 17=14, 19=0, 23=11, 29=17, 31=16, 37=7] floating 4
-16#: [2.24] Jd = 58 [3=0, 5=0, 7=0, 11=0, 13=0, 17=0, 19=0, 23=0, 29=8, 31=1, 37=16, 41=2, 43=4] floating 3
-17#: [38.40] Jd = 65 [3=0, 5=2, 7=1, 11=2, 13=1, 17=4, 19=6, 23=3, 29=5, 31=10, 37=19, 41=20, 43=16, 47=11] floating 3
-18#: [157.18] Jd = 75 [3=1, 5=1, 7=4, 11=2, 13=7, 17=12, 19=8, 23=0, 29=9, 31=14, 37=17, 41=3, 43=5, 47=15] floating 4
-19#: [480.49] Jd = 86 [3=0, 5=2, 7=1, 11=2, 13=5, 17=4, 19=2, 23=3, 29=16, 31=25, 37=28, 41=20, 43=10, 47=11, 53=23, 59=14, 61=19] floating 2
-20#: [2150.31] Jd = 94 [3=0, 5=1, 7=1, 11=3, 13=10, 17=2, 19=17, 23=13, 29=9, 31=3, 37=7, 41=32, 43=40, 47=5, 53=15, 59=20, 61=28, 67=35, 71=37, 73=4] floating 0
-21#: [10922.37] Jd = 99 [3=1, 5=0, 7=5, 11=7, 13=1, 17=6, 19=2, 23=17, 29=9, 31=10, 37=11, 41=1, 43=1, 47=24, 53=3, 59=39, 61=32, 67=2, 71=6, 73=8] floating 1
-22#: [29334.62] Jd = 107 [3=0, 5=1, 7=1, 11=3, 13=10, 17=2, 19=2, 23=9, 29=7, 31=5, 37=15, 41=38, 43=34, 47=35, 53=20, 59=44, 61=13, 67=28, 71=4, 73=4, 79=4, 83=17] floating 0
-23#: [57453.89] Jd = 116 [3=0, 5=2, 7=1, 11=2, 13=5, 17=6, 19=0, 23=11, 29=1, 31=24, 37=28, 41=20, 43=10, 47=4, 53=41, 59=14, 61=49, 67=16, 71=16, 73=16, 79=25, 83=17, 89=26] floating 0
-24#: [105569.37] Jd = 128 [3=0, 5=1, 7=3, 11=0, 13=1, 17=13, 19=5, 23=12, 29=8, 31=20, 37=23, 41=29, 43=25, 47=18, 53=19, 59=50, 61=28, 67=7, 71=32, 73=34, 79=4, 83=2] floating 2
+3#: [0.00] Jd = 4 [0.*.*]
+4#: [0.00] Jd = 6 [1.0.*.*]
+5#: [0.00] Jd = 10 [0.2.1.*.*]
+6#: [0.00] Jd = 12 [1.3.2.0.*.*]
+7#: [0.00] Jd = 16 [0.0.4.2.1.*.*]
+8#: [0.00] Jd = 19 [0.1.0.2.4.*.*.*]
+9#: [0.00] Jd = 22 [0.3.0.5.4.2.1.*.*]
+10#: [0.00] Jd = 28 [0.1.3.8.7.5.4.2.*.*]
+11#: [0.00] Jd = 32 [0.1.0.8.4.5.10.2.*.*.*]
+12#: [0.00] Jd = 36 [1.0.0.1.11.9.8.6.3.2.*.*]
+13#: [0.04] Jd = 44 [0.0.1.4.2.14.13.11.*.7.*.*.*]
+14#: [0.34] Jd = 49 [0.0.1.4.2.14.0.11.17.16.7.*.*.*]
+15#: [0.57] Jd = 52 [0.0.1.4.2.14.0.11.17.16.7.*.*.*.*]
+16#: [2.24] Jd = 58 [0.0.0.0.0.0.0.0.8.1.16.2.4.*.*.*]
+17#: [38.40] Jd = 65 [0.2.1.2.1.4.6.3.5.10.19.20.16.11.*.*.*]
+18#: [157.18] Jd = 75 [1.1.4.2.7.12.8.0.9.14.17.3.5.15.*.*.*.*]
+19#: [480.49] Jd = 86 [0.2.1.2.5.4.2.3.16.25.28.20.10.11.23.14.19.*.*]
+20#: [2150.31] Jd = 94 [0.1.1.3.10.2.17.13.9.3.7.32.40.5.*.20.28.*.*.4]
+21#: [10922.37] Jd = 99 [1.0.5.7.1.6.2.17.9.10.11.1.1.24.3.39.32.*.*.8.*]
+22#: [29334.62] Jd = 107 [0.1.1.3.10.2.2.9.7.5.15.38.34.35.20.44.13.28.*.*.4.17]
+23#: [57453.89] Jd = 116 [0.2.1.2.5.6.0.11.1.24.28.20.10.4.41.14.49.*.*.16.25.*.26]
+24#: [105569.37] Jd = 128 [0.1.3.0.1.13.5.12.8.20.23.29.25.18.19.50.28.7.32.34.4.2.*.*]
 */
