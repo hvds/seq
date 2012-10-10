@@ -8,3 +8,8 @@ k-steppable:
 
 A001055:
   Number of ways of factoring n with all factors >1, focusing on records.
+
+jacobsthal:
+  Given n, what is the longest possible sequence of consecutive integers
+  each of which has a common factor with n? Perl and C code variants of
+  the same algorithm.
