@@ -13,3 +13,7 @@ jacobsthal:
   Given n, what is the longest possible sequence of consecutive integers
   each of which has a common factor with n? Perl and C code variants of
   the same algorithm.
+
+divrep:
+  Investigation of sequences involving arithmetic series related to tau(n),
+  including A064491, A088430, A165497, A165498, A165499, A165500, A165501.

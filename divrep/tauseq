@@ -1,0 +1,619 @@
+#!/opt/maths/bin/perl -w
+use strict;
+BEGIN { $Math::Pari::initmem=1e8; $Math::Pari::initprimes=1e8 }
+use Math::Pari qw/ PARI factorint isprime prime gcd Mod lift divrem /;
+
+use lib './clib';
+use Constraint;
+use ModFunc qw/ mod_combine quadvec /;
+
+my($opt_n, $opt_x, $opt_c, $opt_t, $opt_a, $opt_cp, $opt_cr)
+		= (0, 0, 0, 100000, 0, 0, 0);
+while (@ARGV && $ARGV[0] =~ /^-/) {
+	my $arg = shift @ARGV;
+	last if $arg eq '--';
+	Constraint->debug_more(), next if $arg eq '-d';
+	$opt_a = 1, next if $arg eq '-a';
+	($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
+	($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
+	($opt_cp = $arg || shift(@ARGV)), next if $arg =~ s{^-cp}{};
+	($opt_cr = $arg || shift(@ARGV)), next if $arg =~ s{^-cr}{};
+	($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
+	($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t}{};
+	die "Unknown option '$arg'\n";
+}
+
+$| = 1;
+my($n, $f) = map PARI($_), @ARGV;
+my $style = $opt_a ? {
+	'name' => 'addseq',
+	'eval' => sub { $_[1] + $_[0] * $_[2] },
+	# suppress any n: n+kd==val (mod m), 0<=k<f, n+kd>max
+	'suppress' => sub {
+		my($c, $val, $mod, $k, $max) = @_;
+		my $diff = $k * $c->n;
+		$c->suppress($mod, ($val - $diff) % $mod, $max - $diff);
+	},
+	'fix_square' => 0,
+	'tau' => $n,
+	'start' => 0,
+} : {
+	'name' => 'rootseq',
+	'eval' => sub { $_[0] + $_[1] * $_[2] },
+	# suppress any d: n+kd==val (mod m), 0<=k<f, n+kd>max
+	'suppress' => sub {
+		my($c, $val, $mod, $k, $max) = @_;
+		return if $k == 0;	# d is not constrained in (n + 0 . d)
+		my $n = $c->n;
+		my $g = gcd($k, $mod);
+		my($gv, $gvr) = @{ divrem($val - $n, $g) };
+		return if $gvr != 0;	# No constraint: this modval can't happen
+		$mod /= $g;
+		$val = lift(Mod($gv, $mod) / ($k / $g));
+		$c->suppress($mod, lift(Mod($gv, $mod) / ($k / $g)),
+				int(($max - $n) / $k) + 1);
+	},
+	'fix_square' => 1,
+	'tau' => tau($n),
+	'start' => 1,
+};
+my $c = Constraint->new(
+	'n' => $n,
+	'f' => $f,
+	'tell_count' => $opt_t,
+	't0' => scalar times(),
+	'min' => $opt_n,
+	'max' => $opt_x,
+	'check' => $opt_c,
+	'min_potency' => $opt_cr,
+	'tau' => $style->{'tau'},
+	'style' => $style,
+);
+
+$c = apply($c) or exit 0;
+printf <<OUT, $c->elapsed(), $style->{'name'}, $n, $f, $opt_n, $opt_x, $opt_c;
+300 Init %.2f: trying %s() for (%s, %s) in [%s, %s], checks up to mod %s
+OUT
+
+my $d = rootseq($c);
+if ($d) {
+	my $flen = length($f);
+	my $vlen = length($n + $f * $d);
+	for (0 .. $f) {
+		my $v = $style->{'eval'}->($n, $d, $_);
+		printf <<OUT, $flen, $_, tau($v), $vlen, $v, pf($v);
+201 Sequence % *s: % 2s = tau(% *s = %s)
+OUT
+	}
+	printf <<OUT, $n, $f, $d, $c->elapsed();
+200 f(%s, %s) = %s  (%.3fs)
+OUT
+} else {
+	printf <<OUT, $n, $f, $opt_x, $c->elapsed();
+500 f(%s, %s) > %s  (%.3fs)
+OUT
+}
+exit 0;
+
+sub apply {
+	my $c = shift;
+	my $tn = $c->tau();
+
+	for my $m (2 .. $c->check()) {
+		my $fm = factorint($m);
+		next if $opt_cp && $fm->[0][$#{ $fm->[0] }] > $opt_cp;
+
+		#
+		# If we know n+kd must not divide m (maybe only beyond some maximum
+		# value for n+kd), use that to deny various values (mod m).
+		#
+		my $max = test_series($m, $tn);
+		series($c, 0, $m, $max) if $max >= 0;
+
+		#
+		# If setting n+kd == a (mod b) fixes some divisors so that others
+		# must be square, use that to deny quadratic non-residues.
+		#
+		my $iter = iter_quadres_series($m, $tn);
+		while (my $result = $iter->()) {
+			my($mod_quad, $value_fixed, $mod_fixed, $max) = @$result;
+			square_series($c, $mod_quad, $value_fixed, $mod_fixed, $max);
+		}
+
+		#
+		# n+kd == xp^y (mod p^z) is suppressible when y+1 ~| tau(n).
+		#
+		if (@{ $fm->[0] } == 1) {
+			my $p = $fm->[0][0];
+			my $z = $fm->[1][0];
+			# Check only for y=z-1, since lower y is already catered for.
+			if (gcd($z, $tn) < $z) {
+				my $py = $m / $p;
+				series($c, $py * $_, $m, 0) for 1 .. $p - 1;
+			}
+		}
+	}
+
+	#
+	# If we know n+kd fixes all but a square for some k, that's a hugely
+	# powerful optimisation. Applicability depends on other constraints,
+	# so we check for this last.
+	#
+	# [[ I think this is only relevant for style 'rootseq'. ]]
+	# TODO: Check if pending constraints would trigger this optimisation,
+	# and schedule it if so.
+	#
+	if ($style->{'fix_square'}) {
+		my $fix_square = fix_square($c, $n, $tn);
+		if ($fix_square) {
+			my($k, $ty2) = @$fix_square;
+			# we require d = y^2 - n/k, with tau(y^2) = ty2
+			warn "Fixing square d = y^2 - n/$k, tau(y^2) = $ty2\n";
+			$c = $c->fix_square($k, $ty2);
+		}
+	}
+
+	return $c;
+}
+
+#
+# disallow n+kd=v (mod m) for n+kd > max
+#
+sub series {
+	my($c, $v, $m, $max) = @_;
+	$max ||= 0;
+	($c->debug > 1) && warn "series ($v, $m, $max)\n";
+	$style->{'suppress'}($c, $v, $m, $_, $max) for 0 .. $c->f() - 1;
+	($c->debug > 1) && warn "series ($v, $m, $max): applied\n";
+}
+
+#
+# Disallow n+kd == w gcd(y,z) (mod x) and y(mod z)
+# whenever w is a non-residue (mod x) and n+kd > max.
+#
+sub square_series {
+	my($c, $x, $y, $z, $max) = @_;
+	$max ||= 0;
+	($c->debug > 1) && warn "square_series ($x, $y, $z, $max)\n";
+	my $quadx = quadvec($x);
+	my $yz = gcd($y, $z);
+	my($v, $m);
+	for my $w (0 .. $x - 1) {
+		next if vec($quadx, $w, 1);	# w is not a non-residue
+		($v, $m) = mod_combine($w * $yz, $x, $y, $z);
+		series($c, $v, $m, $max);
+	}
+	($c->debug > 1) && warn "square_series ($x, $y, $z, $max): applied\n";
+}
+
+#
+# To fix d to be related to a square, we need to find x such that:
+# 1) f > x
+# 2) x.rad(x) | n
+# 3) gcd(x, d) = 1 by prior constraints
+# 4) tau(n) = (2y + 1)tau(x) for some y
+# Then we know n+xd = xy^2 for some y (and we know tau(y)).
+#
+sub fix_square {
+	my($c, $n, $tn) = @_;
+	my $f = $c->f();
+	for my $x (@{ $n->divisors }) {
+		last if $x >= $f;	# divisors are returned in ascending order
+		my $fx = factorint($x);
+		my $rx = rad_factor($fx);
+warn("Would try fix_square($x), but 0(mod $rx) is not disallowed.\n"),
+		next unless $c->disallowed($rx, 0);
+		my $xrx = $x * $rx;
+warn("Would try fix_square($x), but $xrx does not divide $n.\n"),
+		next if gcd($xrx, $n) < $xrx;
+		my $tx = tau_factor($fx);
+		my($tdiv, $trem) = @{ divrem($tn, $tx) };
+warn("Would try fix_square($x), but tau($x) does not divide $tn.\n"),
+		next if $trem;
+warn("Would try fix_square($x), but $tn/tau($x) is even.\n"),
+		next if !($tdiv & 1);
+warn("Will fix_square($x).\n"),
+		return [$x, $tdiv];
+	}
+	return undef;
+}
+
+#
+# Let m_4=\prod{p_i^d_i}, d_i < a_i, and 
+# q_4 = \prod{p_i: p_i | m, p_i ~| m4 } > 1.
+# 
+# Then any way to select m_4, q_4: tau(n) / tau(m_4) = 2k+1 gives
+# gcd(n+kd, m)=m_4 -> n+kd must be a quadratic residue (mod q_4).
+# 
+sub iter_quadres_series {
+	my($m, $tn) = @_; 
+	my $fm = factorint($m);
+	my $p = $fm->[0];
+
+	# To search for this, we need 2^k | tau(n) -> 2^k | tau(m_4).
+	my $tnpow2 = maxpow2mult($tn);
+	my @tmpow2 = map maxpow2arith($_), @{ $fm->[1] };
+
+	# We require q_4 > 1, so the greatest power of 2 we can account for
+	# is sum(tmpow2) - min(tmpow2).
+	my $sumpow2 = sum(\@tmpow2);
+	my $minpow2 = min(\@tmpow2);
+	return sub { return undef } if $sumpow2 - $minpow2 < $tnpow2;
+
+	# Internally we'll iterate to find each valid way to fix some prime powers.
+	my $iter = iter_square_kernel_assignment($tn, $fm->[1], 0);
+	# For each assignment, we'll loop k to try each value (mod m4_fixed_mult)
+	# that honours the assigment. Set k to undef to signal that we need a new
+	# assignment.
+	my $k = undef;
+	my($assignment, $m4_fixed_mult, $m4_quad, $m4_mult, $m4_avoid_mult);
+	return sub {
+		while (1) {
+			if (defined $k) {
+				++$k;
+				if ($k >= $m4_avoid_mult) {
+					$k = undef;
+				} else {
+					next if gcd($k, $m4_avoid_mult) > 1;
+					my $mod = $k *  $m4_fixed_mult;
+					return [ $m4_quad, $mod, $m4_mult, 0 ];
+				}
+			}
+			$assignment = $iter->() or return undef;
+			$m4_fixed_mult = 1;
+			$m4_quad = 1;
+			for my $i (0 .. $#$p) {
+				if ($assignment->[$i] == 0) {
+					$m4_quad *= $p->[$i] ** $fm->[1][$i];
+					next;
+				}
+				$m4_fixed_mult *= $p->[$i] ** $assignment->[$i];
+			}
+			$m4_mult = $m / $m4_quad;
+			$m4_avoid_mult = $m4_mult / $m4_fixed_mult;
+			$k = 0;
+		}
+	};
+}
+
+sub test_series {
+	my($m, $tn) = @_;
+	my $fm = factorint($m);
+	my $tm = tau_factor($fm);
+	my $p = $fm->[0];
+	my $max = -1;
+
+	#
+	# If tau(m) >= tau(n) we can limit the options (mod m).
+	#
+	if ($tm > $tn) {
+		return 0;
+	} elsif ($tm == $tn) {
+		$max = $m;
+	}
+
+	#
+	# Let m=\prod{p_i^a_i}, m_2=\prod{p_i^b_i} where b_i is least k >= a_i
+	# such that b_i + 1 divides tau(n). Then if tau(m_2) >= tau(n) we can
+	# limit the options (mod m) for n+kd > m_2.
+	# 
+	my $fm2 = [ $p, [ map first_divisor($tn, $_ + 1) - 1, @{ $fm->[1] } ] ];
+	my $m2 = unfactorint($fm2);
+	my $tm2 = tau_factor($fm2);
+	if ($m2 > $m) {
+		if ($tm2 > $tn) {
+			return 0;
+		} elsif ($tm2 == $tn) {
+			$max = $m2 unless $max >= 0 && $max < $m2;
+		}
+	}
+
+	#
+	# Let m_3=\prod{p_i^c_i}, c^i>=b_i. Valid solutions require selecting
+	# k_j, m_{3j} such that tau(k_j m_{3j})=tau(n). If k_j=1 for all j,
+	# we can limit the options (mod m) for n+kd > max(m_{3j}).
+	#
+	if (gcd($tm2, $tn) < $tm2) {
+		my $maxm3 = 0;
+		my $good = 1;
+		my $iter = iter_factor($tn);
+		while (my $tn_factors = $iter->()) {
+			my $fm3 = [ $p, [ map $_ - 1, @$tn_factors ] ];
+			next if @{ $fm3->[1] } < @{ $fm2->[1] };
+			next if grep $fm3->[1][$_] < $fm2->[1][$_], 0 .. $#$p;
+			$good = 0, last if @$tn_factors > @$p;
+			my $m3 = unfactorint($fm3);
+			$maxm3 = $m3 if $maxm3 < $m3;
+		}
+		$max = $maxm3 if $good && !($max >= 0 && $max < $maxm3);
+	}
+	return $max;
+}
+
+#
+# Given target product t, source list s, boolean fixed, return an iterator
+# that yields assignment lists a, such that each assignment satisfies:
+# - a_i < s_i for all i
+# - \exists k: (2k+1) \prod{a_i + 1} == t
+# - fixed or (\prod{a_i} == 0)
+#
+# Setting s = \prod{p_i^s_i}, a = \prod{p_i^a_i}, the effect is that:
+#   tau(n) = t & gcd(s, n) = a -> \exist q: n = a q^2.
+#
+# This implementation is very simplistic, and expects only to be called
+# with relatively small numbers: it loops over each possible value for
+# a_0, and calls itself recursively to match the rest. For larger numbers
+# you would at least want to prune when the tail cannot provide the powers
+# of 2 required, by passing round an additional two parameters for required
+# and available powers of 2.
+#
+sub iter_square_kernel_assignment {
+	my($t, $s, $fixed) = @_;
+	my($head, $tail) = ($s->[0], [ @$s[1 .. $#$s] ]);
+	my $curval = -1;
+	my $iter;
+	return sub {
+		while (1) {
+			if ($iter) {
+				my $result = $iter->();
+				return [ $curval, @$result ] if $result;
+				$iter = undef;
+			}
+			++$curval;
+			return undef if $curval >= $head;
+			my($t2, $fail) = @{ divrem($t, $curval + 1) };
+			next if $fail;
+
+			my $now_fixed = $fixed || ($curval == 0);
+			if (@$tail) {
+				$iter = iter_square_kernel_assignment($t2, $tail, $now_fixed);
+			} elsif ($now_fixed && ($t2 & 1)) {
+				# all required conditions have been met
+				return [ $curval ];
+			}
+		}
+	};
+}
+
+#
+# Return min of values in arrayref.
+#
+
+sub min {
+	my($a) = @_;
+	die "No values to take min of" unless @$a;
+	my $min = $a->[0];
+	($min > $_) && ($min = $_) for @$a;
+	return $min;
+}
+
+#
+# Return sum of values in arrayref.
+#
+sub sum {
+	my($a) = @_;
+	my $n = 0;
+	$n += $_ for @$a;
+	return $n;
+}
+
+#
+# Given n>=1, return max(k): 2^k <= n.
+#
+sub maxpow2arith {
+	my $n = shift;
+	my $pow = 0;
+	while ($n > 1) {
+		++$pow;
+		$n >>= 1;
+	}
+	return $pow;
+}
+
+#
+# Given n, return max(k): 2^k | n.
+#
+sub maxpow2mult {
+	my $n = shift;
+	my $pow = 0;
+	while (!($n & 1)) {
+		++$pow;
+		$n >>= 1;
+	}
+	return $pow;
+}
+
+#
+# Given factorisation of n = [ p[], pow[] ], return rad(n) = prod(p[i])
+#
+sub rad_factor {
+	my($f) = @_;
+	my $rad = PARI(1);
+	$rad *= $_ for @{ $f->[0] };
+	return $rad;
+}
+
+#
+# Given factorisation of n = [ p[], pow[] ], return tau(n) = prod(pow[i] + 1)
+#
+sub tau_factor {
+	my($f) = @_;
+	my $tau = 1;
+	$tau *= $_ + 1 for @{ $f->[1] };
+	return $tau;
+}
+
+#
+# Given n, d return the least divisor of n >= d.
+# Assumed d <= n.
+#
+sub first_divisor {
+	my($n, $d) = @_;
+	++$d while gcd($d, $n) < $d;
+	return $d;
+}
+
+#
+# Given [ p[], pow[] ] return the n of which it is the factorisation.
+#
+sub unfactorint {
+	my($f) = @_;
+	my $n = 1;
+	for (0 .. $#{ $f->[0] }) {
+		$n *= $f->[0][$_] ** $f->[1][$_];
+	}
+	return $n;
+}
+
+#
+# Given n, return an iterator that yields each factorisation of n into
+# parts > 1, or undef.
+#
+sub iter_factor {
+	my $n = shift;
+	my $f = [ $n ];
+	return sub {
+		return undef unless @$f;
+		my $r = [ @$f ];
+		my $spare = 1;
+		ITERFAC: while (@$f) {
+			my $last = pop @$f;
+			my $prod = $spare * $last;
+			for my $d ($spare + 1 .. int($prod / 2)) {
+				my($q, $rem) = @{ divrem($prod, $d) };
+				next if $rem;
+				push @$f, $q, $d;
+				last ITERFAC;
+			}
+			$spare = $prod;
+		}
+		return @$r ? $r : undef;
+	};
+}
+
+#
+# rootseq(n, tau, f, g, constraint)
+# - search for arithmetic sequence n+kd, 0<=k<=f, with tau(n+kd)=tau(n)
+# - search with d in the range g=[min, max]
+# - check only those d that satisfy constraints in the Constraint object
+#
+sub rootseq {
+	my($c) = @_;
+	my $count = $c->tell_count;
+	my($n, $f, $tau) = ($c->n, $c->f, $c->tau);
+	my($k0, $k1) = ($style->{'start'}, $f - 1);
+	my $tester = ($tau == 2)
+		? sub { isprime($_[0]) }
+		: sub { tau($_[0]) == $tau };
+	my $cur;
+	$c->init();
+	CUR: while ($cur = $c->next()) {
+		report($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
+		$tester->($style->{'eval'}($n, $cur, $_)) || next CUR for $k0..$k1;
+		report($n, $f, $cur, $c);
+		return $cur;
+	}
+	report($n, $f, $c->cur, $c);
+	return undef;
+}
+
+sub report {
+	my($n, $f, $cur, $c) = @_;
+	my $t = $c->elapsed();
+	my($tests, $skipped, $kept) = ($c->tests(), $c->skipped(), $c->kept());
+
+	printf <<OUT, $t, $n, $f, $cur, $kept, $skipped, $tests;
+301 After %.2fs for (%s, %s) reach d=%s (keep %s, skip %s with %s tests)
+OUT
+}
+
+sub check_limit {
+	my($n, $f) = splice @_, 0, 2;
+	my $max = 0;
+	($max < $_) && ($max = $_) for @_;
+	return 1 if $f <= $max;
+	printf <<OUT, $n, $max, $f;
+401 Error: f(%s) <= %s, you asked for %s.
+OUT
+	return undef;
+}
+
+sub phash {
+	my $max = shift;
+	return PARI(1) if $max <= 1;
+	my $mult = PARI(2);
+	my $p = 1;
+	while (1) {
+		$p = nextprime($p);
+		last if $p >= $max;
+		$mult *= $p;
+	}
+	return $mult;
+}
+
+sub pf {
+	my $n = shift;
+	my($prime, $power);
+	eval {
+		($prime, $power) = @{ factorint($n) };
+	};
+	use Data::Dumper;
+	print(Dumper($n), "pf($n) failed: $@"), exit(0) if $@;
+	my $s = join '.', map {
+		$power->[$_] == 1 ? $prime->[$_] : "$prime->[$_]^$power->[$_]"
+	} 0 .. $#$prime;
+	($prime, $power) = (undef, undef);
+	return $s;
+}
+
+#
+# Return ordered representation of prime factors and canonical signature for n.
+# Signature is a string consisting of the powers of the prime factors in
+# descending order, separated by dots. The factors are similarly ordered.
+#
+sub facsig {
+	my $n = shift;
+	# my($p, $pp) = @{ factorint($n) };
+	#
+	# HACK: try to dodge coredumps
+	#
+	my($p, $pp);
+	{
+		my($f) = factorint($n);
+		$p = [ map PARI("$_"), @{ $f->[0] } ];
+		$pp = [ map PARI("$_"), @{ $f->[1] } ];
+		$f = undef;
+	}
+	my @order = sort {
+		$pp->[$b] <=> $pp->[$a]
+	} 0 .. $#$pp;
+	my $fac = [ [ @$p[@order] ], [ @$pp[@order] ] ];
+	my $sig = join '.', @{ $fac->[1] };
+	return ($fac, $sig);
+}
+
+sub nextprime {
+	my $p = shift;
+	DIV: while (1) {
+		$p += 2;
+		my $d = 3;
+		while (1) {
+			last if $d * $d > $p;
+			next DIV unless $p % $d;
+			$d += 2;
+		}
+		return $p;
+	}
+}
+
+sub tau {
+	my $n = shift;
+	my $k = 1;
+	my $power;
+	eval {
+		(undef, $power) = @{ factorint($n) };
+		$k *= $_ + 1 for @$power;
+	};
+	use Carp; Carp::confess("tau($n) failed: $@") if $@;
+	return $k;
+}
