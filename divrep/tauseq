@@ -50,8 +50,7 @@ my $style = $opt_a ? {
 		return if $gvr != 0;	# No constraint: this modval can't happen
 		$mod /= $g;
 		$val = lift(Mod($gv, $mod) / ($k / $g));
-		$c->suppress($mod, lift(Mod($gv, $mod) / ($k / $g)),
-				int(($max - $n) / $k) + 1);
+		$c->suppress($mod, $val, int(($max - $n) / $k) + 1);
 	},
 	'fix_square' => 1,
 	'tau' => tau($n),
@@ -100,6 +99,7 @@ sub apply {
 	my $tn = $c->tau();
 
 	for my $m (2 .. $c->check()) {
+$c->debug && warn "apply $m\n";
 		my $fm = factorint($m);
 		next if $opt_cp && $fm->[0][$#{ $fm->[0] }] > $opt_cp;
 
@@ -121,17 +121,9 @@ sub apply {
 		}
 
 		#
-		# n+kd == xp^y (mod p^z) is suppressible when y+1 ~| tau(n).
+		# n+kd == m (mod m rad(m)) is suppressible when tau(m) ~| tau(n)
 		#
-		if (@{ $fm->[0] } == 1) {
-			my $p = $fm->[0][0];
-			my $z = $fm->[1][0];
-			# Check only for y=z-1, since lower y is already catered for.
-			if (gcd($z, $tn) < $z) {
-				my $py = $m / $p;
-				series($c, $py * $_, $m, 0) for 1 .. $p - 1;
-			}
-		}
+		test_m_rad_m($c, $m, $fm);
 	}
 
 	#
@@ -372,6 +364,67 @@ sub iter_square_kernel_assignment {
 				return [ $curval ];
 			}
 		}
+	};
+}
+
+#
+# n+kd == xp^y (mod p^{y+1}) is suppressible when y+1 ~| tau(n).
+#
+# More generally:
+#	tau(m) ~| tau(n)  and  n+kd == m (mod m rad(m)) => tau(n+kd) != tau(n)
+#
+# However, given m = \prod p_i^a_i, if a) tau(m) > tau(n), or better:
+#	a)  \not \exists k: tau(km) = tau(n)
+# or:
+#	b)  \exists i: tau(m / p_i^a_i) ~| tau(n)
+# we will already have suppressed a superset of what this gives us.
+#   
+sub test_m_rad_m {
+	my($c, $mradm, $fmradm) = @_;
+#optionally: try this for (easier) prime powers only
+#return if @{ $fmradm->[0] } > 1;
+	my($tm, $radm, $fm) = (1, 1, [ $fmradm->[0], [ ] ]);
+	for my $i (0 .. $#{ $fm->[0] }) {
+		my $a_i = $fmradm->[1][$i];
+		# it's not of the form m rad(m) unless every power > 1
+		return if $a_i == 1;
+		$radm *= $fm->[0][$i];
+		$tm *= $a_i;
+		$fm->[1][$i] = $a_i - 1;
+	}
+	my $m = $mradm / $radm;
+	my $tn = $c->tau;
+	# case a (coarse version)
+	return if $tm > $tn;
+
+	# main requirement
+	return if ($tn % $tm) == 0;
+
+	for my $i (0 .. $#{ $fm->[0] }) {
+		my $tm_i = $tm / ($fm->[1][$i] + 1);
+		# case b
+		return if ($tn % $tm_i) != 0;
+	}
+
+	my $iter_coprime = iter_coprime($radm);
+	while (my $cp = $iter_coprime->()) {
+print STDERR "given $m rad($m) qualifies, suppress $m * $cp mod $mradm\n";
+		series($c, $m * $cp, $mradm, 0);
+	}
+}
+
+#
+# Given integer m, returns an iterator that will return in succession
+# each of the \phi(m) integers from 0 .. m-1 that are coprime to m.
+#
+sub iter_coprime {
+	my($m) = @_;
+	my $cur = 0;
+	return sub {
+		while (++$cur < $m) {
+			return $cur if gcd($cur, $m) == 1;
+		}
+		return undef;
 	};
 }
 
