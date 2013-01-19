@@ -568,9 +568,10 @@ sub iter_factor {
 			report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
 			(
 				$tester->($style->{'eval'}($n, $cur, $_))
-						#|| do { report_seq($n, $f, $cur); next CUR; }
+						#|| (report_seq($n, $f, $cur), next CUR)
 						#|| next CUR
-						|| (++$seq_seen[$_-1], next CUR)
+						|| ($seq_seen[$_-1]++ || report_seq($n, $f, $cur), next CUR)
+						#|| (++$seq_seen[$_-1], next CUR)
 			) for $k0 .. $k1;
 			report_reach($n, $f, $cur, $c);
 			return $cur;
