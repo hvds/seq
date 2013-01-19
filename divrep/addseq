@@ -12,7 +12,7 @@ my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr)
 while (@ARGV && $ARGV[0] =~ /^-/) {
 	my $arg = shift @ARGV;
 	last if $arg eq '--';
-	Constraint->debug_more(), next if $arg eq '-d';
+	Constraint->debug_more, next if $arg eq '-d';
 	($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
 	($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
 	($opt_cp = $arg || shift(@ARGV)), next if $arg =~ s{^-cp}{};
@@ -24,7 +24,6 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
 
 $| = 1;
 my($n, $f) = map PARI($_), @ARGV;
-my $tn = tau($n);
 my $c = Constraint->new(
 	'n' => $n,
 	'f' => $f,
@@ -34,22 +33,22 @@ my $c = Constraint->new(
 	'max' => $opt_x,
 	'check' => $opt_c,
 	'min_potency' => $opt_cr,
-	'tau' => $tn,
+	'tau' => $n,
 );
 
 $c = apply($c) or exit 0;
-printf <<OUT, $c->elapsed(), 'rootseq', $n, $f, $opt_n, $opt_x, $opt_c;
+printf <<OUT, $c->elapsed, 'addseq', $n, $f, $opt_n, $opt_x, $opt_c;
 300 Init %.2f: trying %s() for (%s, %s) in [%s, %s], checks up to mod %s
 OUT
 
 my $d = rootseq($c);
 if ($d) {
 	report_seq($n, $f, $d);
-	printf <<OUT, $n, $f, $d, $c->elapsed();
+	printf <<OUT, $n, $f, $d, $c->elapsed;
 200 f(%s, %s) = %s  (%.3fs)
 OUT
 } else {
-	printf <<OUT, $n, $f, $opt_x, $c->elapsed();
+	printf <<OUT, $n, $f, $opt_x, $c->elapsed;
 500 f(%s, %s) > %s  (%.3fs)
 OUT
 }
@@ -57,9 +56,9 @@ exit 0;
 
 sub apply {
 	my $c = shift;
-	my $tn = $c->tau();
+	my $tn = $c->tau;
 
-	for my $m (2 .. $c->check()) {
+	for my $m (2 .. $c->check) {
 $c->debug && warn "apply $m\n";
 		my $fm = factorint($m);
 		next if $opt_cp && $fm->[0][$#{ $fm->[0] }] > $opt_cp;
@@ -95,22 +94,6 @@ $c->debug && warn "apply $m\n";
 		test_m_rad_m($c, $m, $fm);
 	}
 
-	#
-	# If we know n+kd fixes all but a square for some k, that's a hugely
-	# powerful optimisation. Applicability depends on other constraints,
-	# so we check for this last.
-	#
-	# TODO: Check if pending constraints would trigger this optimisation,
-	# and schedule it if so.
-	#
-	my $fix_square = fix_square($c, $n, $tn);
-	if ($fix_square) {
-		my($k, $ty2) = @$fix_square;
-		# we require d = y^2 - n/k, with tau(y^2) = ty2
-		warn "311 Fixing square d = y^2 - n/$k, tau(y^2) = $ty2\n";
-		$c = $c->fix_square($k, $ty2);
-	}
-
 	return $c;
 }
 
@@ -121,14 +104,9 @@ sub series {
 	my($c, $v, $m, $max) = @_;
 	$max ||= 0;
 	($c->debug > 1) && warn "series ($v, $m, $max)\n";
-	my $n = $c->n;
-	for my $k (1 .. $c->f - 1) {
-		my $g = gcd($k, $m);
-		my($gv, $gvr) = @{ divrem($v - $n, $g) };
-		next if $gvr != 0;	# No constraint: this modval can't happen
-		my $m2 = $m / $g;
-		my $v2 = lift(Mod($gv, $m2) / ($k / $g));
-		$c->suppress($m2, $v2, int(($max - $n) / $k) + 1);
+	for my $k (0 .. $c->f - 1) {
+		my $diff = $k * $c->n;
+		$c->suppress($m, ($v - $diff) % $m, $max - $diff);
 	}
 	($c->debug > 1) && warn "series ($v, $m, $max): applied\n";
 }
@@ -152,38 +130,6 @@ sub square_series {
 	($c->debug > 1) && warn "square_series ($x, $y, $z, $max): applied\n";
 }
 
-#
-# To fix d to be related to a square, we need to find x such that:
-# 1) f > x
-# 2) x.rad(x) | n
-# 3) gcd(x, d) = 1 by prior constraints
-# 4) tau(n) = (2y + 1)tau(x) for some y
-# Then we know n+xd = xy^2 for some y (and we know tau(y)).
-#
-sub fix_square {
-	my($c, $n, $tn) = @_;
-	my $f = $c->f();
-	my $debug = $c->debug;
-	for my $x (@{ $n->divisors }) {
-		last if $x >= $f;	# divisors are returned in ascending order
-		my $fx = factorint($x);
-		my $rx = rad_factor($fx);
-		$debug && warn("Would try fix_square($x), but 0(mod $rx) is not disallowed.\n"),
-		next unless $c->disallowed($rx, 0);
-		my $xrx = $x * $rx;
-		$debug && warn("Would try fix_square($x), but $xrx does not divide $n.\n"),
-		next if gcd($xrx, $n) < $xrx;
-		my $tx = tau_factor($fx);
-		my($tdiv, $trem) = @{ divrem($tn, $tx) };
-		$debug && warn("Would try fix_square($x), but tau($x) does not divide $tn.\n"),
-		next if $trem;
-		$debug && warn("Would try fix_square($x), but $tn/tau($x) is even.\n"),
-		next if !($tdiv & 1);
-		$debug && warn("Will fix_square($x).\n"),
-		return [$x, $tdiv];
-	}
-	return undef;
-}
 
 #
 # Let m_4=\prod{p_i^d_i}, d_i < a_i, and 
@@ -536,16 +482,12 @@ sub iter_factor {
 			? sub { isprime($_[0]) }
 			: sub { tau($_[0]) == $tau };
 		my $cur;
-		$c->init();
-		CUR: while ($cur = $c->next()) {
+		$c->init;
+		CUR: while ($cur = $c->next) {
 			report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
 			(
-				$tester->($n + $cur * $_)
-					#|| (report_seq($n, $f, $cur), next CUR)
-					#|| next CUR
-					|| ($seq_seen[$_-1]++ || report_seq($n, $f, $cur), next CUR)
-					#|| (++$seq_seen[$_-1], next CUR)
-			) for 1 .. $k;
+				$tester->($cur + $n * $_) || next CUR
+			) for 0 .. $k;
 			report_reach($n, $f, $cur, $c);
 			return $cur;
 		}
@@ -555,8 +497,8 @@ sub iter_factor {
 
 	sub report_reach {
 		my($n, $f, $cur, $c) = @_;
-		my $t = $c->elapsed();
-		my($tests, $skipped, $kept) = ($c->tests(), $c->skipped(), $c->kept());
+		my $t = $c->elapsed;
+		my($tests, $skipped, $kept) = ($c->tests, $c->skipped, $c->kept);
 
 		printf <<OUT, $t, $n, $f, $cur, $kept, $skipped, $tests, join ' ', map $_ || 0, @seq_seen;
 301 After %.2fs for (%s, %s) reach d=%s (keep %s, skip %s with %s tests) seen [%s]
@@ -569,7 +511,7 @@ sub report_seq {
 	my $flen = length($f);
 	my $vlen = length($n + $f * $d);
 	for (0 .. $f) {
-		my $v = $n + $d * $_;
+		my $v = $d + $n * $_;
 		printf <<OUT, $flen, $_, tau($v), $vlen, $v, pf($v);
 211 Sequence % *s: % 2s = tau(% *s = %s)
 OUT
