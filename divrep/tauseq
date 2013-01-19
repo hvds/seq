@@ -57,9 +57,9 @@ exit 0;
 
 sub apply {
 	my $c = shift;
-	my $tn = $c->tau();
+	my $tn = $c->tau;
 
-	for my $m (2 .. $c->check()) {
+	for my $m (2 .. $c->check) {
 $c->debug && warn "apply $m\n";
 		my $fm = factorint($m);
 		next if $opt_cp && $fm->[0][$#{ $fm->[0] }] > $opt_cp;
@@ -532,20 +532,18 @@ sub iter_factor {
 		my $count = $c->tell_count;
 		my($n, $f, $tau) = ($c->n, $c->f, $c->tau);
 		my $k = $f - 1;
-		my $tester = ($tau == 2)
-			? sub { isprime($_[0]) }
-			: sub { tau($_[0]) == $tau };
+		my $tester = prepare_tester($c);
 		my $cur;
 		$c->init();
 		CUR: while ($cur = $c->next()) {
 			report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
-			(
-				$tester->($n + $cur * $_)
+			for (0 .. $#$tester) {
+				$tester->[$_]->($cur)
 					#|| (report_seq($n, $f, $cur), next CUR)
 					#|| next CUR
-					|| ($seq_seen[$_-1]++ || report_seq($n, $f, $cur), next CUR)
+					|| ($seq_seen[$_]++ || report_seq($n, $f, $cur), next CUR)
 					#|| (++$seq_seen[$_-1], next CUR)
-			) for 1 .. $k;
+			}
 			report_reach($n, $f, $cur, $c);
 			return $cur;
 		}
@@ -562,6 +560,63 @@ sub iter_factor {
 301 After %.2fs for (%s, %s) reach d=%s (keep %s, skip %s with %s tests) seen [%s]
 OUT
 	}
+}
+
+#
+# Returns an arrayref of subrefs, that (in some order) test whether each of
+# the candidate targets n+kd has the required number of factors.
+# Each subref accepts a single argument (d), and returns a boolean: TRUE
+# means tau(n+kd) = tau(n).
+#
+# We try to arrange the order and strategy of the testing subrefs to optimize
+# speed:
+# - we can test primality much faster than we can factorize
+# - we want to test first those least likely to return TRUE (all other things
+#   being equal)
+# - generally the most constrained are least likely to return true; that
+#   probably means that given g=gcd(n,k) we should test those k that
+#   maximize tau(g) first
+# - additionally, we'd prefer not to multiply up with known factors, but
+#   we must take care to elide only fixed powers (so we have a known tau)
+# - if we had a fast issquare() check, that would also be a useful thing
+#   to take advantage of
+#
+# eg for f(125), f(343) we can use prime checks
+
+sub prepare_tester {
+	my($c) = @_;
+	my($n, $f, $tau, $min) = ($c->n, $c->f, $c->tau, $c->min);
+	if ($tau == 2) {
+		# all the targets must be prime; it may still be useful to test them
+		# in reverse order, but I suspect the faster checking on smaller
+		# numbers more than makes up for the reduced chance they are nonprime
+		return [ map {
+			my $k = $_;
+			sub { isprime($n + $_[0] * $k) }
+		} 1 .. $f - 1 ];
+	}
+	my($np, $na) = @{ factorint($n) };
+	my(%seen, @tester);
+	if (
+		$tau == 4
+		&& @$np == 2
+	) {
+		for my $p (@$np) {
+			next if $min <= $p ** 3;
+			my $q = $n / $p;
+			for my $xi (1 .. int(($f - 1) / $p)) {
+				my $ki = $p * $xi;
+				next if $seen{$ki}++;
+				# pq + xpd = p(q+xd)
+				push @tester, sub { isprime($q + $xi * $_[0]) };
+			}
+		}
+	}
+	for my $k (1 .. $f - 1) {
+		next if $seen{$k};
+		push @tester, sub { $tau == tau($n + $_[0] * $k) };
+	}
+	return \@tester;
 }
 
 sub report_seq {
