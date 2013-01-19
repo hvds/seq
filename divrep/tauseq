@@ -97,6 +97,14 @@ $c->debug && warn "apply $m\n";
 		next if $opt_cp && $fm->[0][$#{ $fm->[0] }] > $opt_cp;
 
 		#
+		# If n is prime, the only thing we can usefully do is avoid primes
+		#
+		if ($tn == 2) {
+			series($c, 0, $m, $m) if @{ $fm->[0] } == 1 && $fm->[1][0] == 1;
+			next;
+		}
+
+		#
 		# If we know n+kd must not divide m (maybe only beyond some maximum
 		# value for n+kd), use that to deny various values (mod m).
 		#
