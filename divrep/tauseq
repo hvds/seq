@@ -76,14 +76,7 @@ OUT
 
 my $d = rootseq($c);
 if ($d) {
-	my $flen = length($f);
-	my $vlen = length($n + $f * $d);
-	for (0 .. $f) {
-		my $v = $style->{'eval'}->($n, $d, $_);
-		printf <<OUT, $flen, $_, tau($v), $vlen, $v, pf($v);
-201 Sequence % *s: % 2s = tau(% *s = %s)
-OUT
-	}
+	report_seq($n, $f, $d);
 	printf <<OUT, $n, $f, $d, $c->elapsed();
 200 f(%s, %s) = %s  (%.3fs)
 OUT
@@ -140,7 +133,7 @@ $c->debug && warn "apply $m\n";
 		if ($fix_square) {
 			my($k, $ty2) = @$fix_square;
 			# we require d = y^2 - n/k, with tau(y^2) = ty2
-			warn "Fixing square d = y^2 - n/$k, tau(y^2) = $ty2\n";
+			warn "311 Fixing square d = y^2 - n/$k, tau(y^2) = $ty2\n";
 			$c = $c->fix_square($k, $ty2);
 		}
 	}
@@ -189,22 +182,23 @@ sub square_series {
 sub fix_square {
 	my($c, $n, $tn) = @_;
 	my $f = $c->f();
+	my $debug = $c->debug;
 	for my $x (@{ $n->divisors }) {
 		last if $x >= $f;	# divisors are returned in ascending order
 		my $fx = factorint($x);
 		my $rx = rad_factor($fx);
-warn("Would try fix_square($x), but 0(mod $rx) is not disallowed.\n"),
+		$debug && warn("Would try fix_square($x), but 0(mod $rx) is not disallowed.\n"),
 		next unless $c->disallowed($rx, 0);
 		my $xrx = $x * $rx;
-warn("Would try fix_square($x), but $xrx does not divide $n.\n"),
+		$debug && warn("Would try fix_square($x), but $xrx does not divide $n.\n"),
 		next if gcd($xrx, $n) < $xrx;
 		my $tx = tau_factor($fx);
 		my($tdiv, $trem) = @{ divrem($tn, $tx) };
-warn("Would try fix_square($x), but tau($x) does not divide $tn.\n"),
+		$debug && warn("Would try fix_square($x), but tau($x) does not divide $tn.\n"),
 		next if $trem;
-warn("Would try fix_square($x), but $tn/tau($x) is even.\n"),
+		$debug && warn("Would try fix_square($x), but $tn/tau($x) is even.\n"),
 		next if !($tdiv & 1);
-warn("Will fix_square($x).\n"),
+		$debug && warn("Will fix_square($x).\n"),
 		return [$x, $tdiv];
 	}
 	return undef;
@@ -408,7 +402,7 @@ sub test_m_rad_m {
 
 	my $iter_coprime = iter_coprime($radm);
 	while (my $cp = $iter_coprime->()) {
-print STDERR "given $m rad($m) qualifies, suppress $m * $cp mod $mradm\n";
+$c->debug && warn "given $m rad($m) qualifies, suppress $m * $cp mod $mradm\n";
 		series($c, $m * $cp, $mradm, 0);
 	}
 }
@@ -544,40 +538,60 @@ sub iter_factor {
 	};
 }
 
-#
-# rootseq(n, tau, f, g, constraint)
-# - search for arithmetic sequence n+kd, 0<=k<=f, with tau(n+kd)=tau(n)
-# - search with d in the range g=[min, max]
-# - check only those d that satisfy constraints in the Constraint object
-#
-sub rootseq {
-	my($c) = @_;
-	my $count = $c->tell_count;
-	my($n, $f, $tau) = ($c->n, $c->f, $c->tau);
-	my($k0, $k1) = ($style->{'start'}, $f - 1);
-	my $tester = ($tau == 2)
-		? sub { isprime($_[0]) }
-		: sub { tau($_[0]) == $tau };
-	my $cur;
-	$c->init();
-	CUR: while ($cur = $c->next()) {
-		report($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
-		$tester->($style->{'eval'}($n, $cur, $_)) || next CUR for $k0..$k1;
-		report($n, $f, $cur, $c);
-		return $cur;
+{
+	my @seq_seen;
+	#
+	# rootseq(n, tau, f, g, constraint)
+	# - search for arithmetic sequence n+kd, 0<=k<=f, with tau(n+kd)=tau(n)
+	# - search with d in the range g=[min, max]
+	# - check only those d that satisfy constraints in the Constraint object
+	#
+	sub rootseq {
+		my($c) = @_;
+		my $count = $c->tell_count;
+		my($n, $f, $tau) = ($c->n, $c->f, $c->tau);
+		my($k0, $k1) = ($style->{'start'}, $f - 1);
+		my $tester = ($tau == 2)
+			? sub { isprime($_[0]) }
+			: sub { tau($_[0]) == $tau };
+		my $cur;
+		$c->init();
+		CUR: while ($cur = $c->next()) {
+			report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
+			(
+				$tester->($style->{'eval'}($n, $cur, $_))
+						#|| do { report_seq($n, $f, $cur); next CUR; }
+						#|| next CUR
+						|| (++$seq_seen[$_-1], next CUR)
+			) for $k0 .. $k1;
+			report_reach($n, $f, $cur, $c);
+			return $cur;
+		}
+		report_reach($n, $f, $c->cur, $c);
+		return undef;
 	}
-	report($n, $f, $c->cur, $c);
-	return undef;
+
+	sub report_reach {
+		my($n, $f, $cur, $c) = @_;
+		my $t = $c->elapsed();
+		my($tests, $skipped, $kept) = ($c->tests(), $c->skipped(), $c->kept());
+
+		printf <<OUT, $t, $n, $f, $cur, $kept, $skipped, $tests, join ' ', map $_ || 0, @seq_seen;
+301 After %.2fs for (%s, %s) reach d=%s (keep %s, skip %s with %s tests) seen [%s]
+OUT
+	}
 }
 
-sub report {
-	my($n, $f, $cur, $c) = @_;
-	my $t = $c->elapsed();
-	my($tests, $skipped, $kept) = ($c->tests(), $c->skipped(), $c->kept());
-
-	printf <<OUT, $t, $n, $f, $cur, $kept, $skipped, $tests;
-301 After %.2fs for (%s, %s) reach d=%s (keep %s, skip %s with %s tests)
+sub report_seq {
+	my($n, $f, $d) = @_;
+	my $flen = length($f);
+	my $vlen = length($n + $f * $d);
+	for (0 .. $f) {
+		my $v = $style->{'eval'}->($n, $d, $_);
+		printf <<OUT, $flen, $_, tau($v), $vlen, $v, pf($v);
+211 Sequence % *s: % 2s = tau(% *s = %s)
 OUT
+	}
 }
 
 sub check_limit {
