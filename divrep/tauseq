@@ -1,7 +1,7 @@
 #!/opt/maths/bin/perl -w
 use strict;
 BEGIN { $Math::Pari::initmem=1e8; $Math::Pari::initprimes=1e8 }
-use Math::Pari qw/ PARI factorint isprime prime gcd Mod lift divrem /;
+use Math::Pari qw/ PARI factorint isprime prime gcd Mod lift divrem pari2iv /;
 
 use lib './clib';
 use Constraint;
@@ -9,10 +9,12 @@ use ModFunc qw/ mod_combine quadvec /;
 
 my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr)
 		= (0, 0, 0, 100000, 0, 0);
+my $new_check = 0;
 while (@ARGV && $ARGV[0] =~ /^-/) {
 	my $arg = shift @ARGV;
 	last if $arg eq '--';
 	Constraint->debug_more(), next if $arg eq '-d';
+$new_check = 1, next if $arg eq '-nc';
 	($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
 	($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
 	($opt_cp = $arg || shift(@ARGV)), next if $arg =~ s{^-cp}{};
@@ -79,6 +81,14 @@ $c->debug && warn "apply $m\n";
 		my $max = test_series($m, $tn);
 		series($c, 0, $m, $max) if $max >= 0;
 
+if ($new_check) {
+		#
+		# Look for restrictions on quadratic non-residues mod some factors
+		# of m, when prime powers fixed by other factors leave us needing
+		# a square.
+		#
+		quadres_series($c, $m, $tn);
+} else {
 		#
 		# If setting n+kd == a (mod b) fixes some divisors so that others
 		# must be square, use that to deny quadratic non-residues.
@@ -88,6 +98,7 @@ $c->debug && warn "apply $m\n";
 			my($mod_quad, $value_fixed, $mod_fixed, $max) = @$result;
 			square_series($c, $mod_quad, $value_fixed, $mod_fixed, $max);
 		}
+}
 
 		#
 		# n+kd == m (mod m rad(m)) is suppressible when tau(m) ~| tau(n)
@@ -186,12 +197,110 @@ sub fix_square {
 }
 
 #
+# If \tau(n) / \tau(m) is odd, n + kd == vm (mod m rad m), gcd(v, rad m) = 1
+# then we can suppress vm (mod m rad m) unless v is a quadratic residue
+# mod each prime p dividing m, and we can suppress vm (mod q m rad m) unless
+# v is a quadratic residue mod q.
+# We can go further if instead of q we take q^s: when s is even we have
+# additional non-residues uq^{s-1} (0 < u < q), and when s is odd we have
+# additional uq^{s-1} (u any non-residue mod q). But doing so requires
+# multiple passes over the factors.
+#
+sub quadres_series {
+	my($c, $pmr, $tn) = @_;
+	my $debug = $c->debug;
+	$debug > 1 && print "qs: try $pmr\n";
+	my($mp, $mrpp) = @{ factorint($pmr) };
+	my($spare, $p);
+	my $mpp = [ map {
+		my $pp = $mrpp->[$_] - 1;
+		if ($pp == 0) {
+			if (defined $spare) {
+				# only one spare allowed
+				$debug > 2 && print "qs: too many spares ($mp->[$spare] and $mp->[$_]), skip\n";
+				return;
+			}
+			$spare = $_;
+		}
+		$pp
+	} 0 .. $#$mp ];
+	my $mr = $pmr;
+	if (defined $spare) {
+		$p = $mp->[$spare];
+		$mr /= $p;
+		# PARI-generated arrayrefs don't support splice
+		$mp = [@$mp]; splice @$mp, $spare, 1;
+		$mrpp = [@$mrpp]; splice @$mrpp, $spare, 1;
+		splice @$mpp, $spare, 1;
+	}
+	my $tm = tau_factor([ undef, $mpp ]);
+	my($div, $rem) = @{ divrem($tn, $tm) };
+	if ($rem) {
+		$debug > 2 && print "qs: tm does not divide tn, skip\n";
+		return;
+	}
+	if (! ($div & 1)) {
+		$debug > 2 && print "qs: tn / tm is even, skip\n";
+		return;
+	}
+	$debug > 2 && print "qs: ok\n";
+	my $m = unfactorint([ $mp, $mpp ]);
+	my $r = $mr / $m;
+
+	# The conditions apply, now either:
+	# if p:
+	#   v not a quadres (mod p) for vm (mod m rad m), (v, m) = 1
+	# else:
+	#   v not a quadres (mod rad m) for vm (mod m rad m), (v, m) = 1
+
+	if ($p) {
+		my $vp = quadvec($p);
+		$debug > 2 && print "qs: p=$p\n";
+		VP: for my $v (1 .. $r * $p - 1) {
+			next if gcd($v, $r) > 1;
+			my $md = pari2iv($v % $p);
+			next if vec($vp, $md, 1);	# it's a residue mod p
+			my $mv = $m * $v;
+			$debug > 2 && print "qs: series $v * $m, $pmr\n";
+			series($c, $mv, $pmr, 0);
+		}
+	} else {
+		my @vm = map quadvec($_), @$mp;
+		$debug > 2 && print "qs: no spare\n";
+		V: for my $v (1 .. $r - 1) {
+			next if gcd($v, $r) > 1;
+			my $nonresidue = 0;
+			for (0 .. $#$mp) {
+				my $md = pari2iv($v % $mp->[$_]);
+				$nonresidue = 1, last unless vec($vm[$_], $md, 1);
+			}
+			next unless $nonresidue;
+			$debug > 2 && print "qs: series $v * $m, $pmr\n";
+			series($c, $v * $m, $pmr, 0);
+		}
+	}
+}
+
+#
 # Let m_4=\prod{p_i^d_i}, d_i < a_i, and 
 # q_4 = \prod{p_i: p_i | m, p_i ~| m4 } > 1.
 # 
 # Then any way to select m_4, q_4: tau(n) / tau(m_4) = 2k+1 gives
 # gcd(n+kd, m)=m_4 -> n+kd must be a quadratic residue (mod q_4).
 # 
+# FIXME: for n=243, k >= 3, at m = 9 (or maybe 27) this should see that
+# n+d = 3p^2, n+2d = 3q^2, n+3d = 3^2r between them deny all multiples
+# of 3, which would then allow fix_square(3). I guess this is because
+# we require gcd(m_4, q_4) = 1, but here we need m_4 = q_4 = 3.
+# It's possible we disallow that because we rely on selecting a complete
+# prime power out of m: we should consider also selecting all but one.
+#
+# FIXME: I think we restrict gcd(m_4, q_4) = 1 to reduce the number of
+# combinations to consider; but I suspect we could get a far more
+# effective restriction by considering only q_4 prime - if m_4 pq
+# qualifies, won't that only make the same quadres restrictions we've
+# already 
+#
 sub iter_quadres_series {
 	my($m, $tn) = @_; 
 	my $fm = factorint($m);
@@ -199,6 +308,7 @@ sub iter_quadres_series {
 
 	# To search for this, we need 2^k | tau(n) -> 2^k | tau(m_4).
 	my $tnpow2 = maxpow2mult($tn);
+# FIXME: shouldn't this be maxpow2arith($_ + 1)?
 	my @tmpow2 = map maxpow2arith($_), @{ $fm->[1] };
 
 	# We require q_4 > 1, so the greatest power of 2 we can account for
