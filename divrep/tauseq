@@ -218,74 +218,30 @@ sub quadres_series {
 	my($mp, $mpp) = @{ factorint($m) };
 	my $tm = tau_factor([ $mp, $mpp ]);
 
-	if ($p > 1) {
-		$debug > 2 && print "qs: p=$p\n";
-		if (divides_oddly($tn, $tm)) {
-			# um (mod m rad m) fixes a square, so we can suppress u that are
-			# non-residues mod p.
-			my $vp = quadvec($p);
-			$debug > 2 && print "qs: fix square $p over m rad m, m = $m\n";
-			for my $u (1 .. $r * $p - 1) {
-				next if gcd($u, $r) > 1;
-				my $md = pari2iv($u % $p);
-				next if vec($vp, $md, 1);	# it's a residue mod p
-				my $um = $u * $m;
-				$debug > 2 && print "qs: series $u * $m, $pmr\n";
-				series($c, $um, $pmr, 0);
-			}
-		} else {
-			$debug > 1 && print "qs: found p=$p, but not square fixed\n";
-			return;
-		}
-		return;
-	}
-
-	$debug > 2 && print "qs: no spare\n";
-	if (divides_oddly($tn, $tm)) {
-		# um (mod m rad m) fixes a square, so we can suppress u that are
-		# non-residues mod any prime factor of m
-		my $vr = quadvec($r);
-		for my $u (1 .. $r - 1) {
+	my $rp = $r * $p;
+	my $quad_series = sub {
+		my($mod) = @_;
+		my $checkvec = defined($mod);
+		my $vec = $checkvec ? quadvec($mod) : undef;
+		for my $u (1 .. $rp - 1) {
 			next if gcd($u, $r) > 1;
-			my $md = pari2iv($u % $r);
-			next if vec($vr, $md, 1);
+			next if $checkvec && vec($vec, $u % $mod, 1);
 			$debug > 2 && print "qs: series $u * $m, $pmr\n";
 			series($c, $u * $m, $pmr, 0);
 		}
-	} else {
-		$debug > 2 && print "qs: not square fixed for m rad m. m = $m\n";
+	};
+
+	if ($p > 1) {
+		$quad_series->($p) if divides_oddly($tn, $tm);
+		return;
 	}
 
+	$quad_series->($r) if divides_oddly($tn, $tm);
+
 	for my $j (0 .. $#$mp) {
-		if (divides_oddly($tn, $tm / ($mpp->[$j] + 1))) {
-			# um' (mod m' rad m') fixes a square, so we can suppress u that are
-			# non-residues mod $mp->[$j] ** ($mpp->[$j] + 1)
-			my $p = $mp->[$j];
-			my $pp = $mpp->[$j] + 1;
-			my $m2 = $m / ($p ** ($pp - 1));
-			my $r2 = $r / $p;
-			# if pp is even, we can suppress every multiple of p^{pp-1};
-			# if odd, we can suppress every non-residue multiple
-			$debug > 2 && print "qs: fix square $p ** $pp over m rad m, m = $m2\n";
-			if ($pp & 1) {
-				my $vp = quadvec($p);
-				for my $u (1 .. $r2 * $p - 1) {
-					next if gcd($u, $r) > 1;
-					my $md = pari2iv($u % $p);
-					next if vec($vp, $md, 1);	# it's a residue mod p
-					my $um = $u * $m;
-					$debug > 2 && print "qs: series $u * $m, $pmr\n";
-					series($c, $um, $pmr, 0);
-				}
-			} else {
-				for my $u (1 .. $r2 * $p - 1) {
-					next if gcd($u, $r) > 1;
-					my $um = $u * $m;
-					$debug > 2 && print "qs: series $u * $m, $pmr\n";
-					series($c, $um, $pmr, 0);
-				}
-			}
-		}
+		my $pp = $mpp->[$j] + 1;
+		$quad_series->(($pp & 1) ? $mp->[$j] : undef)
+				if divides_oddly($tn, $tm / $pp);
 	}
 }
 
@@ -514,14 +470,14 @@ sub discern_rad {
 			if ($p > 1) {
 				return;
 			} else {
-				$p = $sp->[$i];
+				# assigning out of the factorint arrayref seems to cause
+				# refcount problems
+				$p *= $sp->[$i];
 			}
 		} else {
 			$r *= $sp->[$i];
 		}
 	}
-	$sp = undef;	# avoid bad free coredumps
-	$spp = undef;
 	return +($p, $s / $p / $r, $r);
 }
 
