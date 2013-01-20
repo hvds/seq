@@ -211,51 +211,34 @@ sub quadres_series {
 	my $debug = $c->debug;
 	$debug > 1 && print "qs: try $pmr\n";
 	my($mp, $mrpp) = @{ factorint($pmr) };
-	my($spare, $p);
-	my $mpp = [ map {
-		my $pp = $mrpp->[$_] - 1;
-		if ($pp == 0) {
-			if (defined $spare) {
-				# only one spare allowed
-				$debug > 2 && print "qs: too many spares ($mp->[$spare] and $mp->[$_]), skip\n";
-				return;
-			}
-			$spare = $_;
-		}
-		$pp
-	} 0 .. $#$mp ];
-	my $mr = $pmr;
-	if (defined $spare) {
-		$p = $mp->[$spare];
-		$mr /= $p;
-		# PARI-generated arrayrefs don't support splice
-		$mp = [@$mp]; splice @$mp, $spare, 1;
-		$mrpp = [@$mrpp]; splice @$mrpp, $spare, 1;
-		splice @$mpp, $spare, 1;
-	}
-	my $tm = tau_factor([ undef, $mpp ]);
-	my($div, $rem) = @{ divrem($tn, $tm) };
-	if ($rem) {
-		$debug > 2 && print "qs: tm does not divide tn, skip\n";
+	my @spare = grep $mrpp->[$_] == 1, 0 .. $#$mp;
+	if (@spare > 1) {
+		$debug > 2 && print "qs: too many spares\n";
 		return;
 	}
-	if (! ($div & 1)) {
-		$debug > 2 && print "qs: tn / tm is even, skip\n";
-		return;
-	}
-	$debug > 2 && print "qs: ok\n";
-	my $m = unfactorint([ $mp, $mpp ]);
-	my $r = $mr / $m;
+	my $tm = prod([ map $_ || 1, @$mrpp ]);
+	my $square_fixed = sub {
+		my($tm) = @_;
+		my($div, $rem) = @{ divrem($tn, $tm) };
+		# not fixed unless tau(m) divides tau(n)
+		return 0 if $rem;
+		# fixed if tau(n) / tau(m) is odd
+		return $div & 1;
+	};
 
-	# The conditions apply, now either:
-	# if p:
-	#   v not a quadres (mod p) for vm (mod m rad m), (v, m) = 1
-	# else:
-	#   v not a quadres (mod rad m) for vm (mod m rad m), (v, m) = 1
-
-	if ($p) {
-		my $vp = quadvec($p);
+	if (@spare) {
+		my $p = $mp->[ $spare[0] ];
 		$debug > 2 && print "qs: p=$p\n";
+		unless ($square_fixed->($tm)) {
+			$debug > 1 && print "qs: found p=$p, but not square fixed\n";
+			return;
+		}
+		my $r = prod($mp) / $p;
+		my $m = $pmr / $p / $r;
+		# vm (mod m rad m) fixes a square, so we can suppress v that are
+		# non-residues mod p.
+		my $vp = quadvec($p);
+		$debug > 2 && print "qs: fix square $p over m rad m, m = $m\n";
 		VP: for my $v (1 .. $r * $p - 1) {
 			next if gcd($v, $r) > 1;
 			my $md = pari2iv($v % $p);
@@ -264,19 +247,60 @@ sub quadres_series {
 			$debug > 2 && print "qs: series $v * $m, $pmr\n";
 			series($c, $mv, $pmr, 0);
 		}
-	} else {
+		return;
+	}
+	$debug > 2 && print "qs: no spare\n";
+
+	my $r = prod($mp);
+	my $m = $pmr / $r;
+	if ($square_fixed->($tm)) {
+		# vm (mod m rad m) fixes a square, so we can suppress v that are
+		# non-residues mod any prime factor of m
 		my @vm = map quadvec($_), @$mp;
-		$debug > 2 && print "qs: no spare\n";
 		V: for my $v (1 .. $r - 1) {
 			next if gcd($v, $r) > 1;
 			my $nonresidue = 0;
-			for (0 .. $#$mp) {
-				my $md = pari2iv($v % $mp->[$_]);
-				$nonresidue = 1, last unless vec($vm[$_], $md, 1);
+			for my $i (0 .. $#$mp) {
+				my $md = pari2iv($v % $mp->[$i]);
+				$nonresidue = 1, last unless vec($vm[$i], $md, 1);
 			}
 			next unless $nonresidue;
 			$debug > 2 && print "qs: series $v * $m, $pmr\n";
 			series($c, $v * $m, $pmr, 0);
+		}
+	} else {
+		$debug > 2 && print "qs: not square fixed for m rad m. m = $m\n";
+	}
+
+	for my $j (0 .. $#$mp) {
+		if ($square_fixed->($tm / $mrpp->[$j])) {
+			# vm' (mod m' rad m') fixes a square, so we can suppress v that are
+			# non-residues mod $mp->[$j] ** $mrpp->[$j]
+			my $p = $mp->[$j];
+			my $pp = $mrpp->[$j];
+			my $m2 = $m / ($p ** ($pp - 1));
+			my $r2 = $r / $p;
+			# if pp is even, we can suppress every multiple of p^{pp-1};
+			# if odd, we can suppress every non-residue multiple
+			$debug > 2 && print "qs: fix square $p ** $pp over m rad m, m = $m2\n";
+			if ($pp & 1) {
+				my $vp = quadvec($p);
+				VP2O: for my $v (1 .. $r2 * $p - 1) {
+					next if gcd($v, $r) > 1;
+					my $md = pari2iv($v % $p);
+					next if vec($vp, $md, 1);	# it's a residue mod p
+					my $mv = $m * $v;
+					$debug > 2 && print "qs: series $v * $m, $pmr\n";
+					series($c, $mv, $pmr, 0);
+				}
+			} else {
+				VP2E: for my $v (1 .. $r2 * $p - 1) {
+					next if gcd($v, $r) > 1;
+					my $mv = $m * $v;
+					$debug > 2 && print "qs: series $v * $m, $pmr\n";
+					series($c, $mv, $pmr, 0);
+				}
+			}
 		}
 	}
 }
@@ -523,6 +547,16 @@ sub min {
 	my $min = $a->[0];
 	($min > $_) && ($min = $_) for @$a;
 	return $min;
+}
+
+#
+# Return product of values in arrayref.
+#
+sub prod {
+	my($a) = @_;
+	my $n = 1;
+	$n *= $_ for @$a;
+	return $n;
 }
 
 #
