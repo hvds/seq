@@ -1,7 +1,7 @@
 #!/opt/maths/bin/perl -w
 use strict;
 BEGIN { $Math::Pari::initmem=1e8; $Math::Pari::initprimes=1e8 }
-use Math::Pari qw/ PARI factorint isprime prime gcd Mod lift divrem pari2iv /;
+use Math::Pari qw/ PARI factorint isprime prime gcd Mod lift divrem /;
 
 use lib './clib';
 use Constraint;
@@ -9,12 +9,10 @@ use ModFunc qw/ mod_combine quadvec /;
 
 my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr)
 		= (0, 0, 0, 100000, 0, 0);
-my $new_check = 0;
 while (@ARGV && $ARGV[0] =~ /^-/) {
 	my $arg = shift @ARGV;
 	last if $arg eq '--';
 	Constraint->debug_more(), next if $arg eq '-d';
-$new_check = 1, next if $arg eq '-nc';
 	($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
 	($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
 	($opt_cp = $arg || shift(@ARGV)), next if $arg =~ s{^-cp}{};
@@ -82,7 +80,6 @@ $c->debug && warn "apply $m\n";
 		my $max = test_series($m, $tn);
 		series($c, 0, $m, $max) if $max >= 0;
 
-if ($new_check) {
 		#
 		# n+kd == m (mod m rad(m)) is suppressible when tau(m) ~| tau(n)
 		#
@@ -90,17 +87,6 @@ if ($new_check) {
 		# factors to be quadratic residues.
 		#
 		test_m_rad_m($c, $m, $tn);
-} else {
-		#
-		# If setting n+kd == a (mod b) fixes some divisors so that others
-		# must be square, use that to deny quadratic non-residues.
-		#
-		my $iter = iter_quadres_series($m, $tn);
-		while (my $result = $iter->()) {
-			my($mod_quad, $value_fixed, $mod_fixed, $max) = @$result;
-			square_series($c, $mod_quad, $value_fixed, $mod_fixed, $max);
-		}
-}
 	}
 
 	#
@@ -139,25 +125,6 @@ sub series {
 		$c->suppress($m2, $v2, int(($max - $n) / $k) + 1);
 	}
 	($c->debug > 1) && warn "series ($v, $m, $max): applied\n";
-}
-
-#
-# Disallow n+kd == w gcd(y,z) (mod x) and y(mod z)
-# whenever w is a non-residue (mod x) and n+kd > max.
-#
-sub square_series {
-	my($c, $x, $y, $z, $max) = @_;
-	$max ||= 0;
-	($c->debug > 1) && warn "square_series ($x, $y, $z, $max)\n";
-	my $quadx = quadvec($x);
-	my $yz = gcd($y, $z);
-	my($v, $m);
-	for my $w (0 .. $x - 1) {
-		next if vec($quadx, $w, 1);	# w is not a non-residue
-		($v, $m) = mod_combine($w * $yz, $x, $y, $z);
-		series($c, $v, $m, $max);
-	}
-	($c->debug > 1) && warn "square_series ($x, $y, $z, $max): applied\n";
 }
 
 #
@@ -276,78 +243,6 @@ sub test_m_rad_m {
 	}
 }
 
-#
-# Let m_4=\prod{p_i^d_i}, d_i < a_i, and 
-# q_4 = \prod{p_i: p_i | m, p_i ~| m4 } > 1.
-# 
-# Then any way to select m_4, q_4: tau(n) / tau(m_4) = 2k+1 gives
-# gcd(n+kd, m)=m_4 -> n+kd must be a quadratic residue (mod q_4).
-# 
-# FIXME: for n=243, k >= 3, at m = 9 (or maybe 27) this should see that
-# n+d = 3p^2, n+2d = 3q^2, n+3d = 3^2r between them deny all multiples
-# of 3, which would then allow fix_square(3). I guess this is because
-# we require gcd(m_4, q_4) = 1, but here we need m_4 = q_4 = 3.
-# It's possible we disallow that because we rely on selecting a complete
-# prime power out of m: we should consider also selecting all but one.
-#
-# FIXME: I think we restrict gcd(m_4, q_4) = 1 to reduce the number of
-# combinations to consider; but I suspect we could get a far more
-# effective restriction by considering only q_4 prime - if m_4 pq
-# qualifies, won't that only make the same quadres restrictions we've
-# already 
-#
-sub iter_quadres_series {
-	my($m, $tn) = @_; 
-	my $fm = factorint($m);
-	my $p = $fm->[0];
-
-	# To search for this, we need 2^k | tau(n) -> 2^k | tau(m_4).
-	my $tnpow2 = maxpow2mult($tn);
-# FIXME: shouldn't this be maxpow2arith($_ + 1)?
-	my @tmpow2 = map maxpow2arith($_), @{ $fm->[1] };
-
-	# We require q_4 > 1, so the greatest power of 2 we can account for
-	# is sum(tmpow2) - min(tmpow2).
-	my $sumpow2 = sum(\@tmpow2);
-	my $minpow2 = min(\@tmpow2);
-	return sub { return undef } if $sumpow2 - $minpow2 < $tnpow2;
-
-	# Internally we'll iterate to find each valid way to fix some prime powers.
-	my $iter = iter_square_kernel_assignment($tn, $fm->[1], 0);
-	# For each assignment, we'll loop k to try each value (mod m4_fixed_mult)
-	# that honours the assigment. Set k to undef to signal that we need a new
-	# assignment.
-	my $k = undef;
-	my($assignment, $m4_fixed_mult, $m4_quad, $m4_mult, $m4_avoid_mult);
-	return sub {
-		while (1) {
-			if (defined $k) {
-				++$k;
-				if ($k >= $m4_avoid_mult) {
-					$k = undef;
-				} else {
-					next if gcd($k, $m4_avoid_mult) > 1;
-					my $mod = $k *  $m4_fixed_mult;
-					return [ $m4_quad, $mod, $m4_mult, 0 ];
-				}
-			}
-			$assignment = $iter->() or return undef;
-			$m4_fixed_mult = 1;
-			$m4_quad = 1;
-			for my $i (0 .. $#$p) {
-				if ($assignment->[$i] == 0) {
-					$m4_quad *= $p->[$i] ** $fm->[1][$i];
-					next;
-				}
-				$m4_fixed_mult *= $p->[$i] ** $assignment->[$i];
-			}
-			$m4_mult = $m / $m4_quad;
-			$m4_avoid_mult = $m4_mult / $m4_fixed_mult;
-			$k = 0;
-		}
-	};
-}
-
 sub test_series {
 	my($m, $tn) = @_;
 	my $fm = factorint($m);
@@ -400,51 +295,6 @@ sub test_series {
 		$max = $maxm3 if $good && !($max >= 0 && $max < $maxm3);
 	}
 	return $max;
-}
-
-#
-# Given target product t, source list s, boolean fixed, return an iterator
-# that yields assignment lists a, such that each assignment satisfies:
-# - a_i < s_i for all i
-# - \exists k: (2k+1) \prod{a_i + 1} == t
-# - fixed or (\prod{a_i} == 0)
-#
-# Setting s = \prod{p_i^s_i}, a = \prod{p_i^a_i}, the effect is that:
-#   tau(n) = t & gcd(s, n) = a -> \exist q: n = a q^2.
-#
-# This implementation is very simplistic, and expects only to be called
-# with relatively small numbers: it loops over each possible value for
-# a_0, and calls itself recursively to match the rest. For larger numbers
-# you would at least want to prune when the tail cannot provide the powers
-# of 2 required, by passing round an additional two parameters for required
-# and available powers of 2.
-#
-sub iter_square_kernel_assignment {
-	my($t, $s, $fixed) = @_;
-	my($head, $tail) = ($s->[0], [ @$s[1 .. $#$s] ]);
-	my $curval = -1;
-	my $iter;
-	return sub {
-		while (1) {
-			if ($iter) {
-				my $result = $iter->();
-				return [ $curval, @$result ] if $result;
-				$iter = undef;
-			}
-			++$curval;
-			return undef if $curval >= $head;
-			my($t2, $fail) = @{ divrem($t, $curval + 1) };
-			next if $fail;
-
-			my $now_fixed = $fixed || ($curval == 0);
-			if (@$tail) {
-				$iter = iter_square_kernel_assignment($t2, $tail, $now_fixed);
-			} elsif ($now_fixed && ($t2 & 1)) {
-				# all required conditions have been met
-				return [ $curval ];
-			}
-		}
-	};
 }
 
 #
@@ -503,32 +353,6 @@ sub sum {
 	my $n = 0;
 	$n += $_ for @$a;
 	return $n;
-}
-
-#
-# Given n>=1, return max(k): 2^k <= n.
-#
-sub maxpow2arith {
-	my $n = shift;
-	my $pow = 0;
-	while ($n > 1) {
-		++$pow;
-		$n >>= 1;
-	}
-	return $pow;
-}
-
-#
-# Given n, return max(k): 2^k | n.
-#
-sub maxpow2mult {
-	my $n = shift;
-	my $pow = 0;
-	while (!($n & 1)) {
-		++$pow;
-		$n >>= 1;
-	}
-	return $pow;
 }
 
 #
