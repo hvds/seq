@@ -104,7 +104,7 @@ if ($new_check) {
 		#
 		# n+kd == m (mod m rad(m)) is suppressible when tau(m) ~| tau(n)
 		#
-		test_m_rad_m($c, $m, $fm);
+		test_m_rad_m($c, $m);
 	}
 
 	#
@@ -198,10 +198,10 @@ sub fix_square {
 }
 
 #
-# If \tau(n) / \tau(m) is odd, n + kd == vm (mod m rad m), gcd(v, rad m) = 1
-# then we can suppress vm (mod m rad m) unless v is a quadratic residue
-# mod each prime p dividing m, and we can suppress vm (mod q m rad m) unless
-# v is a quadratic residue mod q.
+# If \tau(n) / \tau(m) is odd, n + kd == um (mod m rad m), gcd(u, rad m) = 1
+# then we can suppress um (mod m rad m) unless u is a quadratic residue
+# mod each prime p dividing m, and we can suppress um (mod q m rad m) unless
+# u is a quadratic residue mod q.
 # We can go further if instead of q we take q^s: when s is even we have
 # additional non-residues uq^{s-1} (0 < u < q), and when s is odd we have
 # additional uq^{s-1} (u any non-residue mod q). But doing so requires
@@ -229,17 +229,17 @@ sub quadres_series {
 	if ($p > 1) {
 		$debug > 2 && print "qs: p=$p\n";
 		if ($square_fixed->($tm)) {
-			# vm (mod m rad m) fixes a square, so we can suppress v that are
+			# um (mod m rad m) fixes a square, so we can suppress u that are
 			# non-residues mod p.
 			my $vp = quadvec($p);
 			$debug > 2 && print "qs: fix square $p over m rad m, m = $m\n";
-			VP: for my $v (1 .. $r * $p - 1) {
-				next if gcd($v, $r) > 1;
-				my $md = pari2iv($v % $p);
+			for my $u (1 .. $r * $p - 1) {
+				next if gcd($u, $r) > 1;
+				my $md = pari2iv($u % $p);
 				next if vec($vp, $md, 1);	# it's a residue mod p
-				my $mv = $m * $v;
-				$debug > 2 && print "qs: series $v * $m, $pmr\n";
-				series($c, $mv, $pmr, 0);
+				my $um = $u * $m;
+				$debug > 2 && print "qs: series $u * $m, $pmr\n";
+				series($c, $um, $pmr, 0);
 			}
 		} else {
 			$debug > 1 && print "qs: found p=$p, but not square fixed\n";
@@ -250,19 +250,19 @@ sub quadres_series {
 
 	$debug > 2 && print "qs: no spare\n";
 	if ($square_fixed->($tm)) {
-		# vm (mod m rad m) fixes a square, so we can suppress v that are
+		# um (mod m rad m) fixes a square, so we can suppress u that are
 		# non-residues mod any prime factor of m
 		my @vm = map quadvec($_), @$mp;
-		V: for my $v (1 .. $r - 1) {
-			next if gcd($v, $r) > 1;
+		for my $u (1 .. $r - 1) {
+			next if gcd($u, $r) > 1;
 			my $nonresidue = 0;
 			for my $i (0 .. $#$mp) {
-				my $md = pari2iv($v % $mp->[$i]);
+				my $md = pari2iv($u % $mp->[$i]);
 				$nonresidue = 1, last unless vec($vm[$i], $md, 1);
 			}
 			next unless $nonresidue;
-			$debug > 2 && print "qs: series $v * $m, $pmr\n";
-			series($c, $v * $m, $pmr, 0);
+			$debug > 2 && print "qs: series $u * $m, $pmr\n";
+			series($c, $u * $m, $pmr, 0);
 		}
 	} else {
 		$debug > 2 && print "qs: not square fixed for m rad m. m = $m\n";
@@ -270,7 +270,7 @@ sub quadres_series {
 
 	for my $j (0 .. $#$mp) {
 		if ($square_fixed->($tm / ($mpp->[$j] + 1))) {
-			# vm' (mod m' rad m') fixes a square, so we can suppress v that are
+			# um' (mod m' rad m') fixes a square, so we can suppress u that are
 			# non-residues mod $mp->[$j] ** ($mpp->[$j] + 1)
 			my $p = $mp->[$j];
 			my $pp = $mpp->[$j] + 1;
@@ -281,20 +281,20 @@ sub quadres_series {
 			$debug > 2 && print "qs: fix square $p ** $pp over m rad m, m = $m2\n";
 			if ($pp & 1) {
 				my $vp = quadvec($p);
-				VP2O: for my $v (1 .. $r2 * $p - 1) {
-					next if gcd($v, $r) > 1;
-					my $md = pari2iv($v % $p);
+				for my $u (1 .. $r2 * $p - 1) {
+					next if gcd($u, $r) > 1;
+					my $md = pari2iv($u % $p);
 					next if vec($vp, $md, 1);	# it's a residue mod p
-					my $mv = $m * $v;
-					$debug > 2 && print "qs: series $v * $m, $pmr\n";
-					series($c, $mv, $pmr, 0);
+					my $um = $u * $m;
+					$debug > 2 && print "qs: series $u * $m, $pmr\n";
+					series($c, $um, $pmr, 0);
 				}
 			} else {
-				VP2E: for my $v (1 .. $r2 * $p - 1) {
-					next if gcd($v, $r) > 1;
-					my $mv = $m * $v;
-					$debug > 2 && print "qs: series $v * $m, $pmr\n";
-					series($c, $mv, $pmr, 0);
+				for my $u (1 .. $r2 * $p - 1) {
+					next if gcd($u, $r) > 1;
+					my $um = $u * $m;
+					$debug > 2 && print "qs: series $u * $m, $pmr\n";
+					series($c, $um, $pmr, 0);
 				}
 			}
 		}
@@ -485,36 +485,29 @@ sub iter_square_kernel_assignment {
 # we will already have suppressed a superset of what this gives us.
 #   
 sub test_m_rad_m {
-	my($c, $mradm, $fmradm) = @_;
-#optionally: try this for (easier) prime powers only
-#return if @{ $fmradm->[0] } > 1;
-	my($tm, $radm, $fm) = (1, 1, [ $fmradm->[0], [ ] ]);
-	for my $i (0 .. $#{ $fm->[0] }) {
-		my $a_i = $fmradm->[1][$i];
-		# it's not of the form m rad(m) unless every power > 1
-		return if $a_i == 1;
-		$radm *= $fm->[0][$i];
-		$tm *= $a_i;
-		$fm->[1][$i] = $a_i - 1;
-	}
-	my $m = $mradm / $radm;
+	my($c, $mr) = @_;
+	my($p, $m, $r) = discern_rad($mr) or return;
+	$p == 1 or return;
+	my($mp, $mpp) = @{ factorint($m) };
+	my $tm = tau_factor([ $mp, $mpp ]);
 	my $tn = $c->tau;
+
 	# case a (coarse version)
 	return if $tm > $tn;
 
 	# main requirement
 	return if ($tn % $tm) == 0;
 
-	for my $i (0 .. $#{ $fm->[0] }) {
-		my $tm_i = $tm / ($fm->[1][$i] + 1);
+	for my $i (0 .. $#$mp) {
+		my $tm_i = $tm / ($mpp->[$i] + 1);
 		# case b
 		return if ($tn % $tm_i) != 0;
 	}
 
-	my $iter_coprime = iter_coprime($radm);
-	while (my $cp = $iter_coprime->()) {
-$c->debug && warn "given $m rad($m) qualifies, suppress $m * $cp mod $mradm\n";
-		series($c, $m * $cp, $mradm, 0);
+	for my $u (1 .. $r - 1) {
+		next if gcd($u, $r) > 1;
+$c->debug && warn "given $m rad($m) qualifies, suppress $m * $u mod $mr\n";
+		series($c, $m * $u, $mr, 0);
 	}
 }
 
@@ -539,23 +532,9 @@ sub discern_rad {
 			$r *= $sp->[$i];
 		}
 	}
-	$sp = undef;	# avoid coredumps when $p is copied out
+	$sp = undef;	# avoid bad free coredumps
+	$spp = undef;
 	return +($p, $s / $p / $r, $r);
-}
-
-#
-# Given integer m, returns an iterator that will return in succession
-# each of the \phi(m) integers from 0 .. m-1 that are coprime to m.
-#
-sub iter_coprime {
-	my($m) = @_;
-	my $cur = 0;
-	return sub {
-		while (++$cur < $m) {
-			return $cur if gcd($cur, $m) == 1;
-		}
-		return undef;
-	};
 }
 
 #
