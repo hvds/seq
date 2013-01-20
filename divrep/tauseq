@@ -26,6 +26,7 @@ $new_check = 1, next if $arg eq '-nc';
 
 $| = 1;
 my($n, $f) = map PARI($_), @ARGV;
+my $zone = PARI(1);
 my $tn = tau($n);
 my $c = Constraint->new(
 	'n' => $n,
@@ -210,13 +211,12 @@ sub quadres_series {
 	my($c, $pmr, $tn) = @_;
 	my $debug = $c->debug;
 	$debug > 1 && print "qs: try $pmr\n";
-	my($mp, $mrpp) = @{ factorint($pmr) };
-	my @spare = grep $mrpp->[$_] == 1, 0 .. $#$mp;
-	if (@spare > 1) {
+	my($p, $m, $r) = discern_rad($pmr) or do {
 		$debug > 2 && print "qs: too many spares\n";
 		return;
-	}
-	my $tm = prod([ map $_ || 1, @$mrpp ]);
+	};
+	my($mp, $mpp) = @{ factorint($m) };
+	my $tm = tau_factor([ $mp, $mpp ]);
 	my $square_fixed = sub {
 		my($tm) = @_;
 		my($div, $rem) = @{ divrem($tn, $tm) };
@@ -226,33 +226,29 @@ sub quadres_series {
 		return $div & 1;
 	};
 
-	if (@spare) {
-		my $p = $mp->[ $spare[0] ];
+	if ($p > 1) {
 		$debug > 2 && print "qs: p=$p\n";
-		unless ($square_fixed->($tm)) {
+		if ($square_fixed->($tm)) {
+			# vm (mod m rad m) fixes a square, so we can suppress v that are
+			# non-residues mod p.
+			my $vp = quadvec($p);
+			$debug > 2 && print "qs: fix square $p over m rad m, m = $m\n";
+			VP: for my $v (1 .. $r * $p - 1) {
+				next if gcd($v, $r) > 1;
+				my $md = pari2iv($v % $p);
+				next if vec($vp, $md, 1);	# it's a residue mod p
+				my $mv = $m * $v;
+				$debug > 2 && print "qs: series $v * $m, $pmr\n";
+				series($c, $mv, $pmr, 0);
+			}
+		} else {
 			$debug > 1 && print "qs: found p=$p, but not square fixed\n";
 			return;
 		}
-		my $r = prod($mp) / $p;
-		my $m = $pmr / $p / $r;
-		# vm (mod m rad m) fixes a square, so we can suppress v that are
-		# non-residues mod p.
-		my $vp = quadvec($p);
-		$debug > 2 && print "qs: fix square $p over m rad m, m = $m\n";
-		VP: for my $v (1 .. $r * $p - 1) {
-			next if gcd($v, $r) > 1;
-			my $md = pari2iv($v % $p);
-			next if vec($vp, $md, 1);	# it's a residue mod p
-			my $mv = $m * $v;
-			$debug > 2 && print "qs: series $v * $m, $pmr\n";
-			series($c, $mv, $pmr, 0);
-		}
 		return;
 	}
-	$debug > 2 && print "qs: no spare\n";
 
-	my $r = prod($mp);
-	my $m = $pmr / $r;
+	$debug > 2 && print "qs: no spare\n";
 	if ($square_fixed->($tm)) {
 		# vm (mod m rad m) fixes a square, so we can suppress v that are
 		# non-residues mod any prime factor of m
@@ -273,11 +269,11 @@ sub quadres_series {
 	}
 
 	for my $j (0 .. $#$mp) {
-		if ($square_fixed->($tm / $mrpp->[$j])) {
+		if ($square_fixed->($tm / ($mpp->[$j] + 1))) {
 			# vm' (mod m' rad m') fixes a square, so we can suppress v that are
-			# non-residues mod $mp->[$j] ** $mrpp->[$j]
+			# non-residues mod $mp->[$j] ** ($mpp->[$j] + 1)
 			my $p = $mp->[$j];
-			my $pp = $mrpp->[$j];
+			my $pp = $mpp->[$j] + 1;
 			my $m2 = $m / ($p ** ($pp - 1));
 			my $r2 = $r / $p;
 			# if pp is even, we can suppress every multiple of p^{pp-1};
@@ -520,6 +516,31 @@ sub test_m_rad_m {
 $c->debug && warn "given $m rad($m) qualifies, suppress $m * $cp mod $mradm\n";
 		series($c, $m * $cp, $mradm, 0);
 	}
+}
+
+#
+# Given integer s, returns (p, m, rad(m)) such that s = p m rad(m), and
+# p is prime or 1. If no such split is possible (because more than one
+# prime divides s with a multiplicity of one), returns nothing.
+#
+sub discern_rad {
+	my($s) = @_;
+	my($sp, $spp) = @{ factorint($s) };
+	my $p = $zone;
+	my $r = $zone;
+	for my $i (0 .. $#$sp) {
+		if ($spp->[$i] == 1) {
+			if ($p > 1) {
+				return;
+			} else {
+				$p = $sp->[$i];
+			}
+		} else {
+			$r *= $sp->[$i];
+		}
+	}
+	$sp = undef;	# avoid coredumps when $p is copied out
+	return +($p, $s / $p / $r, $r);
 }
 
 #
