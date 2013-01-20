@@ -84,11 +84,12 @@ $c->debug && warn "apply $m\n";
 
 if ($new_check) {
 		#
-		# Look for restrictions on quadratic non-residues mod some factors
-		# of m, when prime powers fixed by other factors leave us needing
-		# a square.
+		# n+kd == m (mod m rad(m)) is suppressible when tau(m) ~| tau(n)
 		#
-		quadres_series($c, $m, $tn);
+		# Alternatively, when tau(n) / tau(m) is odd, we can fix any other
+		# factors to be quadratic residues.
+		#
+		test_m_rad_m($c, $m, $tn);
 } else {
 		#
 		# If setting n+kd == a (mod b) fixes some divisors so that others
@@ -100,11 +101,6 @@ if ($new_check) {
 			square_series($c, $mod_quad, $value_fixed, $mod_fixed, $max);
 		}
 }
-
-		#
-		# n+kd == m (mod m rad(m)) is suppressible when tau(m) ~| tau(n)
-		#
-		test_m_rad_m($c, $m);
 	}
 
 	#
@@ -198,50 +194,85 @@ sub fix_square {
 }
 
 #
-# If \tau(n) / \tau(m) is odd, n + kd == um (mod m rad m), gcd(u, rad m) = 1
-# then we can suppress um (mod m rad m) unless u is a quadratic residue
-# mod each prime p dividing m, and we can suppress um (mod q m rad m) unless
-# u is a quadratic residue mod q.
-# We can go further if instead of q we take q^s: when s is even we have
-# additional non-residues uq^{s-1} (0 < u < q), and when s is odd we have
-# additional uq^{s-1} (u any non-residue mod q). But doing so requires
-# multiple passes over the factors.
+# n+kd == xp^y (mod p^{y+1}) is suppressible when y+1 ~| tau(n).
 #
-sub quadres_series {
+# More generally:
+#	tau(m) ~| tau(n)  and  n+kd == m (mod m rad(m)) => tau(n+kd) != tau(n)
+#
+# However, given m = \prod p_i^a_i, if a) tau(m) > tau(n), or better:
+#	a)  \not \exists k: tau(km) = tau(n)
+# or:
+#	b)  \exists i: tau(m / p_i^a_i) ~| tau(n)
+# we will already have suppressed a superset of what this gives us.
+#   
+# Additionally, when tau(m) | tau(n) with tau(n) / tau(m) odd, then if
+# n + kd == um (mod m rad m), gcd(u, rad m) = 1 we can suppress
+# um (mod m rad m) unless u is a quadratic residue mod each prime p
+# dividing m, and um (mod q m rad m) unless u is a quadratic residue mod q.
+#
+# We can go further if instead of q we take q^s: there are more non-residues
+# mod q^s (but it means recalculating what m and rad(m) mean).
+#
+sub test_m_rad_m {
 	my($c, $pmr, $tn) = @_;
 	my $debug = $c->debug;
-	$debug > 1 && print "qs: try $pmr\n";
+	$debug > 1 && print "m rad m: try $pmr\n";
 	my($p, $m, $r) = discern_rad($pmr) or do {
-		$debug > 2 && print "qs: too many spares\n";
+		$debug > 2 && print "m rad m: too many spares\n";
 		return;
 	};
 	my($mp, $mpp) = @{ factorint($m) };
 	my $tm = tau_factor([ $mp, $mpp ]);
 
 	my $rp = $r * $p;
+	my($qm, $qr, $qrp) = ($m, $r, $rp);
 	my $quad_series = sub {
 		my($mod) = @_;
-		my $checkvec = defined($mod);
-		my $vec = $checkvec ? quadvec($mod) : undef;
-		for my $u (1 .. $rp - 1) {
-			next if gcd($u, $r) > 1;
-			next if $checkvec && vec($vec, $u % $mod, 1);
-			$debug > 2 && print "qs: series $u * $m, $pmr\n";
-			series($c, $u * $m, $pmr, 0);
+		my $vec = quadvec($mod);
+		for my $u (1 .. $qrp - 1) {
+			next if gcd($u, $qr) > 1;
+			next if vec($vec, $u % $mod, 1);
+			$debug > 2 && print "m rad m: series $u * $qm, $pmr\n";
+			series($c, $u * $qm, $pmr, 0);
 		}
 	};
 
 	if ($p > 1) {
 		$quad_series->($p) if divides_oddly($tn, $tm);
+		# all remaining tests require p==1
 		return;
 	}
 
 	$quad_series->($r) if divides_oddly($tn, $tm);
+	{
+		for my $j (0 .. $#$mp) {
+			my $pp = $mpp->[$j] + 1;
+			if (divides_oddly($tn, $tm / $pp)) {
+				my $p = $mp->[$j];
+				$qm = $m / $p;
+				$qr = $r / $p;
+				$qrp = $rp * $p;
+				$quad_series->($p ** $pp);
+			}
+		}
+	}
 
-	for my $j (0 .. $#$mp) {
-		my $pp = $mpp->[$j] + 1;
-		$quad_series->(($pp & 1) ? $mp->[$j] : undef)
-				if divides_oddly($tn, $tm / $pp);
+	# case a (coarse version)
+	return if $tm > $tn;
+
+	# main requirement
+	return if ($tn % $tm) == 0;
+
+	for my $i (0 .. $#$mp) {
+		my $tm_i = $tm / ($mpp->[$i] + 1);
+		# case b
+		return if ($tn % $tm_i) != 0;
+	}
+
+	for my $u (1 .. $r - 1) {
+		next if gcd($u, $r) > 1;
+		$c->debug && print "m rad m: suppress $m * $u mod $pmr\n";
+		series($c, $m * $u, $pmr, 0);
 	}
 }
 
@@ -414,45 +445,6 @@ sub iter_square_kernel_assignment {
 			}
 		}
 	};
-}
-
-#
-# n+kd == xp^y (mod p^{y+1}) is suppressible when y+1 ~| tau(n).
-#
-# More generally:
-#	tau(m) ~| tau(n)  and  n+kd == m (mod m rad(m)) => tau(n+kd) != tau(n)
-#
-# However, given m = \prod p_i^a_i, if a) tau(m) > tau(n), or better:
-#	a)  \not \exists k: tau(km) = tau(n)
-# or:
-#	b)  \exists i: tau(m / p_i^a_i) ~| tau(n)
-# we will already have suppressed a superset of what this gives us.
-#   
-sub test_m_rad_m {
-	my($c, $mr) = @_;
-	my($p, $m, $r) = discern_rad($mr) or return;
-	$p == 1 or return;
-	my($mp, $mpp) = @{ factorint($m) };
-	my $tm = tau_factor([ $mp, $mpp ]);
-	my $tn = $c->tau;
-
-	# case a (coarse version)
-	return if $tm > $tn;
-
-	# main requirement
-	return if ($tn % $tm) == 0;
-
-	for my $i (0 .. $#$mp) {
-		my $tm_i = $tm / ($mpp->[$i] + 1);
-		# case b
-		return if ($tn % $tm_i) != 0;
-	}
-
-	for my $u (1 .. $r - 1) {
-		next if gcd($u, $r) > 1;
-$c->debug && warn "given $m rad($m) qualifies, suppress $m * $u mod $mr\n";
-		series($c, $m * $u, $mr, 0);
-	}
 }
 
 #
