@@ -217,18 +217,10 @@ sub quadres_series {
 	};
 	my($mp, $mpp) = @{ factorint($m) };
 	my $tm = tau_factor([ $mp, $mpp ]);
-	my $square_fixed = sub {
-		my($tm) = @_;
-		my($div, $rem) = @{ divrem($tn, $tm) };
-		# not fixed unless tau(m) divides tau(n)
-		return 0 if $rem;
-		# fixed if tau(n) / tau(m) is odd
-		return $div & 1;
-	};
 
 	if ($p > 1) {
 		$debug > 2 && print "qs: p=$p\n";
-		if ($square_fixed->($tm)) {
+		if (divides_oddly($tn, $tm)) {
 			# um (mod m rad m) fixes a square, so we can suppress u that are
 			# non-residues mod p.
 			my $vp = quadvec($p);
@@ -249,18 +241,14 @@ sub quadres_series {
 	}
 
 	$debug > 2 && print "qs: no spare\n";
-	if ($square_fixed->($tm)) {
+	if (divides_oddly($tn, $tm)) {
 		# um (mod m rad m) fixes a square, so we can suppress u that are
 		# non-residues mod any prime factor of m
-		my @vm = map quadvec($_), @$mp;
+		my $vr = quadvec($r);
 		for my $u (1 .. $r - 1) {
 			next if gcd($u, $r) > 1;
-			my $nonresidue = 0;
-			for my $i (0 .. $#$mp) {
-				my $md = pari2iv($u % $mp->[$i]);
-				$nonresidue = 1, last unless vec($vm[$i], $md, 1);
-			}
-			next unless $nonresidue;
+			my $md = pari2iv($u % $r);
+			next if vec($vr, $md, 1);
 			$debug > 2 && print "qs: series $u * $m, $pmr\n";
 			series($c, $u * $m, $pmr, 0);
 		}
@@ -269,7 +257,7 @@ sub quadres_series {
 	}
 
 	for my $j (0 .. $#$mp) {
-		if ($square_fixed->($tm / ($mpp->[$j] + 1))) {
+		if (divides_oddly($tn, $tm / ($mpp->[$j] + 1))) {
 			# um' (mod m' rad m') fixes a square, so we can suppress u that are
 			# non-residues mod $mp->[$j] ** ($mpp->[$j] + 1)
 			my $p = $mp->[$j];
@@ -593,6 +581,16 @@ sub maxpow2mult {
 		$n >>= 1;
 	}
 	return $pow;
+}
+
+#
+# Given n, d, returns true if d divides n to give an odd number.
+#
+sub divides_oddly {
+	my($n, $d) = @_;
+	my($q, $r) = @{ divrem($n, $d) };
+	return 0 if $r;
+	return +($q & 1) ? 1 : 0;
 }
 
 #
