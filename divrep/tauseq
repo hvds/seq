@@ -516,7 +516,17 @@ OUT
 #   to take advantage of
 #
 # eg for f(125), f(343) we can use prime checks
-
+#
+# TODO: the current "let's put what we know most about first" actually
+# gives us a good ordering for information (via 301 lines), but is badly
+# suboptimal for speed - those tested earliest seem in practice to be the
+# ones least likely to be rejected.
+# Consider testing all k without shortcircuit for the first <x> tests,
+# and then picking an order that tests first those most likely to be
+# rejected. (Outputting the accept rate at this point would also be
+# interesting, since we can use it to start making probabilistic predictions
+# about when we'll find a solution.)
+#
 sub prepare_tester {
 	my($c) = @_;
 	my($n, $f, $tau, $min) = ($c->n, $c->f, $c->tau, $c->min);
@@ -524,6 +534,7 @@ sub prepare_tester {
 		# all the targets must be prime; it may still be useful to test them
 		# in reverse order, but I suspect the faster checking on smaller
 		# numbers more than makes up for the reduced chance they are nonprime
+		print "320 Testers: all prime, ascending order\n";
 		return [ map {
 			my $k = $_;
 			sub { isprime($n + $_[0] * $k) }
@@ -542,15 +553,23 @@ sub prepare_tester {
 				my $ki = $p * $xi;
 				next if $seen{$ki}++;
 				# pq + xpd = p(q+xd)
-				push @tester, sub { isprime($q + $xi * $_[0]) };
+				push @tester, [ "p$ki", sub { isprime($q + $xi * $_[0]) } ];
 			}
 		}
 	}
-	for my $k (1 .. $f - 1) {
-		next if $seen{$k};
-		push @tester, sub { $tau == tau($n + $_[0] * $k) };
-	}
-	return \@tester;
+	# For the rest, let's put what we know most about first
+	my @known = map {
+		my $k = $_;
+		my $g = gcd($k, $n);
+		my $tg = tau($g);
+		[ $k, $g, $tg ];
+	} grep !$seen{$_}, 1 .. $f - 1;
+	push @tester, map {
+		my $k = $_->[0];
+		[ $k, sub { $tau == tau($n + $_[0] * $k) } ]
+	} sort { $b->[2] <=> $a->[2] || $b->[1] <=> $a->[1] } @known;
+	printf "320 Testers: [%s]\n", join ', ', map $_->[0], @tester;
+	return [ map $_->[1], @tester ];
 }
 
 sub report_seq {
