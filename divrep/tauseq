@@ -135,6 +135,18 @@ sub series {
 # 4) tau(n) = (2y + 1)tau(x) for some y
 # Then we know n+xd = xy^2 for some y (and we know tau(y)).
 #
+# There are situations where we could fix a higher power, but we can't yet
+# take advantage of that.
+#
+# FIXME: there are other situations where this optimization could apply:
+# we can fix factors less directly related to f. Eg for n=198, k=12,
+# the constraints fix d==3245(mod 4320); that means at f=10 we have
+# n+fd = 2^3 . p^2. But it will be harder to find this in the general
+# case: we may be mod-fixed mod p, but need to inspect the specific
+# constraints mod p^2 (for example) to show that we can guarantee
+# gcd(n+fd, p^2) = p; we'll also need to adjust the runtime calculations
+# since we are not simply dividing by f.
+#
 sub fix_square {
 	my($c, $n, $tn) = @_;
 	my $f = $c->f();
