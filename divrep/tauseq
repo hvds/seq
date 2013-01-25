@@ -177,8 +177,11 @@ sub fix_square {
 # um (mod m rad m) unless u is a quadratic residue mod each prime p
 # dividing m, and um (mod q m rad m) unless u is a quadratic residue mod q.
 #
-# We can go further if instead of q we take q^s: there are more non-residues
-# mod q^s (but it means recalculating what m and rad(m) mean).
+# We can go further when instead of q we take q^s: there are more non-residues
+# mod q^s (but it means recalculating what m and rad(m) mean). For any
+# q > 2, it is only useful to take q^s : gcd(pmr, q^{s+1}) = q^s since
+# for an odd prime a coprime non-residue mod q^{s+1} is always a non-residue
+# mod q^s. For q=2 we need a special case to cope eg with 3(mod 4).
 #
 sub test_m_rad_m {
 	my($c, $pmr, $tn) = @_;
@@ -211,6 +214,23 @@ sub test_m_rad_m {
 	}
 
 	$quad_series->($r) if divides_oddly($tn, $tm);
+
+	if ($mp->[0] == 2) {
+		# p=2 uniquely introduce new non-residues at higher powers; eg
+		# 3 is a non-residue (mod 4).
+		my $pp2 = $mpp->[0];
+		my $tm2 = $m / ($pp2 + 1) * $pp2;
+		if (divides_oddly($tn, $tm * $pp2 / ($pp2 + 1))) {
+			my $p = $mp->[0];
+			$qm = $m / $p;
+			$qrp = $rp * $p;
+			my $pp = $p ** ($pp2 + 1);
+			# we need to allow 2 mod 8, but not 4 mod 8
+			$qr = $r;	# not $qr = $r / $p
+			$quad_series->($p ** ($pp2 + 1));
+		}
+	}
+
 	{
 		for my $j (0 .. $#$mp) {
 			my $pp = $mpp->[$j] + 1;
