@@ -620,6 +620,7 @@ sub suppress {
 		(($debug > 2) && warn "suppress $v(mod $p): ignore\n"),
 				return 0 if vec($c->[2], $v, 1);
 		($debug > 1) && warn "suppress independent $v(mod $p): apply\n";
+# FIXME: check for "all suppressed" here to shortcircuit the cascade storm
 		vec($c->[2], $v, 1) = 1;
 		vec($c->[1], $v, 1) = 1;
 		++$c->[3];
