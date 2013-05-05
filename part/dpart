@@ -1,0 +1,301 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use lib '../lib';
+use H::Partition;
+use Algorithm::Loops;
+
+=head1 Multi-dimensional partitions
+
+Given an n-dimensional n-cube of side 2, how many distinguishable ways
+can it be partitioned?
+
+Each partition is a collection of fragments in which each fragment is
+a set of orthogonally connected unit n-cubes (ie sharing a common
+(n-1)-cube face). 2 partitions are considered indistinguishable if one
+can be mapped to the other by some combination of rotations and
+reflections. (We actually also count the indistinguishable ones, which
+turns out to be A058975.)
+
+=cut
+
+my($n) = shift(@ARGV) || 3;
+my $nodes = 1 << $n;
+my $full_set = pack "b$nodes", "1" x $nodes;
+my $sym_count = 0;
+my $all_count = 0;
+init_connections();
+
+for my $part (reverse @{ H::Partition->strings($nodes) }) {
+	try_part($part);
+}
+print "$n: $sym_count, $all_count\n";
+exit 0;
+
+sub try_part {
+	my($part) = @_;
+	my($first, $rest) = ($part =~ /^(.)(.*)\z/s);
+	my %seen;
+	for my $piece (@{ pieces(ord $first) }) {
+		my $iter = iter_part($full_set ^ $piece, [ $piece ], $rest, {});
+		while (defined(my $set = $iter->())) {
+			my($canon, $canonstr) = canonical_set($set);
+			++$seen{$canonstr};
+		}
+	}
+	$sym_count += keys %seen;
+	for my $match (keys %seen) {
+		my $set = [ map pack("b$nodes", $_), split /\s+/, $match ];
+		my $iter = iter_set_symmetries($set);
+		my %set_seen;
+		while (1) {
+			my $pset = $iter->() // last;
+			++$set_seen{stringify_set($pset)};
+		}
+		my $this_count = keys %set_seen;
+		printf "(%s) %s\n", $this_count, stringify_set($set);
+		$all_count += $this_count;
+	}
+}
+
+#
+# Given a vector of $nodes bits representing the unit n-cubes not yet
+# allocated, a set (an arrayref of vectors) listing the pieces so far
+# allocated, a partition (packed as a string of characters, the ord()
+# of each character representing the value) of the piece sizes the
+# remaining vector should be split into, and a hashref $seen_shape of
+# shapes that the next piece need not consider, returns an iterator
+# each invocation of which will return a set that fully partitions
+# the full vector into pieces of the requested sizes, or undef if all
+# partitions satisfying the constraints have already been returned.
+#
+# Some attempt is made to avoid duplicates, but the caller should still
+# check.
+#
+sub iter_part {
+	my($vec, $set, $part, $seen_shape) = @_;
+	if (length $part > 1) {
+		my($first, $rest) = ($part =~ /^(.)(.*)\z/s);
+		my $pieces = pieces(ord $first);
+		my $index = 0;
+		my $iter_next_part;
+		my $iter_this_piece;
+		my $cur_set;
+		my $same_next = (ord($first) == ord($rest)) ? 1 : 0;
+		return sub {
+			while (1) {
+				unless (defined $iter_this_piece) {
+					my $piece = $pieces->[$index++];
+					return undef unless defined $piece;
+
+					$iter_this_piece = iter_piece_symmetries($piece)
+				}
+				unless (defined $iter_next_part) {
+					my $shape = $iter_this_piece->();
+					unless (defined $shape) {
+						$iter_this_piece = undef;
+						next;
+					}
+					next if $seen_shape->{$shape}++;
+					next unless ($shape & $vec) eq $shape;
+					$iter_next_part = iter_part(
+						$vec ^ $shape,
+						[ @$set, $shape ],
+						$rest,
+						$same_next ? { %$seen_shape } : {},
+					);
+				}
+				my $result = $iter_next_part->();
+				return $result if defined $result;
+				$iter_next_part = undef;
+			}
+		};
+	} elsif (length $part == 1) {
+		my $seen = 0;
+		return sub {
+			return undef if $seen++;
+			return [ @$set, $vec ] if connected($vec);
+			return undef;
+		};
+	} else {
+		my $seen = 0;
+		return sub {
+			return undef if $seen++;
+			return $set;
+		};
+	}
+}
+
+my @powers;
+my @connections;
+sub init_connections {
+	@powers = map +(1 << $_), 0 .. $n - 1;
+	@connections = map {
+		my $i = $_;
+		my $v = '';
+		vec($v, $i ^ $_, 1) = 1 for @powers;
+		$v
+	} 0 .. $nodes - 1;
+}
+
+#
+# Given a vector of $nodes bits, returns TRUE if the set bits are
+# orthogonally connected, else FALSE.
+#
+sub connected {
+	my($v) = @_;
+	my @bits = grep vec($v, $_, 1), 0 .. $nodes - 1;
+	die "no bits set" unless @bits;
+	my @pend = shift @bits;
+	my %bits = map +($_ => 1), @bits;
+
+	while (@pend) {
+		my $next = shift @pend;
+		push @pend, grep delete($bits{$_}), map $next ^ $_, @powers;
+	}
+	return keys(%bits) ? 0 : 1;
+}
+
+#
+# Given a vector of $nodes bits, returns the canonical representation
+# of the same vector: the minimal vector representing the same bits after
+# all possible rotations and reflections.
+#
+sub canonical_piece {
+	my($v) = @_;
+	my($canon, $canonstr);
+	my $iter = iter_piece_symmetries($v);
+	while (1) {
+		my $w = $iter->();
+		last unless defined $w;
+		my $string = unpack "b$nodes", $w;
+		($canon, $canonstr) = ($w, $string)
+				if !defined($canon) || $string gt $canonstr;
+	}
+	return $canon;
+}
+
+#
+# Given a set (an arrayref of vectors of $nodes bits), returns a list of
+# two values: the canonical representation of this set as a set in the
+# same form, and the stringification of that canonical form.
+#
+sub canonical_set {
+	my($set) = @_;
+	my($canon, $canonstr);
+	my $iter = iter_set_symmetries($set);
+	while (1) {
+		my $sset = $iter->();
+		last unless defined $sset;
+		my $string = stringify_set($sset);
+		($canon, $canonstr) = ($sset, $string)
+				if !defined($canon) || $string gt $canonstr;
+	}
+	return +($canon, $canonstr);
+}
+
+#
+# Given a set (an arrayref of vectors of $nodes bits), returns a string
+# representing the set.
+#
+sub stringify_set {
+	my($set) = @_;
+	return join ' ', map {
+		vec($_, $nodes - 1, 1) = vec($_, $nodes - 1, 1);
+		unpack "b$nodes", $_
+	} sort @$set;
+}
+
+#
+# Returns an arrayref of the mappings that transform a given shape into
+# each of its symmetrical equivalents (including the identity transform).
+# Each mapping is an arrayref of integers, a permutation of the numbers
+# 0 .. $nodes - 1.
+#
+{
+	my $symmetries;
+	sub symmetries {
+		return $symmetries ||= do {
+			my @dim = (0 .. $n - 1);
+			my @base = map [ split //, unpack "b$n", chr($_) ], 0 .. $nodes - 1;
+			my @prep_dim;
+			while (1) {
+				push @prep_dim, [
+					map ord(pack "b$n", join '', @$_[@dim]), @base
+				];
+				last unless Algorithm::Loops::NextPermuteNum(@dim);
+			}
+			[
+				map {
+					my $dim_only = $_;
+					map {
+						my $xor = $_;
+						[ map $_ ^ $xor, @$dim_only ]
+					} 0 .. $nodes - 1
+				} @prep_dim
+			];
+		};
+	}
+}
+
+#
+# Given a vector of $nodes bits representing a shape, returns an iterator that
+# will return successive symmetrical equivalents of that shape (including the
+# identity), or undef after all equivalents have been listed.
+#
+sub iter_piece_symmetries {
+	my($v) = @_;
+	my @bits = split //, unpack "b$nodes", $v;
+	my $symmetries = symmetries();
+	my $index = 0;
+	return sub {
+		my $perm = $symmetries->[$index++];
+		return undef unless defined $perm;
+#use Data::Dumper; print STDERR Dumper({ nodes => $nodes, perm => $perm, bits => \@bits });
+		return pack "b$nodes", join '', @bits[@$perm];
+	};
+}
+
+#
+# Given a set (an arrayref of vectors of $nodes bits), returns an iterator that
+# will return successive symmetrical equivalents of that set (including the
+# identity), or undef after all equivalents have been listed.
+#
+sub iter_set_symmetries {
+	my($set) = @_;
+	my @bits = map [ split //, unpack "b$nodes", $_ ], @$set;
+	my $symmetries = symmetries();
+	my $index = 0;
+	return sub {
+		my $perm = $symmetries->[$index++];
+		return undef unless defined $perm;
+		return [ map pack("b$nodes", join '', @$_[@$perm]), @bits ];
+	};
+}
+
+#
+# Given an integer $p, returns an arrayref of all the connected pieces of
+# $p unit n-squares as vectors of $nodes bits in canonical form.
+#
+{
+	my @pieces;
+	sub pieces {
+		my($size) = @_;
+		return $pieces[$size] ||= ($size == 1) ? [
+			pack "b$nodes", '1' . ('0' x ($nodes - 1))
+		] : do {
+			my %seen;
+			for my $smaller (@{ pieces($size - 1) }) {
+				for my $new (0 .. $nodes - 1) {
+					next if vec($smaller, $new, 1);
+					my $adjacent = $smaller & $connections[$new];
+					next unless $adjacent =~ /[^\x00]/;
+					my $w = $smaller;
+					vec($w, $new, 1) = 1;
+					++$seen{canonical_piece($w)};
+				}
+			}
+			[ sort keys %seen ];
+		};
+	}
+}
+
