@@ -10,7 +10,6 @@ typedef struct avl_s {
 	avl right;
 	int balance;
 	uint ref;
-	uint size;
 } avl_t;
 
 typedef struct avl_tree_s {
@@ -21,12 +20,12 @@ typedef struct avl_tree_s {
 	uchar* vecarena;
 	uint va_size;
 	uint va_used;
-	avl_cmp_t* comparator;
+	uint element_size;
 } avl_tree;
 
-avl_tree* avl_new(avl_cmp_t* comparator);
+avl_tree* avl_new(uint element_size);
 void avl_delete(avl_tree* tree);
 avl_tree* avl_dup(avl_tree* source);
-int avl_seen(avl_tree* tree, uchar* v, uint size);
+int avl_seen(avl_tree* tree, uchar* v);
 
 #endif /* avl.h */

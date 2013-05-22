@@ -35,7 +35,7 @@ vec* fullvec;
 vec* piecestack;
 vec* filledstack;
 vec* solution;
-avl_tree* solutions_seen;
+avl_tree** solutions_seen;
 
 int clk_tck;
 void init_clk(void) {
@@ -341,7 +341,7 @@ clock_t t0, t1;
 		prep_pieces(size - 1);
 t0 = curtime();
 	small_lim = piece_array[size];
-	seen = avl_new(&vec_comparator);
+	seen = avl_new(vecsize);
 	for (smalli = piece_array[size - 1]; smalli < small_lim; ++smalli) {
 		smallv = pieces_vec(smalli);
 		for (new = 0; new < nodes; ++new) {
@@ -353,7 +353,7 @@ t0 = curtime();
 			vec_copy(smallv, scratch);
 			vec_setbit(scratch, new);
 			canonical_piece(scratch);
-			if (avl_seen(seen, canonical_v, vecsize))
+			if (avl_seen(seen, canonical_v))
 				continue;
 			if (pieces_used >= pieces_size) {
 				pieces_size *= 1.5;
@@ -500,7 +500,11 @@ void init_stack(void) {
 	piecestack = (vec*)calloc(nodes, vecsize);
 	filledstack = (vec*)calloc(nodes, vecsize);
 	solution = (vec*)calloc(nodes, vecsize);
-	solutions_seen = avl_new(&set_comparator);
+
+	solutions_seen = (avl_tree**)malloc(nodes * sizeof(avl_tree*));
+	for (i = 0; i < nodes; ++i) {
+		solutions_seen[i] = avl_new(vecsize * (i + 1));
+	}
 
 	fullvec = (vec*)calloc(1, vecsize);
 	memset(fullvec, -1, vecsize);
@@ -511,7 +515,7 @@ void init_stack(void) {
 
 void check_solution(uint pieces) {
 	canonical_set(piecestack, pieces);
-	if (! avl_seen(solutions_seen, solution, pieces * vecsize)) {
+	if (! avl_seen(solutions_seen[pieces - 1], solution)) {
 		dump_solution(stdout, solution, pieces);
 		printf("\n");
 		++sym_result;
@@ -543,7 +547,7 @@ void try_recurse(
 			piece_index = prev_index;
 		} else {
 			prep_pieces(size);
-			seen = avl_new(&vec_comparator);
+			seen = avl_new(vecsize);
 			piece_index = piece_array[size];
 		}
 		end_index = piece_array[size + 1];
@@ -554,7 +558,7 @@ void try_recurse(
 				vec_and3(this_shape, prev_filled, scratch);
 				if (vec_cmp(this_shape, scratch) != 0)
 					continue;
-				if (avl_seen(seen, this_shape, vecsize))
+				if (avl_seen(seen, this_shape))
 					continue;
 				vec_xor3(prev_filled, this_shape, this_filled);
 				try_recurse(level, remain - size, size, piece_index, seen);
@@ -575,12 +579,12 @@ void try_first(uint first) {
 	ps = piecestack_vec(0);
 	fs = filledstack_vec(0);
 
-	seen = avl_new(&vec_comparator);
+	seen = avl_new(vecsize);
 	for ( ; piece_index < end_index; ++piece_index) {
 		this_piece = pieces_vec(piece_index);
 		vec_copy(this_piece, ps);
 		vec_xor3(this_piece, fullvec, fs);
-		avl_seen(seen, this_piece, vecsize);
+		avl_seen(seen, this_piece);
 		try_recurse(
 			0,				/* recursion depth */
 			nodes - first,	/* remaining bits in filledstack */
@@ -593,6 +597,7 @@ void try_first(uint first) {
 }
 
 void teardown(void) {
+	uint i;
 	free(piece_array);
 	free(pieces);
 	free(canonical_v);
@@ -602,7 +607,10 @@ void teardown(void) {
 	free(filledstack);
 	free(solution);
 	free(fullvec);
-	avl_delete(solutions_seen);
+	for (i = 0; i < nodes; ++i) {
+		avl_delete(solutions_seen[i]);
+	}
+	free(solutions_seen);
 }
 
 int main(int argc, char** argv) {

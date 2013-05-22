@@ -4,17 +4,17 @@
 
 typedef unsigned int uint;
 
-avl_tree* avl_new(avl_cmp_t* comparator) {
+avl_tree* avl_new(uint element_size) {
 	avl_tree* t = (avl_tree*)malloc(sizeof(avl_tree));
 
 	t->aa_size = 100;
 	t->aa_used = 0;
 	t->aa_root = 0;
 	t->avlarena = (avl_t*)malloc(t->aa_size * sizeof(avl_t));
-	t->va_size = 1024;
+	t->va_size = 100;
 	t->va_used = 0;
-	t->vecarena = (uchar*)malloc(t->va_size);
-	t->comparator = comparator;
+	t->vecarena = (uchar*)malloc(t->va_size * element_size);
+	t->element_size = element_size;
 	return t;
 }
 
@@ -28,9 +28,9 @@ avl_tree* avl_dup(avl_tree* source) {
 	avl_tree* dest = (avl_tree*)malloc(sizeof(avl_tree));
 	memcpy(dest, source, sizeof(avl_tree));
 	dest->avlarena = (avl_t*)malloc(dest->aa_size * sizeof(avl_t));
-	dest->vecarena = (uchar*)malloc(dest->va_size);
+	dest->vecarena = (uchar*)malloc(dest->va_size * dest->element_size);
 	memcpy(dest->avlarena, source->avlarena, dest->aa_used * sizeof(avl_t));
-	memcpy(dest->vecarena, source->vecarena, dest->va_used);
+	memcpy(dest->vecarena, source->vecarena, dest->va_used * dest->element_size);
 	return dest;
 }
 
@@ -47,34 +47,30 @@ inline avl_t* AVL(avl_tree* t, avl index) {
 	return (avl_t*)(t->avlarena + (index - 1));
 }
 inline uchar* VEC(avl_tree* t, uint index) {
-	return (uchar*)(t->vecarena + index);
+	return (uchar*)(t->vecarena + index * t->element_size);
 }
 inline uchar* AVEC(avl_tree* t, avl index) {
 	return VEC(t, AVL(t, index)->ref);
 }
 
-int avl_cmp(avl_tree* t, uchar* v1, uint size1, uchar* v2, uint size2) {
-	if (size1 < size2)
-		return -1;
-	if (size1 > size2)
-		return 1;
-	return (*(t->comparator))(v1, v2, size1);
+int avl_cmp(avl_tree* t, uchar* v1, uchar* v2) {
+	return set_comparator(v1, v2, t->element_size);
 }
 
-uint vec_alloc(avl_tree* t, uchar* v, uint size) {
+uint vec_alloc(avl_tree* t, uchar* v) {
 	uint vi = t->va_used;
-	t->va_used += size;
+	++t->va_used;
 	if (t->va_used > t->va_size) {
 		t->va_size = t->va_size * 3 / 2;
 		if (t->va_used > t->va_size)
 			t->va_size = t->va_used;
-		t->vecarena = (uchar*)realloc(t->vecarena, t->va_size);
+		t->vecarena = (uchar*)realloc(t->vecarena, t->va_size * t->element_size);
 	}
-	memcpy(VEC(t, vi), v, size);
+	memcpy(VEC(t, vi), v, t->element_size);
 	return vi;
 }
 
-avl avl_alloc(avl_tree* t, uint ref, uint size) {
+avl avl_alloc(avl_tree* t, uint ref) {
 	avl ai = ++t->aa_used;	/* 1-based; 0 means not present */
 	avl_t* ap;
 	resize_avl(t, t->aa_used);
@@ -83,7 +79,6 @@ avl avl_alloc(avl_tree* t, uint ref, uint size) {
 	ap->right = 0;
 	ap->balance = 0;
 	ap->ref = ref;
-	ap->size = size;
 	return ai;
 }
 
@@ -136,9 +131,7 @@ int avlx_insert(avl_tree* t, avl* rootp, avl element) {
 	}
 	rnp = AVL(t, root);
 
-	if (avl_cmp(
-		t, VEC(t, rnp->ref), rnp->size, VEC(t, elp->ref), elp->size
-	) > 0) {
+	if (avl_cmp(t, VEC(t, rnp->ref), VEC(t, elp->ref)) > 0) {
 		/* insert into the left subtree */
 		if (!rnp->left) {
 			rnp->left = element;
@@ -195,18 +188,18 @@ int avlx_insert(avl_tree* t, avl* rootp, avl element) {
 	}
 }
 
-int avlx_exists(avl_tree* t, avl node, uchar* v, uint size) {
+int avlx_exists(avl_tree* t, avl node, uchar* v) {
 	avl_t* np;
 	if (!node)
 		return 0;
 	np = AVL(t, node);
-	switch (avl_cmp(t, VEC(t, np->ref), np->size, v, size)) {
+	switch (avl_cmp(t, VEC(t, np->ref), v)) {
 	  case 0:
 		return 1;
 	  case 1:
-		return avlx_exists(t, np->left, v, size);
+		return avlx_exists(t, np->left, v);
 	  case -1:
-		return avlx_exists(t, np->right, v, size);
+		return avlx_exists(t, np->right, v);
 	}
 }
 
@@ -214,21 +207,21 @@ void avl_insert(avl_tree* tree, avl element) {
 	avlx_insert(tree, &(tree->aa_root), element);
 }
 
-int avl_exists(avl_tree* tree, uchar* v, uint size) {
+int avl_exists(avl_tree* tree, uchar* v) {
 	avl root = tree->aa_root;
 	if (!root)
 		return 0;
-	return avlx_exists(tree, root, v, size);
+	return avlx_exists(tree, root, v);
 }
 
-int avl_seen(avl_tree* tree, uchar* v, uint size) {
+int avl_seen(avl_tree* tree, uchar* v) {
 	avl element;
 	uint vi;
 
-	if (avl_exists(tree, v, size))
+	if (avl_exists(tree, v))
 		return 1;
-	vi = vec_alloc(tree, v, size);
-	element = avl_alloc(tree, vi, size);
+	vi = vec_alloc(tree, v);
+	element = avl_alloc(tree, vi);
 	avl_insert(tree, element);
 	return 0;
 }
