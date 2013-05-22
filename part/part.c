@@ -311,6 +311,8 @@ uint canonical_set(vec* v, uint pieces) {
 }
 
 void init_pieces(void) {
+	canonical_v = (vec*)malloc(vecsize);
+
 	piece_array_size = nodes + 2;
 	piece_array_used = 1;
 	piece_array = (uint*)malloc(sizeof(uint) * piece_array_size);
@@ -322,7 +324,8 @@ void init_pieces(void) {
 	pieces = (vec*)calloc(pieces_size, vecsize);
 
 	vec_setbit(pieces_vec(0), 0);
-	canonical_v = (vec*)malloc(vecsize);
+	canonical_piece(pieces_vec(0));
+	vec_copy(canonical_v, pieces_vec(0));
 }
 
 void prep_pieces(uint size) {
