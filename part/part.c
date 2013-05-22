@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -36,9 +37,13 @@ vec* filledstack;
 vec* solution;
 avl_tree* solutions_seen;
 
-#define TICKSPERSECOND 300
+int clk_tck;
+void init_clk(void) {
+	clk_tck = sysconf(_SC_CLK_TCK);
+}
+
 double difftime(clock_t t0, clock_t t1) {
-	return ((double)t1 - t0) / TICKSPERSECOND;
+	return ((double)t1 - t0) / clk_tck;
 }
 int curtime(void) {
 	struct tms t;
@@ -611,6 +616,7 @@ int main(int argc, char** argv) {
 	vecsize = nodes >> 3;
 	if (vecsize < 1) vecsize = 1;
 
+	init_clk();
 	init_connections();
 	init_bit_lookup();
 	init_transform();
