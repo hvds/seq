@@ -627,9 +627,13 @@ int main(int argc, char** argv) {
 	init_pieces();
 	init_stack();
 
+#if 1
 	for (first = nodes; first > 0; --first) {
 		try_first(first);
 	}
+#else
+	prep_pieces(nodes);
+#endif
 	t1 = curtime();
 	printf("%u: %llu, %llu (%.2f)\n", n, sym_result, all_result, difftime(t0, t1));
 	teardown();
