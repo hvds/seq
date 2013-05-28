@@ -353,7 +353,7 @@ t0 = curtime();
 			vec_copy(smallv, scratch);
 			vec_setbit(scratch, new);
 			canonical_piece(scratch);
-			if (avl_seen(seen, canonical_v))
+			if (avl_seen(seen, canonical_v) == AVL_EXISTS)
 				continue;
 			if (pieces_used >= pieces_size) {
 				pieces_size *= 1.5;
@@ -515,12 +515,13 @@ void init_stack(void) {
 
 void check_solution(uint pieces) {
 	canonical_set(piecestack, pieces);
-	if (! avl_seen(solutions_seen[pieces - 1], solution)) {
-		dump_solution(stdout, solution, pieces);
-		printf("\n");
-		++sym_result;
-		++all_result;
-	}
+	if (avl_seen(solutions_seen[pieces - 1], solution) == AVL_EXISTS)
+		return;
+
+	dump_solution(stdout, solution, pieces);
+	printf("\n");
+	++sym_result;
+	++all_result;
 }
 
 void try_recurse(
@@ -558,7 +559,7 @@ void try_recurse(
 				vec_and3(this_shape, prev_filled, scratch);
 				if (vec_cmp(this_shape, scratch) != 0)
 					continue;
-				if (avl_seen(seen, this_shape))
+				if (avl_seen(seen, this_shape) == AVL_EXISTS)
 					continue;
 				vec_xor3(prev_filled, this_shape, this_filled);
 				try_recurse(level, remain - size, size, piece_index, seen);
@@ -584,7 +585,7 @@ void try_first(uint first) {
 		this_piece = pieces_vec(piece_index);
 		vec_copy(this_piece, ps);
 		vec_xor3(this_piece, fullvec, fs);
-		avl_seen(seen, this_piece);
+		avl_seen(seen, this_piece); /* cannot exist */
 		try_recurse(
 			0,				/* recursion depth */
 			nodes - first,	/* remaining bits in filledstack */

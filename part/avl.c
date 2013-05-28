@@ -70,15 +70,14 @@ uint vec_alloc(avl_tree* t, uchar* v) {
 	return vi;
 }
 
-avl avl_alloc(avl_tree* t, uint ref) {
+avl avl_alloc(avl_tree* t, uchar* v) {
 	avl ai = ++t->aa_used;	/* 1-based; 0 means not present */
 	avl_t* ap;
-	resize_avl(t, t->aa_used);
 	ap = AVL(t, ai);
 	ap->left = 0;
 	ap->right = 0;
 	ap->balance = 0;
-	ap->ref = ref;
+	ap->ref = vec_alloc(t, v);
 	return ai;
 }
 
@@ -120,31 +119,32 @@ void avl_rebalance(avl_tree* t, avl base) {
 /* Insert an element into an AVL tree.
  * Returns 1 if the depth of the tree has grown.
  */
-int avlx_insert(avl_tree* t, avl* rootp, avl element) {
+avl_insert_t avlx_seen(avl_tree* t, avl* rootp, uchar* v) {
 	avl root = *rootp;	/* note: invalidated by any rotate */
-	avl_t* elp = AVL(t, element);
 	avl_t* rnp;
 
 	if (!root) {
-		*rootp = element;
-		return 1;
+		*rootp = avl_alloc(t, v);
+		return AVL_GROW;
 	}
 	rnp = AVL(t, root);
 
-	if (avl_cmp(t, VEC(t, rnp->ref), VEC(t, elp->ref)) > 0) {
+	switch (avl_cmp(t, VEC(t, rnp->ref), v)) {
+	  case 1:
 		/* insert into the left subtree */
 		if (!rnp->left) {
-			rnp->left = element;
+			rnp->left = avl_alloc(t, v);
 			if (rnp->balance--)
-				return 0;
-			return 1;
+				return AVL_OK;
+			return AVL_GROW;
 		}
-		if (avlx_insert(t, &(rnp->left), element)) {
+		switch (avlx_seen(t, &(rnp->left), v)) {
+		  case AVL_GROW:
 			switch (rnp->balance--) {
 			  case 1:
-				return 0;
+				return AVL_OK;
 			  case 0:
-				return 1;
+				return AVL_GROW;
 			}
 			if (AVL(t, rnp->left)->balance < 0) {
 				avl_rotateright(t, rootp);
@@ -156,22 +156,26 @@ int avlx_insert(avl_tree* t, avl* rootp, avl element) {
 				avl_rotateright(t, rootp);
 				avl_rebalance(t, *rootp);
 			}
+		  case AVL_OK:
+			return AVL_OK;
+		  case AVL_EXISTS:
+			return AVL_EXISTS;
 		}
-		return 0;
-	} else {
+	  case -1:
 		/* insert into the right subtree */
 		if (!rnp->right) {
-			rnp->right = element;
+			rnp->right = avl_alloc(t, v);
 			if (rnp->balance++)
-				return 0;
-			return 1;
+				return AVL_OK;
+			return AVL_GROW;
 		}
-		if (avlx_insert(t, &(rnp->right), element)) {
+		switch (avlx_seen(t, &(rnp->right), v)) {
+		  case AVL_GROW:
 			switch (rnp->balance++) {
 			  case -1:
-				return 0;
+				return AVL_OK;
 			  case 0:
-				return 1;
+				return AVL_GROW;
 			}
 			if (AVL(t, rnp->right)->balance > 0) {
 				avl_rotateleft(t, rootp);
@@ -183,46 +187,25 @@ int avlx_insert(avl_tree* t, avl* rootp, avl element) {
 				avl_rotateleft(t, rootp);
 				avl_rebalance(t, *rootp);
 			}
+		  case AVL_OK:
+			return AVL_OK;
+		  case AVL_EXISTS:
+			return AVL_EXISTS;
 		}
-		return 0;
-	}
-}
-
-int avlx_exists(avl_tree* t, avl node, uchar* v) {
-	avl_t* np;
-	if (!node)
-		return 0;
-	np = AVL(t, node);
-	switch (avl_cmp(t, VEC(t, np->ref), v)) {
 	  case 0:
-		return 1;
-	  case 1:
-		return avlx_exists(t, np->left, v);
-	  case -1:
-		return avlx_exists(t, np->right, v);
+		return AVL_EXISTS;
 	}
 }
 
-void avl_insert(avl_tree* tree, avl element) {
-	avlx_insert(tree, &(tree->aa_root), element);
-}
-
-int avl_exists(avl_tree* tree, uchar* v) {
-	avl root = tree->aa_root;
-	if (!root)
-		return 0;
-	return avlx_exists(tree, root, v);
-}
-
-int avl_seen(avl_tree* tree, uchar* v) {
-	avl element;
-	uint vi;
-
-	if (avl_exists(tree, v))
-		return 1;
-	vi = vec_alloc(tree, v);
-	element = avl_alloc(tree, vi);
-	avl_insert(tree, element);
-	return 0;
+avl_insert_t avl_seen(avl_tree* tree, uchar* v) {
+	/* do any realloc now, so the tree won't move under our feet */
+	resize_avl(tree, tree->aa_used + 1);
+	switch (avlx_seen(tree, &(tree->aa_root), v)) {
+	  case AVL_OK:
+	  case AVL_GROW:
+		return AVL_OK;
+	  case AVL_EXISTS:
+		return AVL_EXISTS;
+	}
 }
 
