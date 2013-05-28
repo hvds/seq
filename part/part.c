@@ -10,9 +10,13 @@ typedef unsigned long long counter;
 typedef unsigned char vec;
 typedef unsigned char mapping;
 
-uint n = 0;
-uint nodes;
-uint vecsize;
+#ifndef NBASE
+#define NBASE 4
+#endif
+
+#define NODES (1 << NBASE)
+#define VECSIZE ((NODES + 7) >> 3)
+
 counter sym_result;
 counter all_result;
 int bit_lookup[256];
@@ -52,15 +56,15 @@ int curtime(void) {
 }
 
 inline vec* connect_vec(uint i) {
-	return connections + i * vecsize;
+	return connections + i * VECSIZE;
 }
 
 inline void vec_zero(vec* v) {
-	memset(v, 0, vecsize);
+	memset(v, 0, VECSIZE);
 }
 
 inline void vec_copy(vec* src, vec* dest) {
-	memcpy(dest, src, vecsize);
+	memcpy(dest, src, VECSIZE);
 }
 
 inline void vec_setbit(vec* v, uint i) {
@@ -77,14 +81,14 @@ inline uint vec_testbit(vec* v, uint i) {
 
 inline uint vec_bitcount(vec* v) {
 	uint c = 0, i;
-	for (i = 0; i < vecsize; ++i)
+	for (i = 0; i < VECSIZE; ++i)
 		c += bit_count[v[i]];
 	return c;
 }
 
 #define DO_VEC(state) { \
 	uint i; \
-	for (i = 0; i < vecsize; ++i) { \
+	for (i = 0; i < VECSIZE; ++i) { \
 		state; \
 	} \
 }
@@ -104,7 +108,7 @@ inline void vec_xor3(vec* s1, vec* s2, vec* dest)
 
 inline int vec_empty(vec* v) {
 	uint i;
-	for (i = 0; i < vecsize; ++i) {
+	for (i = 0; i < VECSIZE; ++i) {
 		if (v[i])
 			return 0;
 	}
@@ -114,7 +118,7 @@ inline int vec_empty(vec* v) {
 inline int vec_cmp(vec* s1, vec* s2) {
 	uint i;
 	signed int c;
-	for (i = 0; i < vecsize; ++i) {
+	for (i = 0; i < VECSIZE; ++i) {
 		c = transform[s1[i]] - transform[s2[i]];
 		if (c > 0)
 			return 1;
@@ -142,12 +146,12 @@ int set_comparator(vec* s1, vec* s2, uint size) {
 }
 
 inline mapping* sym_map(uint i) {
-	return symmetries + i * nodes;
+	return symmetries + i * NODES;
 }
 
 inline void apply_map2(mapping* m, vec* src, vec* dest) {
 	uint i, map;
-	for (i = 0; i < nodes; ++i) {
+	for (i = 0; i < NODES; ++i) {
 		if (vec_testbit(src, m[i]))
 			vec_setbit(dest, i);
 		else
@@ -157,7 +161,7 @@ inline void apply_map2(mapping* m, vec* src, vec* dest) {
 
 int first_bit(vec* v) {
 	uint i;
-	for (i = 0; i < vecsize; ++i) {
+	for (i = 0; i < VECSIZE; ++i) {
 		if (v[i])
 			return bit_lookup[v[i]] + (i << 3);
 	}
@@ -167,12 +171,12 @@ int first_bit(vec* v) {
 int next_bit(vec* v, int first) {
 	uint i = (first + 1) >> 3;
 	vec c;
-	if (i > vecsize)
+	if (i > VECSIZE)
 		return -1;
 	c = v[i] & ~((1 << ((first + 1) & 7)) - 1);
 	if (c)
 		return bit_lookup[c] + (i << 3);
-	for (++i; i < vecsize; ++i) {
+	for (++i; i < VECSIZE; ++i) {
 		if (v[i])
 			return bit_lookup[v[i]] + (i << 3);
 	}
@@ -180,16 +184,16 @@ int next_bit(vec* v, int first) {
 }
 
 inline vec* piecestack_vec(uint index) {
-	return piecestack + index * vecsize;
+	return piecestack + index * VECSIZE;
 }
 inline vec* filledstack_vec(uint index) {
-	return filledstack + index * vecsize;
+	return filledstack + index * VECSIZE;
 }
 inline vec* solution_vec(uint index) {
-	return solution + index * vecsize;
+	return solution + index * VECSIZE;
 }
 inline vec* pieces_vec(uint index) {
-	return pieces + index * vecsize;
+	return pieces + index * VECSIZE;
 }
 inline vec* pieces_for(uint size) {
 	return pieces_vec(piece_array[size]);
@@ -204,20 +208,20 @@ void dump_solution(FILE* stream, vec* v, uint size) {
 	for (i = 0; i < size; ++i) {
 		if (i > 0)
 			fprintf(stream, " ");
-		for (j = 0; j < nodes; ++j)
+		for (j = 0; j < NODES; ++j)
 			fprintf(stream, vec_testbit(v, j) ? "1" : "0");
-		v += vecsize;
+		v += VECSIZE;
 	}
 }
 
 /*
-  Given a vector I<v> of I<nodes> bits, returns the index of the symmetry
+  Given a vector I<v> of I<NODES> bits, returns the index of the symmetry
   that transforms it to canonical form. The canonicalized vector will be
   in canonical_v immediately after the call.
 */
 uint canonical_piece(vec* v) {
 	uint i, best_i;
-	vec w[vecsize];
+	vec w[VECSIZE];
 	mapping* m;
 
 	w[0] = 0;
@@ -246,7 +250,7 @@ uint canonical_set(vec* v, uint pieces) {
 	uint i, this_size, cur_size, sym_i, best_sym;
 	uint group_start[pieces], group_size[pieces], groups;
 	int cmp;
-	vec *source, *dest, tmpstack[pieces * vecsize];
+	vec *source, *dest, tmpstack[pieces * VECSIZE];
 	mapping* map;
 
 	/* find the size of each piece, to group them by size */
@@ -265,13 +269,13 @@ uint canonical_set(vec* v, uint pieces) {
 	}
 	++groups;
 
-	memcpy(solution, v, pieces * vecsize);
+	memcpy(solution, v, pieces * VECSIZE);
 	/* and make sure it's sorted canonically */
 	for (i = 0; i < groups; ++i) {
 		if (group_size[i] > 1)
 			qsort(
-				(void*)(solution + group_start[i] * vecsize),
-				group_size[i], vecsize, (__compar_fn_t)vec_cmp
+				(void*)(solution + group_start[i] * VECSIZE),
+				group_size[i], VECSIZE, (__compar_fn_t)vec_cmp
 			);
 	}
 
@@ -281,7 +285,7 @@ uint canonical_set(vec* v, uint pieces) {
 		map = sym_map(sym_i);
 		for (i = 0; i < pieces; ++i) {
 			source = piecestack_vec(i);
-			dest = tmpstack + i * vecsize;
+			dest = tmpstack + i * VECSIZE;
 			apply_map2(map, source, dest);
 		}
 
@@ -289,21 +293,21 @@ uint canonical_set(vec* v, uint pieces) {
 		for (i = 0; i < groups; ++i) {
 			if (group_size[i] > 1)
 				qsort(
-					(void*)(tmpstack + group_start[i] * vecsize),
-					group_size[i], vecsize, (__compar_fn_t)vec_cmp
+					(void*)(tmpstack + group_start[i] * VECSIZE),
+					group_size[i], VECSIZE, (__compar_fn_t)vec_cmp
 				);
 		}
 
 		/* compare against best so far */
 		for (i = 0; i < pieces; ++i) {
-			cmp = vec_cmp(tmpstack + i * vecsize, solution + i * vecsize);
+			cmp = vec_cmp(tmpstack + i * VECSIZE, solution + i * VECSIZE);
 			if (cmp < 0)
 				break;
 			else if (cmp > 0)
 				break;
 		}
 		if (cmp < 0) {
-			memcpy(solution, tmpstack, pieces * vecsize);
+			memcpy(solution, tmpstack, pieces * VECSIZE);
 			best_sym = sym_i;
 		}
 	}
@@ -311,9 +315,9 @@ uint canonical_set(vec* v, uint pieces) {
 }
 
 void init_pieces(void) {
-	canonical_v = (vec*)malloc(vecsize);
+	canonical_v = (vec*)malloc(VECSIZE);
 
-	piece_array_size = nodes + 2;
+	piece_array_size = NODES + 2;
 	piece_array_used = 1;
 	piece_array = (uint*)malloc(sizeof(uint) * piece_array_size);
 	piece_array[1] = 0;
@@ -321,7 +325,7 @@ void init_pieces(void) {
 
 	pieces_size = 100;
 	pieces_used = 1;
-	pieces = (vec*)calloc(pieces_size, vecsize);
+	pieces = (vec*)calloc(pieces_size, VECSIZE);
 
 	vec_setbit(pieces_vec(0), 0);
 	canonical_piece(pieces_vec(0));
@@ -330,7 +334,7 @@ void init_pieces(void) {
 
 void prep_pieces(uint size) {
 	uint smalli, small_lim;
-	vec scratch[vecsize], *smallv;
+	vec scratch[VECSIZE], *smallv;
 	uint new;
 	avl_tree* seen;
 clock_t t0, t1;
@@ -341,10 +345,10 @@ clock_t t0, t1;
 		prep_pieces(size - 1);
 t0 = curtime();
 	small_lim = piece_array[size];
-	seen = avl_new(vecsize);
+	seen = avl_new(VECSIZE);
 	for (smalli = piece_array[size - 1]; smalli < small_lim; ++smalli) {
 		smallv = pieces_vec(smalli);
-		for (new = 0; new < nodes; ++new) {
+		for (new = 0; new < NODES; ++new) {
 			if (vec_testbit(smallv, new))
 				continue;
 			vec_and3(smallv, connect_vec(new), scratch);
@@ -357,7 +361,7 @@ t0 = curtime();
 				continue;
 			if (pieces_used >= pieces_size) {
 				pieces_size *= 1.5;
-				pieces = (vec*)realloc(pieces, pieces_size * vecsize);
+				pieces = (vec*)realloc(pieces, pieces_size * VECSIZE);
 				smallv = pieces_vec(smalli);
 			}
 			vec_copy(canonical_v, pieces_vec(pieces_used));
@@ -372,15 +376,15 @@ t1 = curtime();
 }
 
 /*
-  Given a vector I<v> of I<nodes> bits, returns C<TRUE> if it represents
+  Given a vector I<v> of I<NODES> bits, returns C<TRUE> if it represents
   a single connected piece, else C<FALSE>.
   If no bits in the vector are set, behaviour is undetermined.
 */
 int connected(vec* v) {
 	int i = first_bit(v);
-	vec unallocated[vecsize];
-	vec current[vecsize];
-	vec next[vecsize];
+	vec unallocated[VECSIZE];
+	vec current[VECSIZE];
+	vec next[VECSIZE];
 
 	vec_copy(v, unallocated);
 	vec_clearbit(unallocated, i);
@@ -401,10 +405,10 @@ int connected(vec* v) {
 
 void init_connections(void) {
 	uint i, j;
-	connections = (vec*)calloc(nodes, vecsize);
-	for (i = 0; i < nodes; ++i) {
+	connections = (vec*)calloc(NODES, VECSIZE);
+	for (i = 0; i < NODES; ++i) {
 		vec* v = connect_vec(i);
-		for (j = 0; j < n; ++j) {
+		for (j = 0; j < NBASE; ++j) {
 			uint k = i ^ (1 << j);
 			vec_setbit(v, k);
 		}
@@ -465,21 +469,21 @@ void init_symmetries(void) {
 	uint fac = 1;
 	uint i, j, k;
 	mapping *m, *m2, value;
-	mapping perm[n];
+	mapping perm[NBASE];
 
-	for (i = 2; i <= n; ++i)
+	for (i = 2; i <= NBASE; ++i)
 		fac *= i;
-	sym_count = nodes * fac;
-	symmetries = (mapping*)calloc(sym_count, nodes * sizeof(mapping));
+	sym_count = NODES * fac;
+	symmetries = (mapping*)calloc(sym_count, NODES * sizeof(mapping));
 
-	for (i = 0; i < n; ++i) {
+	for (i = 0; i < NBASE; ++i) {
 		perm[i] = (mapping)i;
 	}
-	for (i = 0; i < fac; ++i, next_perm(perm, n)) {
+	for (i = 0; i < fac; ++i, next_perm(perm, NBASE)) {
 		m = sym_map(i);
-		for (j = 0; j < nodes; ++j) {
+		for (j = 0; j < NODES; ++j) {
 			value = 0;
-			for (k = 0; k < n; ++k) {
+			for (k = 0; k < NBASE; ++k) {
 				if (j & (1 << perm[k]))
 					value |= 1 << k;
 			}
@@ -488,29 +492,30 @@ void init_symmetries(void) {
 	}
 
 	m = sym_map(0);
-	for (i = 1; i < nodes; ++i) {
+	for (i = 1; i < NODES; ++i) {
 		m2 = sym_map(i * fac);
-		for (j = 0; j < nodes * fac; ++j)
+		for (j = 0; j < NODES * fac; ++j)
 			m2[j] = m[j] ^ i;
 	}
 }
 
 void init_stack(void) {
 	uint i;
-	piecestack = (vec*)calloc(nodes, vecsize);
-	filledstack = (vec*)calloc(nodes, vecsize);
-	solution = (vec*)calloc(nodes, vecsize);
+	piecestack = (vec*)calloc(NODES, VECSIZE);
+	filledstack = (vec*)calloc(NODES, VECSIZE);
+	solution = (vec*)calloc(NODES, VECSIZE);
 
-	solutions_seen = (avl_tree**)malloc(nodes * sizeof(avl_tree*));
-	for (i = 0; i < nodes; ++i) {
-		solutions_seen[i] = avl_new(vecsize * (i + 1));
+	solutions_seen = (avl_tree**)malloc(NODES * sizeof(avl_tree*));
+	for (i = 0; i < NODES; ++i) {
+		solutions_seen[i] = avl_new(VECSIZE * (i + 1));
 	}
 
-	fullvec = (vec*)calloc(1, vecsize);
-	memset(fullvec, -1, vecsize);
-	if (nodes < 8) {
-		fullvec[0] = (1 << nodes) - 1;
-	}
+	fullvec = (vec*)calloc(1, VECSIZE);
+#if NODES < 8
+	fullvec[0] = (1 << NODES) - 1;
+#else
+	memset(fullvec, -1, VECSIZE);
+#endif
 }
 
 void check_solution(uint pieces) {
@@ -530,7 +535,7 @@ void try_recurse(
 	uint level = prev_level + 1;
 	uint size, piece_index, end_index, sym_index;
 	vec *prev_filled, *this_filled, *this_piece, *this_shape;
-	vec scratch[vecsize];
+	vec scratch[VECSIZE];
 	avl_tree* seen;
 
 	if (remain == 0) {
@@ -548,7 +553,7 @@ void try_recurse(
 			piece_index = prev_index;
 		} else {
 			prep_pieces(size);
-			seen = avl_new(vecsize);
+			seen = avl_new(VECSIZE);
 			piece_index = piece_array[size];
 		}
 		end_index = piece_array[size + 1];
@@ -580,7 +585,7 @@ void try_first(uint first) {
 	ps = piecestack_vec(0);
 	fs = filledstack_vec(0);
 
-	seen = avl_new(vecsize);
+	seen = avl_new(VECSIZE);
 	for ( ; piece_index < end_index; ++piece_index) {
 		this_piece = pieces_vec(piece_index);
 		vec_copy(this_piece, ps);
@@ -588,7 +593,7 @@ void try_first(uint first) {
 		avl_seen(seen, this_piece); /* cannot exist */
 		try_recurse(
 			0,				/* recursion depth */
-			nodes - first,	/* remaining bits in filledstack */
+			NODES - first,	/* remaining bits in filledstack */
 			first,			/* max size for pieces */
 			piece_index,	/* min index for pieces (if same size) */
 			seen			/* heap of seen shapes */
@@ -608,7 +613,7 @@ void teardown(void) {
 	free(filledstack);
 	free(solution);
 	free(fullvec);
-	for (i = 0; i < nodes; ++i) {
+	for (i = 0; i < NODES; ++i) {
 		avl_delete(solutions_seen[i]);
 	}
 	free(solutions_seen);
@@ -618,16 +623,6 @@ int main(int argc, char** argv) {
 	uint first;
 	clock_t t0 = curtime(), t1;
 
-	if (argc > 1)
-		n = atoi(argv[1]);
-	if (argc != 2 || n < 1 || n > 31) {
-		fprintf(stderr, "Usage: %s <dimension>\n", argv[0]);
-		return -1;
-	}
-	nodes = 1 << n;
-	vecsize = nodes >> 3;
-	if (vecsize < 1) vecsize = 1;
-
 	init_clk();
 	init_connections();
 	init_bit_lookup();
@@ -636,15 +631,16 @@ int main(int argc, char** argv) {
 	init_pieces();
 	init_stack();
 
-#if 1
-	for (first = nodes; first > 0; --first) {
+#ifdef PIECE_ONLY
+	prep_pieces(NODES);
+#else
+	for (first = NODES; first > 0; --first) {
 		try_first(first);
 	}
-#else
-	prep_pieces(nodes);
 #endif
 	t1 = curtime();
-	printf("%u: %llu, %llu (%.2f)\n", n, sym_result, all_result, difftime(t0, t1));
+	printf("%u: %llu, %llu (%.2f)\n",
+			NBASE, sym_result, all_result, difftime(t0, t1));
 	teardown();
 	return 0;
 }
