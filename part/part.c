@@ -221,10 +221,13 @@ void dump_solution(FILE* stream, vec* v, uint size) {
 */
 uint canonical_piece(vec* v) {
 	uint i, j, best_i;
+	uint first, sc_start, sc_end;
 	uint bits = 0;
 	uint contiguous = 0;
 	vec w[VECSIZE];
 	mapping* m;
+	/* The (sorted) symmetries evenly map each bit to the zero bit */
+	uint sym_block = sym_count >> NBASE;
 
 	/* count the bits, and the number contiguous at start */
 	for (i = 0; i < NODES; ++i) {
@@ -238,26 +241,36 @@ uint canonical_piece(vec* v) {
 	w[0] = 0;
 	best_i = 0;
 	vec_copy(v, canonical_v);
-	for (i = 1; i < sym_count; ++i) {
-		m = sym_map(i);
-		for (j = 0; j < contiguous; ++j)
-			if (!vec_testbit(v, m[j]))
-				goto SYM_FAIL;
 
-		apply_map2(m, v, w);
-		if (vec_cmp(w, canonical_v) > 0) {
-			best_i = i;
-			vec_copy(w, canonical_v);
-			for (j = contiguous; j < bits; ++j) {
-				if (vec_testbit(w, j)) {
-					++contiguous;
-				} else {
-					break;
+	if (bits == 0)
+		return 0;
+
+	for (first = 0; first < NODES; ++first) {
+		/* if this bit is not set, we can skip the whole block */
+		if (!vec_testbit(v, first))
+			continue;
+		sc_start = sym_block * first;
+		sc_end = sc_start + sym_block;
+		for (i = sc_start; i < sc_end; ++i) {
+			m = sym_map(i);
+			for (j = 1; j < contiguous; ++j)
+				if (!vec_testbit(v, m[j]))
+					goto SYM_FAIL;
+			apply_map2(m, v, w);
+			if (vec_cmp(w, canonical_v) > 0) {
+				best_i = i;
+				vec_copy(w, canonical_v);
+				for (j = contiguous; j < bits; ++j) {
+					if (vec_testbit(w, j)) {
+						++contiguous;
+					} else {
+						break;
+					}
 				}
 			}
+		  SYM_FAIL:
+			;
 		}
-	  SYM_FAIL:
-		;
 	}
 	return best_i;
 }
@@ -489,6 +502,19 @@ void init_transform(void) {
 	}
 }
 
+int map_cmp(mapping* ma, mapping* mb) {
+	uint i;
+	int c;
+	for (i = 0; i < NODES; ++i) {
+		c = ma[i] - mb[i];
+		if (c > 0)
+			return 1;
+		if (c < 0)
+			return -1;
+	}
+	return 0;
+}
+
 void init_symmetries(void) {
 	uint fac = 1;
 	uint i, j, k;
@@ -521,6 +547,9 @@ void init_symmetries(void) {
 		for (j = 0; j < NODES * fac; ++j)
 			m2[j] = m[j] ^ i;
 	}
+
+	qsort(symmetries, sym_count, NODES * sizeof(mapping),
+			(__compar_fn_t)map_cmp);
 }
 
 void init_stack(void) {
