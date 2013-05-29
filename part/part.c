@@ -220,20 +220,44 @@ void dump_solution(FILE* stream, vec* v, uint size) {
   in canonical_v immediately after the call.
 */
 uint canonical_piece(vec* v) {
-	uint i, best_i;
+	uint i, j, best_i;
+	uint bits = 0;
+	uint contiguous = 0;
 	vec w[VECSIZE];
 	mapping* m;
+
+	/* count the bits, and the number contiguous at start */
+	for (i = 0; i < NODES; ++i) {
+		if (vec_testbit(v, i)) {
+			++bits;
+			if (i == contiguous)
+				++contiguous;
+		}
+	}
 
 	w[0] = 0;
 	best_i = 0;
 	vec_copy(v, canonical_v);
 	for (i = 1; i < sym_count; ++i) {
 		m = sym_map(i);
+		for (j = 0; j < contiguous; ++j)
+			if (!vec_testbit(v, m[j]))
+				goto SYM_FAIL;
+
 		apply_map2(m, v, w);
 		if (vec_cmp(w, canonical_v) > 0) {
 			best_i = i;
 			vec_copy(w, canonical_v);
+			for (j = contiguous; j < bits; ++j) {
+				if (vec_testbit(w, j)) {
+					++contiguous;
+				} else {
+					break;
+				}
+			}
 		}
+	  SYM_FAIL:
+		;
 	}
 	return best_i;
 }
