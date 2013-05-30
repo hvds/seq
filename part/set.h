@@ -2,7 +2,6 @@
 #define _SETH_H 1
 
 #include "part.h"
-/* temporary, for transform[] */
 #include "vec.h"
 
 typedef unsigned int seth;

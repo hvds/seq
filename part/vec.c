@@ -219,3 +219,26 @@ vech_insert_t vech_seen(vech_tree* tree, vec_t* v) {
 	}
 }
 
+uint bit_count[256];
+void init_bit_count(void) {
+	uint i;
+	bit_count[0] = 0;
+	for (i = 1; i < 256; ++i)
+		if (i & 1)
+			bit_count[i] = 1 + bit_count[i >> 1];
+		else
+			bit_count[i] = bit_count[i >> 1];
+}
+
+vec_t* connections;
+void init_connections(void) {
+	uint i, j;
+	connections = (vec_t*)calloc(NODES, sizeof(vec_t));
+	for (i = 0; i < NODES; ++i) {
+		vec_t* v = connect_vec(i);
+		for (j = 0; j < NBASE; ++j) {
+			uint k = i ^ (1 << j);
+			vec_setbit(v, k);
+		}
+	}
+}

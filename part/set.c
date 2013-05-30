@@ -4,15 +4,11 @@ typedef unsigned int uint;
 
 int set_comparator(set_t* s1, set_t* s2, uint size) {
 	uint i;
-	signed int c;
-	uchar* str1 = (uchar*)&(s1[0].s[0].v);
-	uchar* str2 = (uchar*)&(s2[0].s[0].v);
+	int c;
 	for (i = 0; i < size; ++i) {
-		c = transform[str1[i]] - transform[str2[i]];
-		if (c > 0)
-			return 1;
-		if (c < 0)
-			return -1;
+		c = vec_cmp(&(s1->s[i]), &(s2->s[i]));
+		if (c)
+			return c;
 	}
 	return 0;
 }
@@ -26,7 +22,7 @@ seth_tree* seth_new(uint element_size) {
 	t->setharena = (seth_t*)malloc(t->sha_size * sizeof(seth_t));
 	t->sa_size = 100;
 	t->sa_used = 0;
-	t->setarena = (uchar*)malloc(t->sa_size * element_size * VECSIZE);
+	t->setarena = (uchar*)malloc(t->sa_size * element_size * sizeof(vec_t));
 	t->element_size = element_size;
 	return t;
 }
@@ -41,9 +37,9 @@ seth_tree* seth_dup(seth_tree* source) {
 	seth_tree* dest = (seth_tree*)malloc(sizeof(seth_tree));
 	memcpy(dest, source, sizeof(seth_tree));
 	dest->setharena = (seth_t*)malloc(dest->sha_size * sizeof(seth_t));
-	dest->setarena = (uchar*)malloc(dest->sa_size * dest->element_size * VECSIZE);
+	dest->setarena = (uchar*)malloc(dest->sa_size * dest->element_size * sizeof(vec_t));
 	memcpy(dest->setharena, source->setharena, dest->sha_used * sizeof(seth_t));
-	memcpy(dest->setarena, source->setarena, dest->sa_used * dest->element_size * VECSIZE);
+	memcpy(dest->setarena, source->setarena, dest->sa_used * dest->element_size * sizeof(vec_t));
 	return dest;
 }
 
@@ -60,7 +56,7 @@ inline seth_t* SETH(seth_tree* t, seth index) {
 	return (seth_t*)(t->setharena + (index - 1));
 }
 inline set_t* SET(seth_tree* t, uint index) {
-	return (set_t*)(t->setarena + index * t->element_size * VECSIZE);
+	return (set_t*)(t->setarena + index * t->element_size * sizeof(vec_t));
 }
 inline set_t* ASET(seth_tree* t, seth index) {
 	return SET(t, SETH(t, index)->ref);
@@ -73,9 +69,9 @@ uint set_alloc(seth_tree* t, set_t* v) {
 		t->sa_size = t->sa_size * 3 / 2;
 		if (t->sa_used > t->sa_size)
 			t->sa_size = t->sa_used;
-		t->setarena = (uchar*)realloc(t->setarena, t->sa_size * t->element_size * VECSIZE);
+		t->setarena = (uchar*)realloc(t->setarena, t->sa_size * t->element_size * sizeof(vec_t));
 	}
-	memcpy(SET(t, vi), v, t->element_size * VECSIZE);
+	memcpy(SET(t, vi), v, t->element_size * sizeof(vec_t));
 	return vi;
 }
 
@@ -138,7 +134,7 @@ seth_insert_t sethx_seen(seth_tree* t, seth* rootp, set_t* v) {
 	}
 	rnp = SETH(t, root);
 
-	switch (set_comparator(SET(t, rnp->ref), v, t->element_size * VECSIZE)) {
+	switch (set_comparator(SET(t, rnp->ref), v, t->element_size)) {
 	  case 1:
 		/* insert into the left subtree */
 		if (!rnp->left) {

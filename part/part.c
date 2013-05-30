@@ -27,105 +27,6 @@ BLOCK_START
 BLOCK_END
 
 BLOCK_START
-	/* bit count and bit lookup functions */
-	int bit_lookup[256];
-	uint bit_count[256];
-
-	void init_bit_lookup(void) {
-		uint i;
-		bit_lookup[0] = -1;
-		bit_count[0] = 0;
-		for (i = 1; i < 256; ++i) {
-			if (i & 1) {
-				bit_lookup[i] = 0;
-				bit_count[i] = 1 + bit_count[i >> 1];
-			} else {
-				bit_lookup[i] = 1 + bit_lookup[i >> 1];
-				bit_count[i] = bit_count[i >> 1];
-			}
-		}
-	}
-
-	inline uint vec_bitcount(vec_t* v) {
-		uint c = 0, i;
-		for (i = 0; i < VECSIZE; ++i)
-			c += bit_count[v->v[i]];
-		return c;
-	}
-
-	int first_bit(vec_t* v) {
-		uint i;
-		for (i = 0; i < VECSIZE; ++i) {
-			if (v->v[i])
-				return bit_lookup[v->v[i]] + (i << 3);
-		}
-		return -1;
-	}
-
-	int next_bit(vec_t* v, int first) {
-		uint i = (first + 1) >> 3;
-		uchar c;
-		if (i > VECSIZE)
-			return -1;
-		c = v->v[i] & ~((1 << ((first + 1) & 7)) - 1);
-		if (c)
-			return bit_lookup[c] + (i << 3);
-		for (++i; i < VECSIZE; ++i) {
-			if (v->v[i])
-				return bit_lookup[v->v[i]] + (i << 3);
-		}
-		return -1;
-	}
-BLOCK_END
-
-BLOCK_START
-	/* connectivity functions */
-	vec_t* connections;
-
-	inline vec_t* connect_vec(uint i) {
-		return connections + i;
-	}
-
-	void init_connections(void) {
-		uint i, j;
-		connections = (vec_t*)calloc(NODES, sizeof(vec_t));
-		for (i = 0; i < NODES; ++i) {
-			vec_t* v = connect_vec(i);
-			for (j = 0; j < NBASE; ++j) {
-				uint k = i ^ (1 << j);
-				vec_setbit(v, k);
-			}
-		}
-	}
-
-	/*
-	  Given a vector I<v> of I<NODES> bits, returns C<TRUE> if it represents
-	  a single connected piece, else C<FALSE>.
-	  If no bits in the vector are set, behaviour is undetermined.
-	*/
-	int connected(vec_t* v) {
-		int i = first_bit(v);
-		vec_t unallocated, current, next;
-
-		vec_copy(v, &unallocated);
-		vec_clearbit(&unallocated, i);
-		vec_zero(&current);
-		vec_setbit(&current, i);
-
-		while (!vec_empty(&current)) {
-			vec_zero(&next);
-			for (i = first_bit(&current); i >= 0; i = next_bit(&current, i)) {
-				vec_t* w = connect_vec(i);
-				vec_or(w, &next);
-			}
-			vec_and3(&unallocated, &next, &current);
-			vec_xor(&current, &unallocated);
-		}
-		return vec_empty(&unallocated) ? 1 : 0;
-	}
-BLOCK_END
-
-BLOCK_START
 	/* symmetries functions */
 	uint sym_count;
 	mapping* symmetries;
@@ -594,7 +495,7 @@ int main(int argc, char** argv) {
 	init_transform();
 	init_clk();
 	init_connections();
-	init_bit_lookup();
+	init_bit_count();
 	init_symmetries();
 	init_pieces();
 	init_stack();
