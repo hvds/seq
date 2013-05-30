@@ -246,7 +246,6 @@ BLOCK_END
 counter sym_result;
 counter all_result;
 
-vec_t* fullvec;
 vec_t* piecestack;
 vec_t* filledstack;
 vec_t* solution;
@@ -360,13 +359,6 @@ void init_stack(void) {
 	for (i = 0; i < NODES; ++i) {
 		solutions_seen[i] = seth_new(i + 1);
 	}
-
-	fullvec = (vec_t*)calloc(1, sizeof(vec_t));
-#if NODES < 8
-	fullvec->v[0] = (1 << NODES) - 1;
-#else
-	memset(fullvec, -1, sizeof(vec_t));
-#endif
 }
 
 void check_solution(uint pieces) {
@@ -440,7 +432,7 @@ void try_first(uint first) {
 	for ( ; piece_index < end_index; ++piece_index) {
 		this_piece = pieces_vec(piece_index);
 		vec_copy(this_piece, ps);
-		vec_xor3(this_piece, fullvec, fs);
+		vec_not2(this_piece, fs);
 		vech_seen(seen, this_piece); /* cannot exist */
 		try_recurse(
 			0,				/* recursion depth */
@@ -462,7 +454,6 @@ void teardown(void) {
 	free(piecestack);
 	free(filledstack);
 	free(solution);
-	free(fullvec);
 	for (i = 0; i < NODES; ++i) {
 		seth_delete(solutions_seen[i]);
 	}

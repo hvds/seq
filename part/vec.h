@@ -85,6 +85,20 @@ INLINE void vec_and3(vec_t* s1, vec_t* s2, vec_t* dest)
 INLINE void vec_xor3(vec_t* s1, vec_t* s2, vec_t* dest)
 	DO_VEC(dest->v[i] = s1->v[i] ^ s2->v[i])
 
+INLINE void vec_not(vec_t* src)
+#if NODES < 8
+	{ src->v[0] ^= (1 << NODES) - 1; }
+#else
+	DO_VEC(src->v[i] ^= 255)
+#endif
+
+INLINE void vec_not2(vec_t* src, vec_t* dest)
+#if NODES < 8
+	{ dest->v[0] = src->v[0] ^ ((1 << NODES) - 1); }
+#else
+	DO_VEC(dest->v[i] = src->v[i] ^ 255)
+#endif
+
 INLINE int vec_empty(vec_t* v) {
 	uint i;
 	for (i = 0; i < VECSIZE; ++i) {
