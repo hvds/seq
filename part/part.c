@@ -1,30 +1,12 @@
 #include "part.h"
 #include "vec.h"
 #include "set.h"
+#include "clock.h"
 
 typedef uint mapping;
 
 #define BLOCK_START
 #define BLOCK_END
-
-BLOCK_START
-	/* clock functions */
-	int clk_tck;
-
-	void init_clk(void) {
-		clk_tck = sysconf(_SC_CLK_TCK);
-	}
-
-	double difftime(clock_t t0, clock_t t1) {
-		return ((double)t1 - t0) / clk_tck;
-	}
-
-	int curtime(void) {
-		struct tms t;
-		times(&t);
-		return (int) t.tms_utime;
-	}
-BLOCK_END
 
 BLOCK_START
 	/* symmetries functions */
@@ -222,42 +204,42 @@ BLOCK_START
 		vec_t scratch, *smallv;
 		uint new;
 		vech_tree* seen;
-		clock_t t0, t1;
+		double t;
 
 		if (size <= piece_array_used)
 			return;
 		if (size > piece_array_used + 1)
 			prep_pieces(size - 1);
-		t0 = curtime();
-		small_lim = piece_array[size];
-		seen = vech_new();
-		for (smalli = piece_array[size - 1]; smalli < small_lim; ++smalli) {
-			smallv = pieces_vec(smalli);
-			for (new = 0; new < NODES; ++new) {
-				if (vec_testbit(smallv, new))
-					continue;
-				vec_and3(smallv, connect_vec(new), &scratch);
-				if (vec_empty(&scratch))
-					continue;
-				vec_copy(smallv, &scratch);
-				vec_setbit(&scratch, new);
-				canonical_piece(&scratch);
-				if (vech_seen(seen, canonical_v) == VECH_EXISTS)
-					continue;
-				if (pieces_used >= pieces_size) {
-					pieces_size *= 1.5;
-					pieces = (vec_t*)realloc(pieces, pieces_size * sizeof(vec_t));
-					smallv = pieces_vec(smalli);
+		t = TIMETHIS({
+			small_lim = piece_array[size];
+			seen = vech_new();
+			for (smalli = piece_array[size - 1]; smalli < small_lim; ++smalli) {
+				smallv = pieces_vec(smalli);
+				for (new = 0; new < NODES; ++new) {
+					if (vec_testbit(smallv, new))
+						continue;
+					vec_and3(smallv, connect_vec(new), &scratch);
+					if (vec_empty(&scratch))
+						continue;
+					vec_copy(smallv, &scratch);
+					vec_setbit(&scratch, new);
+					canonical_piece(&scratch);
+					if (vech_seen(seen, canonical_v) == VECH_EXISTS)
+						continue;
+					if (pieces_used >= pieces_size) {
+						pieces_size *= 1.5;
+						pieces = (vec_t*)realloc(pieces, pieces_size * sizeof(vec_t));
+						smallv = pieces_vec(smalli);
+					}
+					vec_copy(canonical_v, pieces_vec(pieces_used));
+					++pieces_used;
 				}
-				vec_copy(canonical_v, pieces_vec(pieces_used));
-				++pieces_used;
 			}
-		}
-		vech_delete(seen);
-		piece_array[size + 1] = pieces_used;
-		piece_array_used = size + 1;
-		t1 = curtime();
-		fprintf(stderr, "P%u: %u (%.2f)\n", size, pieces_used - small_lim, difftime(t0, t1));
+			vech_delete(seen);
+			piece_array[size + 1] = pieces_used;
+			piece_array_used = size + 1;
+		});
+		fprintf(stderr, "P%u: %u (%.2f)\n", size, pieces_used - small_lim, t);
 	}
 BLOCK_END
 
@@ -476,7 +458,6 @@ void teardown(void) {
 	free(piece_array);
 	free(pieces);
 	free(canonical_v);
-	free(connections);
 	free(symmetries);
 	free(piecestack);
 	free(filledstack);
@@ -486,30 +467,34 @@ void teardown(void) {
 		seth_delete(solutions_seen[i]);
 	}
 	free(solutions_seen);
+	teardown_vec();
+	teardown_clock();
+}
+
+void setup(void) {
+	setup_clock();
+	setup_vec();
+	init_symmetries();
+	init_pieces();
+	init_stack();
 }
 
 int main(int argc, char** argv) {
 	uint first;
-	clock_t t0 = curtime(), t1;
+	double t;
 
-	init_transform();
-	init_clk();
-	init_connections();
-	init_bit_count();
-	init_symmetries();
-	init_pieces();
-	init_stack();
+	setup();
 
+	t = TIMETHIS({
 #ifdef PIECE_ONLY
-	prep_pieces(NODES);
+		prep_pieces(NODES);
 #else
-	for (first = NODES; first > 0; --first) {
-		try_first(first);
-	}
+		for (first = NODES; first > 0; --first) {
+			try_first(first);
+		}
 #endif
-	t1 = curtime();
-	printf("%u: %llu, %llu (%.2f)\n",
-			NBASE, sym_result, all_result, difftime(t0, t1));
+	});
+	printf("%u: %llu, %llu (%.2f)\n", NBASE, sym_result, all_result, t);
 	teardown();
 	return 0;
 }

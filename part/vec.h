@@ -117,10 +117,9 @@ INLINE uint vec_bitcount(vec_t* v) {
 	return c;
 }
 
-extern vec_t* connections;
+extern vec_t connections[];
 INLINE vec_t* connect_vec(uint i) {
-	return connections + i;
+	return &connections[i];
 }
-void init_connections(void);
 
 #endif

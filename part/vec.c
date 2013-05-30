@@ -2,20 +2,6 @@
 #include "vec.h"
 
 typedef unsigned int uint;
-uchar transform[256];
-
-void init_transform(void) {
-	uint i, j;
-	uchar value;
-	for (i = 0; i < 256; ++i) {
-		value = 0;
-		for (j = 0; j < 8; ++j) {
-			if (i & (1 << j))
-				value |= 1 << (7 - j);
-		}
-		transform[i] = value;
-	}
-}
 
 vech_tree* vech_new(void) {
 	vech_tree* t = (vech_tree*)malloc(sizeof(vech_tree));
@@ -219,26 +205,36 @@ vech_insert_t vech_seen(vech_tree* tree, vec_t* v) {
 	}
 }
 
+uchar transform[256];
 uint bit_count[256];
-void init_bit_count(void) {
-	uint i;
+vec_t connections[NODES];
+
+void setup_vec(void) {
+	uint i, j, k;
+	uchar value;
 	bit_count[0] = 0;
-	for (i = 1; i < 256; ++i)
+	for (i = 0; i < 256; ++i) {
 		if (i & 1)
 			bit_count[i] = 1 + bit_count[i >> 1];
 		else
 			bit_count[i] = bit_count[i >> 1];
-}
+		value = 0;
+		for (j = 0; j < 8; ++j) {
+			if (i & (1 << j))
+				value |= 1 << (7 - j);
+		}
+		transform[i] = value;
+	}
 
-vec_t* connections;
-void init_connections(void) {
-	uint i, j;
-	connections = (vec_t*)calloc(NODES, sizeof(vec_t));
 	for (i = 0; i < NODES; ++i) {
 		vec_t* v = connect_vec(i);
 		for (j = 0; j < NBASE; ++j) {
-			uint k = i ^ (1 << j);
+			k = i ^ (1 << j);
 			vec_setbit(v, k);
 		}
 	}
+}
+
+void teardown_vec(void) {
+	/* nothing to do */
 }
