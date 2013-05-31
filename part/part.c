@@ -299,7 +299,6 @@ void try_recurse(
 	uint level = prev_level + 1;
 	uint size, piece_index, end_index, sym_index;
 	vec_t *prev_filled, *this_filled, *this_piece, *this_shape;
-	vec_t scratch;
 	vech_tree* seen;
 
 	if (remain == 0) {
@@ -325,8 +324,7 @@ void try_recurse(
 			this_piece = pieces_vec(piece_index);
 			for (sym_index = 0; sym_index < sym_count; ++sym_index) {
 				apply_map2(sym_map(sym_index), this_piece, this_shape);
-				vec_and3(this_shape, prev_filled, &scratch);
-				if (vec_cmp(this_shape, &scratch) != 0)
+				if (! vec_contains(prev_filled, this_shape))
 					continue;
 				if (vech_seen(seen, this_shape) == VECH_EXISTS)
 					continue;

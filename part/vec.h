@@ -108,6 +108,14 @@ VEC_INLINE int vec_empty(vec_t* v) {
 	return 1;
 }
 
+VEC_INLINE int vec_contains(vec_t* container, vec_t* content) {
+	uint i;
+	for (i = 0; i < VECSIZE; ++i)
+		if ((~container->v[i]) & content->v[i])
+			return 0;
+	return 1;
+}
+
 extern uchar transform[];
 VEC_INLINE int vec_cmp(vec_t* s1, vec_t* s2) {
 	uint i;
