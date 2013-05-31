@@ -1,6 +1,6 @@
 CFLAGS = -g -O6
-CFILES = part.c vec.c set.c clock.c
-HFILES = part.h vec.h set.h clock.h
+CFILES = part.c vec.c set.c clock.c symmetries.c
+HFILES = part.h vec.h set.h clock.h symmetries.h
 
 part1: $(CFILES) $(HFILES)
 	gcc -DNBASE=1 -o part1 $(CFLAGS) $(CFILES)

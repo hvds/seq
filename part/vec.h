@@ -4,9 +4,9 @@
 #include "part.h"
 
 #ifndef IS_VEC_C
-#define INLINE extern inline
+#define VEC_INLINE extern inline
 #else
-#define INLINE inline
+#define VEC_INLINE inline
 #endif
 
 #define VECSIZE ((NODES + 7) >> 3)
@@ -45,23 +45,23 @@ void vech_delete(vech_tree* tree);
 vech_tree* vech_dup(vech_tree* source);
 vech_insert_t vech_seen(vech_tree* tree, vec_t* v);
 
-INLINE void vec_zero(vec_t* v) {
+VEC_INLINE void vec_zero(vec_t* v) {
 	memset(v, 0, sizeof(vec_t));
 }
 
-INLINE void vec_copy(vec_t* src, vec_t* dest) {
+VEC_INLINE void vec_copy(vec_t* src, vec_t* dest) {
 	memcpy(dest, src, sizeof(vec_t));
 }
 
-INLINE void vec_setbit(vec_t* v, uint i) {
+VEC_INLINE void vec_setbit(vec_t* v, uint i) {
 	v->v[i >> 3] |= 1 << (i & 7);
 }
 
-INLINE void vec_clearbit(vec_t* v, uint i) {
+VEC_INLINE void vec_clearbit(vec_t* v, uint i) {
 	v->v[i >> 3] &= ~(1 << (i & 7));
 }
 
-INLINE uint vec_testbit(vec_t* v, uint i) {
+VEC_INLINE uint vec_testbit(vec_t* v, uint i) {
 	return (v->v[i >> 3] & (1 << (i & 7))) ? 1 : 0;
 }
 
@@ -72,34 +72,34 @@ INLINE uint vec_testbit(vec_t* v, uint i) {
 	} \
 }
 
-INLINE void vec_or(vec_t* src, vec_t* dest)
+VEC_INLINE void vec_or(vec_t* src, vec_t* dest)
 	DO_VEC(dest->v[i] |= src->v[i])
-INLINE void vec_and(vec_t* src, vec_t* dest)
+VEC_INLINE void vec_and(vec_t* src, vec_t* dest)
 	DO_VEC(dest->v[i] &= src->v[i])
-INLINE void vec_xor(vec_t* src, vec_t* dest)
+VEC_INLINE void vec_xor(vec_t* src, vec_t* dest)
 	DO_VEC(dest->v[i] ^= src->v[i])
-INLINE void vec_or3(vec_t* s1, vec_t* s2, vec_t* dest)
+VEC_INLINE void vec_or3(vec_t* s1, vec_t* s2, vec_t* dest)
 	DO_VEC(dest->v[i] = s1->v[i] | s2->v[i])
-INLINE void vec_and3(vec_t* s1, vec_t* s2, vec_t* dest)
+VEC_INLINE void vec_and3(vec_t* s1, vec_t* s2, vec_t* dest)
 	DO_VEC(dest->v[i] = s1->v[i] & s2->v[i])
-INLINE void vec_xor3(vec_t* s1, vec_t* s2, vec_t* dest)
+VEC_INLINE void vec_xor3(vec_t* s1, vec_t* s2, vec_t* dest)
 	DO_VEC(dest->v[i] = s1->v[i] ^ s2->v[i])
 
-INLINE void vec_not(vec_t* src)
+VEC_INLINE void vec_not(vec_t* src)
 #if NODES < 8
 	{ src->v[0] ^= (1 << NODES) - 1; }
 #else
 	DO_VEC(src->v[i] ^= 255)
 #endif
 
-INLINE void vec_not2(vec_t* src, vec_t* dest)
+VEC_INLINE void vec_not2(vec_t* src, vec_t* dest)
 #if NODES < 8
 	{ dest->v[0] = src->v[0] ^ ((1 << NODES) - 1); }
 #else
 	DO_VEC(dest->v[i] = src->v[i] ^ 255)
 #endif
 
-INLINE int vec_empty(vec_t* v) {
+VEC_INLINE int vec_empty(vec_t* v) {
 	uint i;
 	for (i = 0; i < VECSIZE; ++i) {
 		if (v->v[i])
@@ -109,7 +109,7 @@ INLINE int vec_empty(vec_t* v) {
 }
 
 extern uchar transform[];
-INLINE int vec_cmp(vec_t* s1, vec_t* s2) {
+VEC_INLINE int vec_cmp(vec_t* s1, vec_t* s2) {
 	uint i;
 	signed int c;
 	for (i = 0; i < VECSIZE; ++i) {
@@ -124,7 +124,7 @@ INLINE int vec_cmp(vec_t* s1, vec_t* s2) {
 
 /* temporary, used only by canonical_set() */
 extern uint bit_count[];
-INLINE uint vec_bitcount(vec_t* v) {
+VEC_INLINE uint vec_bitcount(vec_t* v) {
 	uint c = 0, i;
 	for (i = 0; i < VECSIZE; ++i)
 		c += bit_count[v->v[i]];
@@ -132,7 +132,7 @@ INLINE uint vec_bitcount(vec_t* v) {
 }
 
 extern vec_t connections[];
-INLINE vec_t* connect_vec(uint i) {
+VEC_INLINE vec_t* connect_vec(uint i) {
 	return &connections[i];
 }
 

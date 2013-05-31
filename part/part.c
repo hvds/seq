@@ -1,104 +1,11 @@
 #include "part.h"
 #include "vec.h"
 #include "set.h"
+#include "symmetries.h"
 #include "clock.h"
-
-typedef uint mapping;
 
 #define BLOCK_START
 #define BLOCK_END
-
-BLOCK_START
-	/* symmetries functions */
-	uint sym_count;
-	mapping* symmetries;
-
-	inline mapping* sym_map(uint i) {
-		return symmetries + i * NODES;
-	}
-
-	int map_cmp(mapping* ma, mapping* mb) {
-		uint i;
-		int c;
-		for (i = 0; i < NODES; ++i) {
-			c = ma[i] - mb[i];
-			if (c > 0)
-				return 1;
-			if (c < 0)
-				return -1;
-		}
-		return 0;
-	}
-
-	void next_perm(mapping* p, uint size) {
-		uint last = size - 1;
-		uint j, k;
-		mapping temp;
-		int i = (int)last - 1;
-
-		while (i >= 0 && p[i] > p[i+1])
-			--i;
-		if (i < 0)
-			return;
-		for (j = i + 1, k = last; j < k; ++j, --k) {
-			temp = p[j];
-			p[j] = p[k];
-			p[k] = temp;
-		}
-		for (j = i + 1; p[j] < p[i]; ++j)
-			;
-		temp = p[i];
-		p[i] = p[j];
-		p[j] = temp;
-	}
-
-	void init_symmetries(void) {
-		uint fac = 1;
-		uint i, j, k;
-		mapping *m, *m2, value;
-		mapping perm[NBASE];
-
-		for (i = 2; i <= NBASE; ++i)
-			fac *= i;
-		sym_count = NODES * fac;
-		symmetries = (mapping*)calloc(sym_count, NODES * sizeof(mapping));
-
-		for (i = 0; i < NBASE; ++i) {
-			perm[i] = (mapping)i;
-		}
-		for (i = 0; i < fac; ++i, next_perm(perm, NBASE)) {
-			m = sym_map(i);
-			for (j = 0; j < NODES; ++j) {
-				value = 0;
-				for (k = 0; k < NBASE; ++k) {
-					if (j & (1 << perm[k]))
-						value |= 1 << k;
-				}
-				m[j] = value;
-			}
-		}
-
-		m = sym_map(0);
-		for (i = 1; i < NODES; ++i) {
-			m2 = sym_map(i * fac);
-			for (j = 0; j < NODES * fac; ++j)
-				m2[j] = m[j] ^ i;
-		}
-
-		qsort(symmetries, sym_count, NODES * sizeof(mapping),
-				(__compar_fn_t)map_cmp);
-	}
-
-	inline void apply_map2(mapping* m, vec_t* src, vec_t* dest) {
-		uint i, map;
-		for (i = 0; i < NODES; ++i) {
-			if (vec_testbit(src, m[i]))
-				vec_setbit(dest, i);
-			else
-				vec_clearbit(dest, i);
-		}
-	}
-BLOCK_END
 
 BLOCK_START
 	/* pieces functions */
@@ -131,7 +38,7 @@ BLOCK_START
 		uint bits = 0;
 		uint contiguous = 0;
 		vec_t w;
-		mapping* m;
+		sym_t* sym;
 		/* The (sorted) symmetries evenly map each bit to the zero bit */
 		uint sym_block = sym_count >> NBASE;
 
@@ -158,11 +65,11 @@ BLOCK_START
 			sc_start = sym_block * first;
 			sc_end = sc_start + sym_block;
 			for (i = sc_start; i < sc_end; ++i) {
-				m = sym_map(i);
+				sym = sym_map(i);
 				for (j = 1; j < contiguous; ++j)
-					if (!vec_testbit(v, m[j]))
+					if (!vec_testbit(v, sym->map[j]))
 						goto SYM_FAIL;
-				apply_map2(m, v, &w);
+				apply_map2(sym, v, &w);
 				if (vec_cmp(&w, canonical_v) > 0) {
 					best_i = i;
 					vec_copy(&w, canonical_v);
@@ -181,7 +88,7 @@ BLOCK_START
 		return best_i;
 	}
 
-	void init_pieces(void) {
+	void setup_pieces(void) {
 		canonical_v = (vec_t*)malloc(sizeof(vec_t));
 
 		piece_array_size = NODES + 2;
@@ -197,6 +104,12 @@ BLOCK_START
 		vec_setbit(pieces_vec(0), 0);
 		canonical_piece(pieces_vec(0));
 		vec_copy(canonical_v, pieces_vec(0));
+	}
+
+	void teardown_pieces(void) {
+		free(pieces);
+		free(piece_array);
+		free(canonical_v);
 	}
 
 	void prep_pieces(uint size) {
@@ -261,6 +174,26 @@ inline vec_t* solution_vec(uint index) {
 	return solution + index;
 }
 
+void setup_stack(void) {
+	uint i;
+	piecestack = (vec_t*)calloc(NODES, sizeof(vec_t));
+	filledstack = (vec_t*)calloc(NODES, sizeof(vec_t));
+	solution = (vec_t*)calloc(NODES, sizeof(vec_t));
+	solutions_seen = (seth_tree**)malloc(NODES * sizeof(seth_tree*));
+	for (i = 0; i < NODES; ++i)
+		solutions_seen[i] = seth_new(i + 1);
+}
+
+void teardown_stack(void) {
+	uint i;
+	for (i = 0; i < NODES; ++i)
+		seth_delete(solutions_seen[i]);
+	free(solutions_seen);
+	free(solution);
+	free(filledstack);
+	free(piecestack);
+}
+
 void dump_solution(FILE* stream, vec_t* v, uint size) {
 	uint i, j;
 
@@ -286,7 +219,7 @@ uint canonical_set(vec_t* v, uint pieces) {
 	uint group_start[pieces], group_size[pieces], groups;
 	int cmp;
 	vec_t *source, *dest, tmpstack[pieces];
-	mapping* map;
+	sym_t* sym;
 
 	/* find the size of each piece, to group them by size */
 	groups = 0;
@@ -317,11 +250,11 @@ uint canonical_set(vec_t* v, uint pieces) {
 	best_sym = 0;
 	for (sym_i = 1; sym_i < sym_count; ++sym_i) {
 		/* apply the map */
-		map = sym_map(sym_i);
+		sym = sym_map(sym_i);
 		for (i = 0; i < pieces; ++i) {
 			source = piecestack_vec(i);
 			dest = &tmpstack[i];
-			apply_map2(map, source, dest);
+			apply_map2(sym, source, dest);
 		}
 
 		/* sort each group of same-sized pieces */
@@ -347,18 +280,6 @@ uint canonical_set(vec_t* v, uint pieces) {
 		}
 	}
 	return best_sym;
-}
-
-void init_stack(void) {
-	uint i;
-	piecestack = (vec_t*)calloc(NODES, sizeof(vec_t));
-	filledstack = (vec_t*)calloc(NODES, sizeof(vec_t));
-	solution = (vec_t*)calloc(NODES, sizeof(vec_t));
-
-	solutions_seen = (seth_tree**)malloc(NODES * sizeof(seth_tree*));
-	for (i = 0; i < NODES; ++i) {
-		solutions_seen[i] = seth_new(i + 1);
-	}
 }
 
 void check_solution(uint pieces) {
@@ -446,18 +367,9 @@ void try_first(uint first) {
 }
 
 void teardown(void) {
-	uint i;
-	free(piece_array);
-	free(pieces);
-	free(canonical_v);
-	free(symmetries);
-	free(piecestack);
-	free(filledstack);
-	free(solution);
-	for (i = 0; i < NODES; ++i) {
-		seth_delete(solutions_seen[i]);
-	}
-	free(solutions_seen);
+	teardown_stack();
+	teardown_pieces();
+	teardown_symmetries();
 	teardown_vec();
 	teardown_clock();
 }
@@ -465,9 +377,9 @@ void teardown(void) {
 void setup(void) {
 	setup_clock();
 	setup_vec();
-	init_symmetries();
-	init_pieces();
-	init_stack();
+	setup_symmetries();
+	setup_pieces();
+	setup_stack();
 }
 
 int main(int argc, char** argv) {
