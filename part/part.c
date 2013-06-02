@@ -23,9 +23,6 @@ BLOCK_START
 	inline vec_t* pieces_for(uint size) {
 		return pieces_vec(piece_array[size]);
 	}
-	inline uint piece_count(uint size) {
-		return piece_array[size + 1] - piece_array[size];
-	}
 
 	/*
 	  Given a vector I<v> of I<NODES> bits, returns the index of the symmetry
@@ -123,65 +120,54 @@ BLOCK_START
 			return;
 		if (size > piece_array_used + 1)
 			prep_pieces(size - 1);
-		t = TIMETHIS({
-			small_lim = piece_array[size];
-			seen = vech_new();
-			for (smalli = piece_array[size - 1]; smalli < small_lim; ++smalli) {
-				smallv = pieces_vec(smalli);
-				for (new = 0; new < NODES; ++new) {
-					if (vec_testbit(smallv, new))
-						continue;
-					vec_and3(smallv, connect_vec(new), &scratch);
-					if (vec_empty(&scratch))
-						continue;
-					vec_copy(smallv, &scratch);
-					vec_setbit(&scratch, new);
-					canonical_piece(&scratch);
-					if (vech_seen(seen, canonical_v) == VECH_EXISTS)
-						continue;
-					if (pieces_used >= pieces_size) {
-						pieces_size *= 1.5;
-						pieces = (vec_t*)realloc(pieces, pieces_size * sizeof(vec_t));
-						smallv = pieces_vec(smalli);
-					}
-					vec_copy(canonical_v, pieces_vec(pieces_used));
-					++pieces_used;
+		small_lim = pieces_used;
+		seen = vech_new();
+		for (smalli = piece_array[size - 1]; smalli < small_lim; ++smalli) {
+			smallv = pieces_vec(smalli);
+			for (new = 0; new < NODES; ++new) {
+				if (vec_testbit(smallv, new))
+					continue;
+				vec_and3(smallv, connect_vec(new), &scratch);
+				if (vec_empty(&scratch))
+					continue;
+				vec_copy(smallv, &scratch);
+				vec_setbit(&scratch, new);
+				canonical_piece(&scratch);
+				if (vech_seen(seen, canonical_v) == VECH_EXISTS)
+					continue;
+				if (pieces_used >= pieces_size) {
+					pieces_size *= 1.5;
+					pieces = (vec_t*)realloc(pieces, pieces_size * sizeof(vec_t));
+					smallv = pieces_vec(smalli);
 				}
+				vec_copy(canonical_v, pieces_vec(pieces_used));
+				++pieces_used;
 			}
-			vech_delete(seen);
-			piece_array[size + 1] = pieces_used;
-			piece_array_used = size + 1;
-		});
-		fprintf(stderr, "P%u: %u (%.2f)\n", size, pieces_used - small_lim, t);
+		}
+		vech_delete(seen);
+		piece_array[size + 1] = pieces_used;
+		piece_array_used = size;
 	}
 BLOCK_END
 
 counter sym_result;
 counter all_result;
 
-vec_t* piecestack;
-vec_t* filledstack;
-vec_t* solution;
+typedef struct step_s {
+	set_t set;		/* the combined set of pieces so far */
+	vec_t freevec;	/* bits still free */
+	vec_t shape;	/* a rotated/reflected piece to insert */
+} step_t;
+step_t steps[NODES];
+set_t* solution;
 seth_tree** solutions_seen;
-
-inline vec_t* piecestack_vec(uint index) {
-	return piecestack + index;
-}
-inline vec_t* filledstack_vec(uint index) {
-	return filledstack + index;
-}
-inline vec_t* solution_vec(uint index) {
-	return solution + index;
-}
 
 void setup_stack(void) {
 	uint i;
-	piecestack = (vec_t*)calloc(NODES, sizeof(vec_t));
-	filledstack = (vec_t*)calloc(NODES, sizeof(vec_t));
-	solution = (vec_t*)calloc(NODES, sizeof(vec_t));
+	solution = (set_t*)malloc(sizeof(set_t));
 	solutions_seen = (seth_tree**)malloc(NODES * sizeof(seth_tree*));
 	for (i = 0; i < NODES; ++i)
-		solutions_seen[i] = seth_new(i + 1);
+		solutions_seen[i] = seth_new();
 }
 
 void teardown_stack(void) {
@@ -190,125 +176,101 @@ void teardown_stack(void) {
 		seth_delete(solutions_seen[i]);
 	free(solutions_seen);
 	free(solution);
-	free(filledstack);
-	free(piecestack);
-}
-
-void dump_solution(FILE* stream, vec_t* v, uint size) {
-	uint i, j;
-
-	for (i = 0; i < size; ++i) {
-		if (i > 0)
-			fprintf(stream, " ");
-		for (j = 0; j < NODES; ++j)
-			fprintf(stream, vec_testbit(v, j) ? "1" : "0");
-		++v;
-	}
 }
 
 /*
-  Given a set I<s> of vectors, returns the index of the symmetry that
-  transforms it to canonical form. If the first shape in the set is an
-  a_0-omino, that means it is the symmetry map under which all of the
-  a_0-ominoes in the set sort lexically first (under vec_cmp); remaining
-  shapes are used for tie-breaking, next-largest pieces first.
-  The canonical set of vectors is in solution[] immediately after calling.
+  Given a set_t I<s>, returns the index of the symmetry that
+  transforms it to canonical form. This is the symmetry mapping under
+  which it sorts lexically first.
+  The canonical set is in I<solution> immediately after calling.
 */
-uint canonical_set(vec_t* v, uint pieces) {
-	uint i, this_size, cur_size, sym_i, best_sym;
-	uint group_start[pieces], group_size[pieces], groups;
-	int cmp;
-	vec_t *source, *dest, tmpstack[pieces];
+uint canonical_set(set_t* set, uint pieces) {
+	uint i, sym_i, best_sym;
+	uint seen, mapping[NODES + 1], source, dest;
 	sym_t* sym;
 
-	/* find the size of each piece, to group them by size */
-	groups = 0;
-	for (i = 0; i < pieces; ++i) {
-		vec_t* source = piecestack_vec(i);
-		this_size = vec_bitcount(source);
-		if (i == 0 || this_size != cur_size) {
-			groups = (i == 0) ? 0 : groups + 1;
-			group_start[groups] = i;
-			group_size[groups] = 1;
-			cur_size = this_size;
-		} else {
-			++group_size[groups];
-		}
+	/* the set may not start in canonical form, so a simple set_copy() here
+	 * is not enough.
+	 */
+	sym_i = 0;
+	sym = sym_map(sym_i);
+	seen = 0;
+	memset(mapping, 0, sizeof(mapping));
+	for (i = 0; i < NODES; ++i) {
+		source = set->p[sym->map[i]];
+		if (source && !mapping[source])
+			mapping[source] = ++seen;
+		solution->p[i] = mapping[source];
 	}
-	++groups;
-
-	memcpy(solution, v, pieces * sizeof(vec_t));
-	/* and make sure it's sorted canonically */
-	for (i = 0; i < groups; ++i) {
-		if (group_size[i] > 1)
-			qsort(
-				(void*)(solution + group_start[i]),
-				group_size[i], sizeof(vec_t), (__compar_fn_t)vec_cmp
-			);
-	}
-
 	best_sym = 0;
+
 	for (sym_i = 1; sym_i < sym_count; ++sym_i) {
-		/* apply the map */
 		sym = sym_map(sym_i);
-		for (i = 0; i < pieces; ++i) {
-			source = piecestack_vec(i);
-			dest = &tmpstack[i];
-			apply_map2(sym, source, dest);
-		}
 
-		/* sort each group of same-sized pieces */
-		for (i = 0; i < groups; ++i) {
-			if (group_size[i] > 1)
-				qsort(
-					(void*)(tmpstack + group_start[i]),
-					group_size[i], sizeof(vec_t), (__compar_fn_t)vec_cmp
-				);
-		}
+		/* while applying the map, at each step we either know it is worse
+		 * (and abort) or that it is better (in which case we go to the
+		 * accept state) or that it is identical so far. So we need no
+		 * scratch space for the result, only for the assignments.
+		 */
+		seen = 0;
+		memset(mapping, 0, sizeof(mapping));
 
-		/* compare against best so far */
-		for (i = 0; i < pieces; ++i) {
-			cmp = vec_cmp(tmpstack + i, solution + i);
-			if (cmp < 0)
-				break;
-			else if (cmp > 0)
-				break;
+		for (i = 0; i < NODES; ++i) {
+			source = set->p[sym->map[i]];
+			if (source && !mapping[source])
+				mapping[source] = ++seen;
+			dest = mapping[source];
+			if (dest > solution->p[i])
+				goto SYM_FAIL;
+			if (dest < solution->p[i])
+				goto SYM_ACCEPT;
 		}
-		if (cmp < 0) {
-			memcpy(solution, tmpstack, pieces * sizeof(vec_t));
-			best_sym = sym_i;
+		/* if we fall through it's identical, treat same as fail */
+	  SYM_FAIL:
+		continue;
+
+	  SYM_ACCEPT:
+		for ( ; i < NODES; ++i) {
+			source = set->p[sym->map[i]];
+			if (source && !mapping[source]) 
+				mapping[source] = ++seen;
+			solution->p[i] = mapping[source];
 		}
+		best_sym = sym_i;
 	}
 	return best_sym;
 }
 
-void check_solution(uint pieces) {
-	canonical_set(piecestack, pieces);
-	if (seth_seen(solutions_seen[pieces - 1], (set_t*)solution) == SETH_EXISTS)
+void check_solution(set_t* set, uint pieces) {
+	canonical_set(set, pieces);
+	if (seth_seen(solutions_seen[pieces - 1], solution) == SETH_EXISTS)
 		return;
 
-	dump_solution(stdout, solution, pieces);
+	fprint_set(stdout, solution, pieces);
 	printf("\n");
 	++sym_result;
 	++all_result;
 }
 
 void try_recurse(
-	uint prev_level, uint remain, uint maxpiece, uint prev_index, vech_tree* prev_seen
+	uint prev_level, uint remain, uint maxpiece, uint prev_index,
+	vech_tree* prev_seen
 ) {
 	uint level = prev_level + 1;
 	uint size, piece_index, end_index, sym_index;
-	vec_t *prev_filled, *this_filled, *this_piece, *this_shape;
+	step_t* step = &(steps[level]);
+	step_t* prev_step = &(steps[prev_level]);
+	vec_t *prev_free, *this_free, *this_piece, *this_shape;
 	vech_tree* seen;
 
 	if (remain == 0) {
 		/* we have a solution in the stack: check for uniqueness, and record */
-		check_solution(level);
+		check_solution(&(prev_step->set), level);
 		return;
 	}
-	prev_filled = filledstack_vec(prev_level);
-	this_filled = filledstack_vec(level);
-	this_shape = piecestack_vec(level);
+	prev_free = &(prev_step->freevec);
+	this_free = &(step->freevec);
+	this_shape = &(step->shape);
 	size = (remain < maxpiece) ? remain : maxpiece;
 	for ( ; size > 0; --size) {
 		if (size == maxpiece) {
@@ -324,12 +286,19 @@ void try_recurse(
 			this_piece = pieces_vec(piece_index);
 			for (sym_index = 0; sym_index < sym_count; ++sym_index) {
 				apply_map2(sym_map(sym_index), this_piece, this_shape);
-				if (! vec_contains(prev_filled, this_shape))
+				if (! vec_contains(prev_free, this_shape))
 					continue;
 				if (vech_seen(seen, this_shape) == VECH_EXISTS)
 					continue;
-				vec_xor3(prev_filled, this_shape, this_filled);
-				try_recurse(level, remain - size, size, piece_index, seen);
+				vec_xor3(prev_free, this_shape, this_free);
+				set_append(&(step->set), &(prev_step->set), this_shape, level);
+				try_recurse(
+					level,			/* recursion depth */
+					remain - size,	/* remaining bits free */
+					size,			/* max size for pieces */
+					piece_index,	/* min index for pieces (if same size) */
+					seen			/* heap of seen shapes */
+				);
 			}
 		}
 		vech_delete(seen);
@@ -338,24 +307,23 @@ void try_recurse(
 
 void try_first(uint first) {
 	uint piece_index, end_index;
-	vec_t *this_piece, *ps, *fs;
+	step_t* step = &(steps[0]);
+	vec_t *this_piece;
 	vech_tree* seen;
 
-	prep_pieces(first);
 	piece_index = piece_array[first];
 	end_index = piece_array[first + 1];
-	ps = piecestack_vec(0);
-	fs = filledstack_vec(0);
 
 	seen = vech_new();
 	for ( ; piece_index < end_index; ++piece_index) {
 		this_piece = pieces_vec(piece_index);
-		vec_copy(this_piece, ps);
-		vec_not2(this_piece, fs);
+		vec_copy(this_piece, &(step->shape));
+		vec_not2(this_piece, &(step->freevec));
+		set_init(&(step->set), &(step->shape));
 		vech_seen(seen, this_piece); /* cannot exist */
 		try_recurse(
 			0,				/* recursion depth */
-			NODES - first,	/* remaining bits in filledstack */
+			NODES - first,	/* remaining bits free */
 			first,			/* max size for pieces */
 			piece_index,	/* min index for pieces (if same size) */
 			seen			/* heap of seen shapes */
@@ -382,20 +350,31 @@ void setup(void) {
 
 int main(int argc, char** argv) {
 	uint first;
-	double t;
+	double t1, t2;
+	counter prev;
 
 	setup();
 
-	t = TIMETHIS({
-#ifdef PIECE_ONLY
-		prep_pieces(NODES);
-#else
-		for (first = NODES; first > 0; --first) {
-			try_first(first);
+	t1 = TIMETHIS({
+		for (first = 1; first <= NODES; ++first) {
+			t2 = TIMETHIS({
+				prep_pieces(first);
+			});
+			fprintf(stderr, "pieces %u: %u (%.2f)\n",
+					first, piece_array[first + 1] - piece_array[first], t2);
+		}
+#ifndef PIECE_ONLY
+		for (first = 1; first <= NODES; ++first) {
+			prev = sym_result;
+			t2 = TIMETHIS({
+				try_first(first);
+			});
+			fprintf(stderr, "solutions %u: %llu/%llu (%.2f)\n",
+					first, sym_result - prev, sym_result, t2);
 		}
 #endif
 	});
-	printf("%u: %llu, %llu (%.2f)\n", NBASE, sym_result, all_result, t);
+	printf("%u: %llu, %llu (%.2f)\n", NBASE, sym_result, all_result, t1);
 	teardown();
 	return 0;
 }

@@ -14,7 +14,10 @@ part3: $(CFILES) $(HFILES)
 part4: $(CFILES) $(HFILES)
 	gcc -DNBASE=4 -o part4 $(CFLAGS) $(CFILES)
 
-part5: $(CFILES) $(HFILES)
+part5p: $(CFILES) $(HFILES)
 	gcc -DNBASE=5 -DPIECE_ONLY -o part5 $(CFLAGS) $(CFILES)
+
+part5: $(CFILES) $(HFILES)
+	gcc -DNBASE=5 -o part5 $(CFLAGS) $(CFILES)
 
 all: part1 part2 part3 part4 part5

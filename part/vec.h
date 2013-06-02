@@ -130,15 +130,6 @@ VEC_INLINE int vec_cmp(vec_t* s1, vec_t* s2) {
 	return 0;
 }
 
-/* temporary, used only by canonical_set() */
-extern uint bit_count[];
-VEC_INLINE uint vec_bitcount(vec_t* v) {
-	uint c = 0, i;
-	for (i = 0; i < VECSIZE; ++i)
-		c += bit_count[v->v[i]];
-	return c;
-}
-
 extern vec_t connections[];
 VEC_INLINE vec_t* connect_vec(uint i) {
 	return &connections[i];
