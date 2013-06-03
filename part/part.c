@@ -299,6 +299,10 @@ void try_recurse(
 					piece_index,	/* min index for pieces (if same size) */
 					seen			/* heap of seen shapes */
 				);
+				/* if this piece of size 1, all remaining pieces will be too,
+				 * so only one arrangement is relevant */
+				if (size == 1)
+					break;
 			}
 		}
 		vech_delete(seen);
@@ -363,7 +367,10 @@ int main(int argc, char** argv) {
 			fprintf(stderr, "pieces %u: %u (%.2f)\n",
 					first, piece_array[first + 1] - piece_array[first], t2);
 		}
+	});
+	fprintf(stderr, "Total pieces: %u (%.2f)\n", pieces_used, t1);
 #ifndef PIECE_ONLY
+	t1 = TIMETHIS({
 		for (first = 1; first <= NODES; ++first) {
 			prev = sym_result;
 			t2 = TIMETHIS({
@@ -372,9 +379,9 @@ int main(int argc, char** argv) {
 			fprintf(stderr, "solutions %u: %llu/%llu (%.2f)\n",
 					first, sym_result - prev, sym_result, t2);
 		}
-#endif
 	});
 	printf("%u: %llu, %llu (%.2f)\n", NBASE, sym_result, all_result, t1);
+#endif
 	teardown();
 	return 0;
 }
