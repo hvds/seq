@@ -4,6 +4,8 @@
 #include "symmetries.h"
 #include "clock.h"
 
+#define REPORT_MASK ((1 << 20) - 1)
+
 #define BLOCK_START
 #define BLOCK_END
 
@@ -151,7 +153,6 @@ BLOCK_START
 BLOCK_END
 
 counter sym_result;
-counter all_result;
 
 typedef struct step_s {
 	set_t set;		/* the combined set of pieces so far */
@@ -249,7 +250,11 @@ void check_solution(set_t* set, uint pieces) {
 	fprint_set(stdout, solution, pieces);
 	printf("\n");
 	++sym_result;
-	++all_result;
+	if (! (sym_result & REPORT_MASK)) {
+		fprintf(stderr, "%llu: ", sym_result);
+		fprint_set(stderr, solution, pieces);
+		fprintf(stderr, "\n");
+	}
 }
 
 void try_recurse(
@@ -272,7 +277,7 @@ void try_recurse(
 	this_free = &(step->freevec);
 	this_shape = &(step->shape);
 	size = (remain < maxpiece) ? remain : maxpiece;
-	for ( ; size > 0; --size) {
+	for ( ; size > 1; --size) {
 		if (size == maxpiece) {
 			seen = vech_dup(prev_seen);
 			piece_index = prev_index;
@@ -299,13 +304,21 @@ void try_recurse(
 					piece_index,	/* min index for pieces (if same size) */
 					seen			/* heap of seen shapes */
 				);
-				/* if this piece of size 1, all remaining pieces will be too,
-				 * so only one arrangement is relevant */
-				if (size == 1)
-					break;
 			}
 		}
 		vech_delete(seen);
+	}
+	/* handle size=1 separately */
+	{
+		uint cur = level, i;
+		set_t* s = &(step->set);
+		set_copy(&(prev_step->set), s);
+		for (i = 0; i < NODES; ++i) {
+			if (s->p[i] != 0)
+				continue;
+			s->p[i] = ++cur;
+		}
+		check_solution(s, cur);
 	}
 }
 
@@ -371,7 +384,11 @@ int main(int argc, char** argv) {
 	fprintf(stderr, "Total pieces: %u (%.2f)\n", pieces_used, t1);
 #ifndef PIECE_ONLY
 	t1 = TIMETHIS({
+#ifndef REVERSE
 		for (first = 1; first <= NODES; ++first) {
+#else
+		for (first = NODES; first > 0; --first) {
+#endif
 			prev = sym_result;
 			t2 = TIMETHIS({
 				try_first(first);
@@ -380,7 +397,7 @@ int main(int argc, char** argv) {
 					first, sym_result - prev, sym_result, t2);
 		}
 	});
-	printf("%u: %llu, %llu (%.2f)\n", NBASE, sym_result, all_result, t1);
+	printf("%u: Total %llu (%.2f)\n", NBASE, sym_result, t1);
 #endif
 	teardown();
 	return 0;
