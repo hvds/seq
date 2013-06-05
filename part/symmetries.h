@@ -25,6 +25,10 @@ SYM_INLINE sym_t* sym_map(unsigned int i) {
 
 SYM_INLINE void apply_map2(sym_t* sym, vec_t* src, vec_t* dest) {
 	unsigned int i;
+#if NODES < 8
+	/* make sure the whole byte is clear, for comparisons */
+	dest->v[0] = 0;
+#endif
 	for (i = 0; i < NODES; ++i) {
 		if (vec_testbit(src, sym->map[i]))
 			vec_setbit(dest, i); 
