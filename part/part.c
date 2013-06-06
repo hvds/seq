@@ -34,6 +34,12 @@ void teardown_stack(void) {
 	free(solution);
 }
 
+void reset_solutions(void) {
+	uint i;
+	for (i = 0; i < NODES; ++i)
+		seth_reset(solutions_seen[i]);
+}
+
 /*
   Given a set_t I<s>, returns the index of the symmetry that
   transforms it to canonical form. This is the symmetry mapping under
@@ -249,7 +255,8 @@ int main(int argc, char** argv) {
 #endif
 			prev = sym_result;
 			t2 = TIMETHIS({
-				try_first(first);
+	 			try_first(first);
+				reset_solutions();
 			});
 			fprintf(stderr, "solutions %u: %llu/%llu (%.2f)\n",
 					first, sym_result - prev, sym_result, t2);

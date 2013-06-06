@@ -38,6 +38,12 @@ void seth_delete(seth_tree* t) {
 	free(t);
 }
 
+void seth_reset(seth_tree* t) {
+	t->sha_used = 0;
+	t->sha_root = 0;
+	t->sa_used = 0;
+}
+
 seth_tree* seth_dup(seth_tree* source) {
 	seth_tree* dest = (seth_tree*)malloc(sizeof(seth_tree));
 	memcpy(dest, source, sizeof(seth_tree));

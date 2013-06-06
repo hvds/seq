@@ -37,6 +37,7 @@ typedef struct seth_tree_s {
 
 seth_tree* seth_new(void);
 void seth_delete(seth_tree* tree);
+void seth_reset(seth_tree* tree);
 seth_tree* seth_dup(seth_tree* source);
 seth_insert_t seth_seen(seth_tree* tree, set_t* v);
 
