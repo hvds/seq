@@ -169,18 +169,9 @@ void try_recurse(
 		}
 		vech_delete(seen);
 	}
-	/* handle size=1 separately */
-	{
-		uint cur = level, i;
-		set_t* s = &(step->set);
-		set_copy(&(prev_step->set), s);
-		for (i = 0; i < NODES; ++i) {
-			if (s->p[i] != 0)
-				continue;
-			s->p[i] = ++cur;
-		}
-		check_solution(s, cur);
-	}
+	/* handle size=1 separately: no point filling in the singles, just take
+	 * them as read */
+	check_solution(&(prev_step->set), prev_level + remain);
 }
 
 void try_first(uint first) {
