@@ -7,6 +7,7 @@ void setup_clock(void);
 void teardown_clock(void);
 
 extern int clock_tick;
+extern int gtime;
 int curtime(void);
 double difftime(clock_t t0, clock_t t1);
 
@@ -17,5 +18,7 @@ double difftime(clock_t t0, clock_t t1);
 	t1 = curtime(); \
 	difftime(t0, t1); \
 })
+
+#define GTIME difftime(gtime, curtime())
 
 #endif

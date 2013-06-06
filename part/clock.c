@@ -3,9 +3,11 @@
 
 /* clock functions */
 int clk_tck;
+int gtime;
 
 void setup_clock(void) {
 	clk_tck = sysconf(_SC_CLK_TCK);
+	gtime = curtime();
 }
 
 void teardown_clock(void) {

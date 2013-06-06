@@ -114,7 +114,7 @@ void check_solution(set_t* set, uint pieces) {
 	if (! (sym_result & REPORT_MASK)) {
 		fprintf(stderr, "%llu: ", sym_result);
 		fprint_set(stderr, solution, pieces);
-		fprintf(stderr, "\n");
+		fprintf(stderr, " (%.2f)\n", GTIME);
 	}
 }
 
