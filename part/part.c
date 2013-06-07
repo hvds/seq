@@ -105,10 +105,10 @@ void canonical_set(set_t* set, uint pieces) {
 	}
 }
 
-void check_solution(set_t* set, uint pieces) {
+int check_solution(set_t* set, uint pieces) {
 	canonical_set(set, pieces);
 	if (seth_seen(solutions_seen[pieces - 1], solution) == SETH_EXISTS)
-		return;
+		return 0;
 
 	fprint_set(stdout, solution, pieces);
 	printf("\n");
@@ -118,6 +118,7 @@ void check_solution(set_t* set, uint pieces) {
 		fprint_set(stderr, solution, pieces);
 		fprintf(stderr, " (%.2f)\n", GTIME);
 	}
+	return 1;
 }
 
 void try_recurse(
@@ -128,18 +129,23 @@ void try_recurse(
 	uint size, piece_index, end_index, sym_index;
 	step_t* step = &(steps[level]);
 	step_t* prev_step = &(steps[prev_level]);
-	vec_t *prev_free, *this_free, *this_shape;
 	piece_t* this_piece;
 	vech_tree* seen;
+	vec_t *prev_free, *this_free;
+	vec_t* this_shape = &(step->shape);
 
-	if (remain == 0) {
-		/* we have a solution in the stack: check for uniqueness, and record */
-		check_solution(&(prev_step->set), level);
+	/* Handle size=1 separately: no point filling in the singles, just take
+	 * them as read. If this is not a new solution, we've seen this shape
+	 * before, so skip the rest.
+	 */
+	if (! check_solution(&(prev_step->set), level + remain))
 		return;
-	}
+	/* If we're full, there's nothing to do */
+	if (remain == 0)
+		return;
+
 	prev_free = &(prev_step->freevec);
 	this_free = &(step->freevec);
-	this_shape = &(step->shape);
 	size = (remain < maxpiece) ? remain : maxpiece;
 	for ( ; size > 1; --size) {
 		if (size == maxpiece) {
@@ -171,9 +177,6 @@ void try_recurse(
 		}
 		vech_delete(seen);
 	}
-	/* handle size=1 separately: no point filling in the singles, just take
-	 * them as read */
-	check_solution(&(prev_step->set), prev_level + remain);
 }
 
 void try_first(uint first) {
