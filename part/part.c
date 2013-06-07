@@ -41,14 +41,13 @@ void reset_solutions(void) {
 }
 
 /*
-  Given a set_t I<s>, returns the index of the symmetry that
-  transforms it to canonical form. This is the symmetry mapping under
-  which it sorts lexically first.
+  Given a set_t I<s>, transforms it to canonical form. This is the symmetry
+  mapping under which it sorts lexically first.
   The canonical set is in I<solution> immediately after calling.
 */
-uint canonical_set(set_t* set, uint pieces) {
-	uint i, sym_i, best_sym;
-	uint seen, mapping[NODES + 1], source, dest;
+void canonical_set(set_t* set, uint pieces) {
+	uint i, sym_i;
+	uint seen, mapping[NODES], source, dest;
 	sym_t* sym;
 
 	/* the set may not start in canonical form, so a simple set_copy() here
@@ -60,11 +59,12 @@ uint canonical_set(set_t* set, uint pieces) {
 	memset(mapping, 0, sizeof(mapping));
 	for (i = 0; i < NODES; ++i) {
 		source = set->p[sym->map[i]];
-		if (source && !mapping[source])
-			mapping[source] = ++seen;
-		solution->p[i] = mapping[source];
+		solution->p[i] = source
+			? mapping[source - 1]
+				? mapping[source - 1]
+				: (mapping[source - 1] = ++seen)
+			: 0;
 	}
-	best_sym = 0;
 
 	for (sym_i = 1; sym_i < sym_count; ++sym_i) {
 		sym = sym_map(sym_i);
@@ -79,9 +79,11 @@ uint canonical_set(set_t* set, uint pieces) {
 
 		for (i = 0; i < NODES; ++i) {
 			source = set->p[sym->map[i]];
-			if (source && !mapping[source])
-				mapping[source] = ++seen;
-			dest = mapping[source];
+			dest = source
+				? mapping[source - 1]
+					? mapping[source - 1]
+					: (mapping[source - 1] = ++seen)
+				: 0;
 			if (dest > solution->p[i])
 				goto SYM_FAIL;
 			if (dest < solution->p[i])
@@ -94,13 +96,13 @@ uint canonical_set(set_t* set, uint pieces) {
 	  SYM_ACCEPT:
 		for ( ; i < NODES; ++i) {
 			source = set->p[sym->map[i]];
-			if (source && !mapping[source]) 
-				mapping[source] = ++seen;
-			solution->p[i] = mapping[source];
+			solution->p[i] = source
+				? mapping[source - 1]
+					? mapping[source - 1]
+					: (mapping[source - 1] = ++seen)
+				: 0;
 		}
-		best_sym = sym_i;
 	}
-	return best_sym;
 }
 
 void check_solution(set_t* set, uint pieces) {
