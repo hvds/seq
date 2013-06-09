@@ -1,0 +1,37 @@
+Running n=5 with NOPREP found 3.6E6 partitions with max size 2 in an hour.
+We then coredumped after 7.5h having found a further 3E7 partitions with
+max size 3, probably due to running over the available address space -
+storing 3.36E6 AVL tree elements costs us 1.5GB (16 bytes overhead per
+element, plus 32 bytes of data).
+
+I can't tell for sure because the coredump was truncated, but I'm guessing
+we tried to grow one of the trees by 50%, and blew the 2GB limit.
+
+It might be possible to minimize the overhead per solution, at a smallish
+cost - store the solution in a packed representation using 5 bits per offset
+(saves 12 bytes), store the solution inline in the element node (saves 4)
+and stuff the balance value into the top bit of the left and right offsets
+(saves 4). But the work probably isn't worth doing, it'll just let us run
+a few more hours before we blow up - either on max 3 or on max 4.
+
+So the next step is to rewrite the main recursion along the same lines as
+the original perl code - pick an I-partition of 32, and find all S-partitions
+of the shape with pieces of those sizes; store only the solutions for
+this I-partition for deduplication, and discard them for starting on the
+next I-partition.
+
+Maybe we'll still run out of memory, but hopefully we'll be close enough
+to a complete solution by then to have a good estimate of how much we
+need room for.
+
+After that, next step is to add code to convert a vec_t into an array of
+graph_t, to find the number of ways to partition a graph_t, and to use
+that wherever we can safely do so.
+
+Symmetries are the problem: given an asymmetrical large piece filling
+more than half the shape, it is sufficient to count the partitions of
+each of the disconnected subgraphs comprising the remained and multiply
+them together. But if it's a symmetrical piece, or multiple pieces, or
+no more than half the shape, there are a bunch of complex wrinkles to
+take into consideration.
+
