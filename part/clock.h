@@ -4,6 +4,7 @@
 #include <sys/times.h>
 
 void setup_clock(void);
+void reset_clock(void);
 void teardown_clock(void);
 
 extern int clock_tick;

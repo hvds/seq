@@ -231,6 +231,7 @@ int main(int argc, char** argv) {
 
 	setup();
 
+#ifndef NOPREP
 	t1 = TIMETHIS({
 		for (first = 1; first <= NODES; ++first) {
 			t2 = TIMETHIS({
@@ -242,12 +243,23 @@ int main(int argc, char** argv) {
 		}
 	});
 	fprintf(stderr, "Total pieces: %u (%.2f)\n", pieces_used, t1);
+	reset_clock();
+#endif
+
 #ifndef PIECE_ONLY
 	t1 = TIMETHIS({
 #ifndef REVERSE
 		for (first = 1; first <= NODES; ++first) {
 #else
 		for (first = NODES; first > 0; --first) {
+#endif
+#ifdef NOPREP
+			t2 = TIMETHIS({
+				prep_pieces(first);
+			});
+			fprintf(stderr, "pieces %u: %u [%u symsets] (%.2f)\n",
+					first, piece_array[first + 1] - piece_array[first],
+					sym_set_count, t2);
 #endif
 			prev = sym_result;
 			t2 = TIMETHIS({

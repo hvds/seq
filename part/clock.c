@@ -10,6 +10,10 @@ void setup_clock(void) {
 	gtime = curtime();
 }
 
+void reset_clock(void) {
+	gtime = curtime();
+}
+
 void teardown_clock(void) {
 	/* nothing to do */
 }
