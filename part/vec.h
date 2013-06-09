@@ -134,5 +134,6 @@ extern vec_t connections[];
 VEC_INLINE vec_t* connect_vec(uint i) {
 	return &connections[i];
 }
+int is_connected(vec_t* v);
 
 #endif

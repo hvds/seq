@@ -148,6 +148,14 @@ void try_recurse(
 	this_free = &(step->freevec);
 	size = (remain < maxpiece) ? remain : maxpiece;
 	for ( ; size > 1; --size) {
+		if (size == remain) {
+			/* no point iterating over the pieces, only one can fit */
+			if (is_connected(prev_free)) {
+				set_append(&(step->set), &(prev_step->set), prev_free, level);
+				check_solution(&(step->set), level + 1);
+			}
+			continue;
+		}
 		if (size == maxpiece) {
 			seen = vech_dup(prev_seen);
 			piece_index = prev_index;
