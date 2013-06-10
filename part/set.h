@@ -33,7 +33,6 @@ typedef struct seth_tree_s {
 	set_t* setarena;
 	uint sa_size;
 	uint sa_used;
-	uint seen;
 } seth_tree;
 
 seth_tree* seth_new(void);

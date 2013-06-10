@@ -1,6 +1,6 @@
 CFLAGS = -g -O6
-CFILES = part.c vec.c set.c clock.c symmetries.c pieces.c sym_set.c ipart.c
-HFILES = part.h vec.h set.h clock.h symmetries.h pieces.h sym_set.h ipart.h
+CFILES = part.c vec.c set.c clock.c symmetries.c pieces.c sym_set.c
+HFILES = part.h vec.h set.h clock.h symmetries.h pieces.h sym_set.h
 
 part1: $(CFILES) $(HFILES)
 	gcc -DNBASE=1 -o part1 $(CFLAGS) $(CFILES)
@@ -14,8 +14,8 @@ part3: $(CFILES) $(HFILES)
 part4: $(CFILES) $(HFILES)
 	gcc -DNBASE=4 -o part4 $(CFLAGS) $(CFILES)
 
-#part5p: $(CFILES) $(HFILES)
-#	gcc -DNBASE=5 -DPIECE_ONLY -o part5 $(CFLAGS) $(CFILES)
+part5p: $(CFILES) $(HFILES)
+	gcc -DNBASE=5 -DPIECE_ONLY -o part5 $(CFLAGS) $(CFILES)
 
 part5r: $(CFILES) $(HFILES)
 	gcc -DNBASE=5 -DREVERSE -o part5r $(CFLAGS) $(CFILES)
