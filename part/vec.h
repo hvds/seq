@@ -42,6 +42,7 @@ typedef struct vech_tree_s {
 
 vech_tree* vech_new(void);
 void vech_delete(vech_tree* tree);
+void vech_reset(vech_tree* tree);
 vech_tree* vech_dup(vech_tree* source);
 vech_insert_t vech_seen(vech_tree* tree, vec_t* v);
 

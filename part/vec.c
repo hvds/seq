@@ -22,6 +22,12 @@ void vech_delete(vech_tree* t) {
 	free(t);
 }
 
+void vech_reset(vech_tree* t) {
+	t->vha_used = 0;
+	t->vha_root = 0;
+	t->va_used = 0;
+}
+
 vech_tree* vech_dup(vech_tree* source) {
 	vech_tree* dest = (vech_tree*)malloc(sizeof(vech_tree));
 	memcpy(dest, source, sizeof(vech_tree));
