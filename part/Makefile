@@ -14,8 +14,8 @@ part3: $(CFILES) $(HFILES)
 part4: $(CFILES) $(HFILES)
 	gcc -DNBASE=4 -o part4 $(CFLAGS) $(CFILES)
 
-part5p: $(CFILES) $(HFILES)
-	gcc -DNBASE=5 -DPIECE_ONLY -o part5 $(CFLAGS) $(CFILES)
+#part5p: $(CFILES) $(HFILES)
+#	gcc -DNBASE=5 -DPIECE_ONLY -o part5 $(CFLAGS) $(CFILES)
 
 part5r: $(CFILES) $(HFILES)
 	gcc -DNBASE=5 -DREVERSE -o part5r $(CFLAGS) $(CFILES)

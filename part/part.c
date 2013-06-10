@@ -122,15 +122,13 @@ int check_solution(set_t* set, uint pieces) {
 }
 
 void try_recurse(
-	uint prev_level, uint remain, uint maxpiece, uint prev_index,
-	vech_tree* prev_seen
+	uint prev_level, uint remain, uint maxpiece
 ) {
 	uint level = prev_level + 1;
 	uint size, piece_index, end_index, sym_index;
 	step_t* step = &(steps[level]);
 	step_t* prev_step = &(steps[prev_level]);
 	piece_t* this_piece;
-	vech_tree* seen;
 	vec_t *prev_free, *this_free;
 	vec_t* this_shape = &(step->shape);
 
@@ -156,13 +154,7 @@ void try_recurse(
 			}
 			continue;
 		}
-		if (size == maxpiece) {
-			seen = vech_dup(prev_seen);
-			piece_index = prev_index;
-		} else {
-			seen = vech_new();
-			piece_index = piece_array[size];
-		}
+		piece_index = piece_array[size];
 		end_index = piece_array[size + 1];
 		for ( ; piece_index < end_index; ++piece_index) {
 			this_piece = pieces_vec(piece_index);
@@ -170,20 +162,15 @@ void try_recurse(
 				apply_map2(sym_map(this_piece->ss->index[sym_index]), &(this_piece->v), this_shape);
 				if (! vec_contains(prev_free, this_shape))
 					continue;
-				if (vech_seen(seen, this_shape) == VECH_EXISTS)
-					continue;
 				vec_xor3(prev_free, this_shape, this_free);
 				set_append(&(step->set), &(prev_step->set), this_shape, level);
 				try_recurse(
 					level,			/* recursion depth */
 					remain - size,	/* remaining bits free */
-					size,			/* max size for pieces */
-					piece_index,	/* min index for pieces (if same size) */
-					seen			/* heap of seen shapes */
+					size			/* max size for pieces */
 				);
 			}
 		}
-		vech_delete(seen);
 	}
 }
 
@@ -191,27 +178,21 @@ void try_first(uint first) {
 	uint piece_index, end_index;
 	step_t* step = &(steps[0]);
 	piece_t *this_piece;
-	vech_tree* seen;
 
 	piece_index = piece_array[first];
 	end_index = piece_array[first + 1];
 
-	seen = vech_new();
 	for ( ; piece_index < end_index; ++piece_index) {
 		this_piece = pieces_vec(piece_index);
 		vec_copy(&(this_piece->v), &(step->shape));
 		vec_not2(&(this_piece->v), &(step->freevec));
 		set_init(&(step->set), &(step->shape));
-		vech_seen(seen, &(this_piece->v)); /* cannot exist */
 		try_recurse(
 			0,				/* recursion depth */
 			NODES - first,	/* remaining bits free */
-			first,			/* max size for pieces */
-			piece_index,	/* min index for pieces (if same size) */
-			seen			/* heap of seen shapes */
+			first			/* max size for pieces */
 		);
 	}
-	vech_delete(seen);
 }
 
 void teardown(void) {
