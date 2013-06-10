@@ -14,6 +14,7 @@ and stuff the balance value into the top bit of the left and right offsets
 (saves 4). But the work probably isn't worth doing, it'll just let us run
 a few more hours before we blow up - either on max 3 or on max 4.
 
+[[[
 So the next step is to rewrite the main recursion along the same lines as
 the original perl code - pick an I-partition of 32, and find all S-partitions
 of the shape with pieces of those sizes; store only the solutions for
@@ -23,6 +24,24 @@ next I-partition.
 Maybe we'll still run out of memory, but hopefully we'll be close enough
 to a complete solution by then to have a good estimate of how much we
 need room for.
+---
+Tried that, but it doesn't help: we reach pretty much all the same
+S-partitions on one I-partition as the next, so we record all the same
+partials (for the same memory use); we just take much longer.
+
+I think that means we simply can't afford to de-dupe by recording seen
+partials. Maybe we can avoid that instead by canon - if we can select
+a canonicalization process that ensures each partial appears at least
+once in already-canonical form, we don't need to say "skip if seen", we
+can instead say "skip unless canonical".
+
+That means we must give up the prev_index optimization, that stops us
+trying the j-th piece of size k when a prior level has already tried
+it: what was uncanonical at that level may be canonical when inserted
+to a fuller set. (We could maybe recover it if we could traverse pieces
+in canonical order, but we can't do that without expanding the symmetries,
+and we already decided that'd require 10GB.)
+]]]
 
 After that, next step is to add code to convert a vec_t into an array of
 graph_t, to find the number of ways to partition a graph_t, and to use
