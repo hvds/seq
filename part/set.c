@@ -29,6 +29,7 @@ seth_tree* seth_new(void) {
 	t->sa_size = 100;
 	t->sa_used = 0;
 	t->setarena = (set_t*)malloc(t->sa_size * sizeof(set_t));
+	t->seen = 0;
 	return t;
 }
 
@@ -42,6 +43,7 @@ void seth_reset(seth_tree* t) {
 	t->sha_used = 0;
 	t->sha_root = 0;
 	t->sa_used = 0;
+	t->seen = 0;
 }
 
 seth_tree* seth_dup(seth_tree* source) {
@@ -221,6 +223,7 @@ seth_insert_t seth_seen(seth_tree* tree, set_t* set) {
 	  case SETH_GROW:
 		return SETH_OK;
 	  case SETH_EXISTS:
+		++tree->seen;
 		return SETH_EXISTS;
 	}
 }
