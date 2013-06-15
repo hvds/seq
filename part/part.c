@@ -63,25 +63,31 @@ void teardown_steps(void) {
   If canonical, I<ssto> is also set to the subset of the symmetries in
   I<ssfrom> that map I<set> to itself.
 
-  FIXME: this currently uses a broken definition of 'canonical': we want
-  to prune the recursion at any point that we reach a noncanonical set,
-  but with the current definition we may have a noncanonical set that
-  will become canonical (and therefore should be recursed to) on adding
-  another piece. For n=4, the set aabbccd**e*effd* is an example.
-  To fix this, rather than a simple lexical compare of the string before
-  and after applying the mapping for a symmetry, compare piece by piece:
-  this ensures that canonicalness remains stable under the addition of
-  pieces as long as the first node of the new piece appears after the
-  first node of any existing piece.
+  Note we must compare pieces in strict order (rather than just comparing
+  the full string lexically), to ensure every canonical partial has a
+  canonical predecessor.
 */
-int canonicalize(set_t* set, sym_set_t* ssfrom, sym_set_t* ssto) {
+int canonicalize(
+	set_t* set, uint piece_size, uint piece_count,
+	sym_set_t* ssfrom, sym_set_t* ssto
+) {
 	uint i, sym_i, ssend;
 	uint seen, mapping[NODES], source, dest;
 	sym_t* sym;
+	uint pivot, broken_index;
+	int broken_value;
+	uint seen_index[NODES], piece_index[NODES];
+	uint cmp;
 
+	memset(seen_index, 0, sizeof(seen_index));
 	/* Make a copy with 0 mapped to NODES, so we sort the way we want to */
-	for (i = 0; i < NODES; ++i)
-		solution->p[i] = set->p[i] ? set->p[i] : NODES;
+	for (i = 0; i < NODES; ++i) {
+		uint offset = set->p[i];
+		if (!offset)
+			continue;
+		--offset;
+		piece_index[offset * piece_size + seen_index[offset]++] = i;
+	}
 
 	ssend = ssfrom->count;
 	ssto->count = 0;
@@ -89,19 +95,48 @@ int canonicalize(set_t* set, sym_set_t* ssfrom, sym_set_t* ssto) {
 		sym = sym_map(ssfrom->index[sym_i]);
 		seen = 0;
 		memset(mapping, 0, sizeof(mapping));
+
+		pivot = 0;
+		broken_value = 0;
+		broken_index = piece_count;
+		memset(seen_index, 0, piece_count * sizeof(uint));
 		for (i = 0; i < NODES; ++i) {
 			source = set->p[sym->map[i]];
-			dest = source
-				? mapping[source - 1]
-					? mapping[source - 1]
-					: (mapping[source - 1] = ++seen)
-				: NODES;
-			/* if this map sorts earlier, the original is not canonical */
-			if (dest < solution->p[i])
-				return 0;
-			/* if this map sorts later, it's fine, but not an identity */
-			if (dest > solution->p[i])
+			if (!source)
+				continue;
+			if (!mapping[source - 1])
+				mapping[source - 1] = ++seen;
+			dest = mapping[source - 1] - 1;
+			if (dest >= broken_index)
+				continue;
+			cmp = piece_index[dest * piece_size + seen_index[dest]++];
+			if (cmp != i) {
+				broken_value = (cmp > i) ? -1 : 1;
+				broken_index = dest;
+				if (pivot < broken_index)
+					continue;
+				if (broken_value < 0)
+					return 0;
 				goto NOT_IDENTITY;
+			}
+
+			if (dest > pivot)
+				continue;
+			if (seen_index[dest] < piece_size)
+				continue;
+			/* we have exactly matched the pivot piece */
+			while (++pivot < piece_count) {
+				if (pivot == broken_index) {
+					if (broken_value < 0) {
+						return 0;
+					}
+					goto NOT_IDENTITY;
+				}
+				if (seen_index[pivot] < piece_size)
+					break;
+			}
+			if (pivot >= piece_count)
+				break;
 		}
 		/* if we fall through it's an identity, so preserve it */
 		ssto->index[ssto->count++] = ssfrom->index[sym_i];
@@ -141,16 +176,19 @@ void check_solution(uint level) {
 inline int insert_piece(uint level, vec_t* piece) {
 	step_t* step = &(steps[level]);
 	step_t* prev = &(steps[level - 1]);
-	uint parent;
+	uint parent, piece_count;
 	if (step->piece_size == prev->piece_size) {
 		parent = prev->parent;
-		set_append(&(step->set), &(prev->set), piece, level - parent);
+		piece_count = level - parent;
+		set_append(&(step->set), &(prev->set), piece, piece_count);
 	} else {
+		piece_count = 1;
 		parent = level - 1;
 		set_init(&(step->set), piece);
 	}
 	step->parent = parent;
-	return canonicalize(&(step->set), steps[parent].ss, step->ss);
+	return canonicalize(&(step->set), step->piece_size, piece_count,
+			steps[parent].ss, step->ss);
 }
 
 void try_recurse(uint prev_level) {
