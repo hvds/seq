@@ -6,7 +6,7 @@
 #include "clock.h"
 #include <assert.h>
 
-#define REPORT_MASK ((1 << 18) - 1)
+#define REPORT_MASK ((1 << 20) - 1)
 
 counter sym_result = 0;
 counter all_result = 0;
@@ -77,7 +77,7 @@ int canonicalize(
 	uint pivot, broken_index;
 	int broken_value;
 	uint seen_index[NODES], piece_index[NODES];
-	uint cmp;
+	uint cmp, next;
 
 	memset(seen_index, 0, sizeof(seen_index));
 	/* Make a copy with 0 mapped to NODES, so we sort the way we want to */
@@ -99,8 +99,11 @@ int canonicalize(
 		pivot = 0;
 		broken_value = 0;
 		broken_index = piece_count;
+		next = piece_index[0];
 		memset(seen_index, 0, piece_count * sizeof(uint));
 		for (i = 0; i < NODES; ++i) {
+			if (i > next)
+				goto NOT_IDENTITY;
 			source = set->p[sym->map[i]];
 			if (!source)
 				continue;
@@ -122,8 +125,10 @@ int canonicalize(
 
 			if (dest > pivot)
 				continue;
-			if (seen_index[dest] < piece_size)
+			if (seen_index[dest] < piece_size) {
+				next = piece_index[dest * piece_size + seen_index[dest]];
 				continue;
+			}
 			/* we have exactly matched the pivot piece */
 			while (++pivot < piece_count) {
 				if (pivot == broken_index) {
@@ -137,6 +142,7 @@ int canonicalize(
 			}
 			if (pivot >= piece_count)
 				break;
+			next = piece_index[pivot * piece_size + seen_index[pivot]];
 		}
 		/* if we fall through it's an identity, so preserve it */
 		ssto->index[ssto->count++] = ssfrom->index[sym_i];
