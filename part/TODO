@@ -7,40 +7,19 @@ element, plus 32 bytes of data).
 I can't tell for sure because the coredump was truncated, but I'm guessing
 we tried to grow one of the trees by 50%, and blew the 2GB limit.
 
-It might be possible to minimize the overhead per solution, at a smallish
-cost - store the solution in a packed representation using 5 bits per offset
-(saves 12 bytes), store the solution inline in the element node (saves 4)
-and stuff the balance value into the top bit of the left and right offsets
-(saves 4). But the work probably isn't worth doing, it'll just let us run
-a few more hours before we blow up - either on max 3 or on max 4.
+We simply can't afford to de-dupe by recording seen partials, so we must
+instead de-dupe by canon - we must select a canonicalization process that
+ensures each partial appears at least once in already-canonical form.
 
 [[[
-So the next step is to rewrite the main recursion along the same lines as
-the original perl code - pick an I-partition of 32, and find all S-partitions
-of the shape with pieces of those sizes; store only the solutions for
-this I-partition for deduplication, and discard them for starting on the
-next I-partition.
+This is partially working now, but we need to further refine the definition
+of what is canonical - ensuring "each partial appears at least once in
+already-canonical form" requires a canonicalization that guarantees to be
+progressive, ie that guarantees every canonical partial of C<k+1> pieces
+has a canonical predecessor of C<k> pieces.
 
-Maybe we'll still run out of memory, but hopefully we'll be close enough
-to a complete solution by then to have a good estimate of how much we
-need room for.
----
-Tried that, but it doesn't help: we reach pretty much all the same
-S-partitions on one I-partition as the next, so we record all the same
-partials (for the same memory use); we just take much longer.
-
-I think that means we simply can't afford to de-dupe by recording seen
-partials. Maybe we can avoid that instead by canon - if we can select
-a canonicalization process that ensures each partial appears at least
-once in already-canonical form, we don't need to say "skip if seen", we
-can instead say "skip unless canonical".
-
-That means we must give up the prev_index optimization, that stops us
-trying the j-th piece of size k when a prior level has already tried
-it: what was uncanonical at that level may be canonical when inserted
-to a fuller set. (We could maybe recover it if we could traverse pieces
-in canonical order, but we can't do that without expanding the symmetries,
-and we already decided that'd require 10GB.)
+Failing to do so means the current code, while finding all solutions for
+n <= 3, misses about 10% of solutions for n=4.
 ]]]
 
 After that, next step is to add code to convert a vec_t into an array of
