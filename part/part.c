@@ -5,7 +5,7 @@
 #include "pieces.h"
 #include "clock.h"
 
-#define REPORT_MASK ((1 << 20) - 1)
+#define REPORT_MASK ((1 << 24) - 1)
 
 counter sym_result = 0;
 counter all_result = 0;
@@ -197,6 +197,17 @@ void check_solution(uint level) {
 	++sym_result;
 	all_result += syms;
 
+#ifdef QUIET
+	/* build the printable set only if needed */
+	if (! (sym_result & REPORT_MASK)) {
+		set_zero(&combined);
+		for (i = level; i > 0; i = steps[i].parent)
+			set_merge(&(steps[i].set), &combined, steps[i].parent);
+		fprintf(stderr, "%llu: (%u) ", sym_result, syms);
+		fprint_set(stderr, &combined);
+		fprintf(stderr, " (%.2f)\n", GTIME);
+	}
+#else
 	set_zero(&combined);
 	for (i = level; i > 0; i = steps[i].parent)
 		set_merge(&(steps[i].set), &combined, steps[i].parent);
@@ -209,6 +220,7 @@ void check_solution(uint level) {
 		fprint_set(stderr, &combined);
 		fprintf(stderr, " (%.2f)\n", GTIME);
 	}
+#endif
 }
 
 inline int insert_piece(uint level, vec_t* piece) {
