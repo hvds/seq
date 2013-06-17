@@ -4,7 +4,6 @@
 #include "symmetries.h"
 #include "pieces.h"
 #include "clock.h"
-#include <assert.h>
 
 #define REPORT_MASK ((1 << 20) - 1)
 
@@ -74,84 +73,118 @@ int canonicalize(
 	uint i, sym_i, ssend;
 	uint seen, mapping[NODES], source, dest;
 	sym_t* sym;
-	uint pivot, broken_index;
-	int broken_value;
-	uint seen_index[NODES], piece_index[NODES];
-	uint cmp, next;
-
-	memset(seen_index, 0, sizeof(seen_index));
-	/* Make a copy with 0 mapped to NODES, so we sort the way we want to */
-	for (i = 0; i < NODES; ++i) {
-		uint offset = set->p[i];
-		if (!offset)
-			continue;
-		--offset;
-		piece_index[offset * piece_size + seen_index[offset]++] = i;
-	}
 
 	ssend = ssfrom->count;
 	ssto->count = 0;
-	for (sym_i = 0; sym_i < ssend; ++sym_i) {
-		sym = sym_map(ssfrom->index[sym_i]);
-		seen = 0;
-		memset(mapping, 0, sizeof(mapping));
 
-		pivot = 0;
-		broken_value = 0;
-		broken_index = piece_count;
-		next = piece_index[0];
-		memset(seen_index, 0, piece_count * sizeof(uint));
-		for (i = 0; i < NODES; ++i) {
-			if (i > next)
-				goto NOT_IDENTITY;
-			source = set->p[sym->map[i]];
-			if (!source)
-				continue;
-			if (!mapping[source - 1])
-				mapping[source - 1] = ++seen;
-			dest = mapping[source - 1] - 1;
-			if (dest >= broken_index)
-				continue;
-			cmp = piece_index[dest * piece_size + seen_index[dest]++];
-			if (cmp != i) {
-				broken_value = (cmp > i) ? -1 : 1;
-				broken_index = dest;
-				if (pivot < broken_index)
-					continue;
-				if (broken_value < 0)
+	if (piece_count == 1) {
+		/* the original faster code is safe for a single piece */
+
+		/* Make a copy with 0 mapped to NODES, so we sort the way we want to */
+		for (i = 0; i < NODES; ++i)
+			solution->p[i] = set->p[i] ? set->p[i] : NODES;
+
+		for (sym_i = 0; sym_i < ssend; ++sym_i) {
+			sym = sym_map(ssfrom->index[sym_i]);
+			seen = 0;
+			memset(mapping, 0, sizeof(mapping));
+			for (i = 0; i < NODES; ++i) {
+				source = set->p[sym->map[i]];
+				dest = source
+					? mapping[source - 1]
+						? mapping[source - 1]
+						: (mapping[source - 1] = ++seen)
+					: NODES;
+				/* if this map sorts earlier, the original is not canonical */
+				if (dest < solution->p[i])
 					return 0;
-				goto NOT_IDENTITY;
+				/* if this map sorts later, it's fine, but not an identity */
+				if (dest > solution->p[i])
+					goto NOT_IDENTITY1;
 			}
-
-			if (dest > pivot)
-				continue;
-			if (seen_index[dest] < piece_size) {
-				next = piece_index[dest * piece_size + seen_index[dest]];
-				continue;
-			}
-			/* we have exactly matched the pivot piece */
-			while (++pivot < piece_count) {
-				if (pivot == broken_index) {
-					if (broken_value < 0) {
-						return 0;
-					}
-					goto NOT_IDENTITY;
-				}
-				if (seen_index[pivot] < piece_size)
-					break;
-			}
-			if (pivot >= piece_count)
-				break;
-			next = piece_index[pivot * piece_size + seen_index[pivot]];
+			/* if we fall through it's an identity, so preserve it */
+			ssto->index[ssto->count++] = ssfrom->index[sym_i];
+		  NOT_IDENTITY1:
+			;
 		}
-		/* if we fall through it's an identity, so preserve it */
-		ssto->index[ssto->count++] = ssfrom->index[sym_i];
-	  NOT_IDENTITY:
-		;
+	} else {
+		uint pivot, broken_index;
+		int broken_value;
+		uint seen_index[NODES], piece_index[NODES];
+		uint cmp, next;
+
+		memset(seen_index, 0, sizeof(seen_index));
+		/* Make a copy with 0 mapped to NODES, so we sort the way we want to */
+		for (i = 0; i < NODES; ++i) {
+			uint offset = set->p[i];
+			if (!offset)
+				continue;
+			--offset;
+			piece_index[offset * piece_size + seen_index[offset]++] = i;
+		}
+
+		ssend = ssfrom->count;
+		ssto->count = 0;
+		for (sym_i = 0; sym_i < ssend; ++sym_i) {
+			sym = sym_map(ssfrom->index[sym_i]);
+			seen = 0;
+			memset(mapping, 0, sizeof(mapping));
+
+			pivot = 0;
+			broken_value = 0;
+			broken_index = piece_count;
+			next = piece_index[0];
+			memset(seen_index, 0, piece_count * sizeof(uint));
+			for (i = 0; i < NODES; ++i) {
+				if (i > next)
+					goto NOT_IDENTITYn;
+				source = set->p[sym->map[i]];
+				if (!source)
+					continue;
+				if (!mapping[source - 1])
+					mapping[source - 1] = ++seen;
+				dest = mapping[source - 1] - 1;
+				if (dest >= broken_index)
+					continue;
+				cmp = piece_index[dest * piece_size + seen_index[dest]++];
+				if (cmp != i) {
+					broken_value = (cmp > i) ? -1 : 1;
+					broken_index = dest;
+					if (pivot < broken_index)
+						continue;
+					if (broken_value < 0)
+						return 0;
+					goto NOT_IDENTITYn;
+				}
+
+				if (dest > pivot)
+					continue;
+				if (seen_index[dest] < piece_size) {
+					next = piece_index[dest * piece_size + seen_index[dest]];
+					continue;
+				}
+				/* we have exactly matched the pivot piece */
+				while (++pivot < piece_count) {
+					if (pivot == broken_index) {
+						if (broken_value < 0) {
+							return 0;
+						}
+						goto NOT_IDENTITYn;
+					}
+					if (seen_index[pivot] < piece_size)
+						break;
+				}
+				if (pivot >= piece_count)
+					break;
+				next = piece_index[pivot * piece_size + seen_index[pivot]];
+			}
+			/* if we fall through it's an identity, so preserve it */
+			ssto->index[ssto->count++] = ssfrom->index[sym_i];
+		  NOT_IDENTITYn:
+			;
+		}
 	}
 	/* if we get through the gauntlet, we are canonical */
-	assert(ssto->count > 0);
-	assert(0 == (sym_count % ssto->count));
 	return 1;
 }
 
@@ -160,7 +193,6 @@ void check_solution(uint level) {
 	set_t combined;
 	uint i;
 	uint syms = sym_count / step->ss->count;
-	assert(0 == (sym_count % step->ss->count));
 
 	++sym_result;
 	all_result += syms;
