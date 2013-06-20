@@ -4,8 +4,13 @@
 #include "symmetries.h"
 #include "pieces.h"
 #include "clock.h"
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
 
 #define REPORT_MASK ((1 << 24) - 1)
+#define STR_EVALUATE(x) #x
+#define STRINGIFY(x) STR_EVALUATE(x)
 
 counter sym_result = 0;
 counter all_result = 0;
@@ -260,11 +265,6 @@ void try_recurse(uint prev_level) {
 	for (size = 2; size <= max_size; ++size) {
 #endif
 		uint pi, end_index;
-#ifdef NOPREP
-		if (prev_level == 0) {
-			prep_pieces(size);
-		}
-#endif
 		step->piece_size = size;
 		step->remain = prev->remain - size;
 		if (step->remain == 0) {
@@ -277,7 +277,7 @@ void try_recurse(uint prev_level) {
 		end_index = piece_array[size + 1];
 		for (pi = piece_array[size]; pi < end_index; ++pi) {
 			piece_t* this_piece = pieces_vec(pi);
-			sym_set_t* ss = this_piece->ss;
+			sym_set_t* ss = SSO(this_piece->sso);
 			uint sym_c = ss->count;
 			uint sym_i;
 			for (sym_i = 0; sym_i < sym_c; ++sym_i) {
@@ -298,6 +298,66 @@ void try_recurse(uint prev_level) {
 		}
 	}
 }
+
+void import_pieces(char* filename) {
+	struct {
+		uint section;
+		uint size;
+	} section_header;
+	int expect = (1 << 0) | (1 << 1);
+	int seen = 0;
+	FILE* f = fopen(filename, "r");
+	int read_ok;
+
+	if (!f) {
+		fprintf(stderr, "%s: %s (%d)\n", filename, strerror(errno), errno);
+		exit(-1);
+	}
+	while (1) {
+		read_ok = fread(&section_header, sizeof(section_header), 1, f);
+		if (read_ok < 1) {
+			fprintf(stderr, "%s: %s (%d)\n", filename, strerror(errno), errno);
+			fclose(f);
+			exit(-1);
+		}
+		switch (section_header.section) {
+		  case 0:
+			if (seen & (1 << 0)) {
+				fprintf(stderr, "%s: repeated section 0\n", filename);
+				fclose(f);
+				exit(-1);
+			}
+			load_sym_sets(f, section_header.size);
+			seen = seen | (1 << 0);
+			break;
+		  case 1:
+			if (seen & (1 << 1)) {
+				fprintf(stderr, "%s: repeated section 1\n", filename);
+				fclose(f);
+				exit(-1);
+			}
+			load_pieces(f, section_header.size);
+			seen = seen | (1 << 1);
+			break;
+		  case 2:
+			if (seen == expect) {
+				fclose(f);
+				return;
+			}
+			fprintf(stderr,
+				"%s: expected sections %d before footer, got sections %d\n",
+				filename, expect, seen
+			);
+			fclose(f);
+			exit(-1);
+		  default:
+			fprintf(stderr, "%s: unexpected section %#08x\n",
+					filename, section_header.section);
+			fclose(f);
+			exit(-1);
+		}
+	}
+}
  
 void teardown(void) {
 	teardown_steps();
@@ -309,11 +369,14 @@ void teardown(void) {
 }
 
 void setup(void) {
+	char* piece_file = "results/p" STRINGIFY(NBASE);
+
 	setup_clock();
 	setup_vec();
 	setup_symmetries();
 	setup_sym_set();
 	setup_pieces();
+	import_pieces(piece_file);
 	setup_steps();
 }
 
@@ -324,27 +387,10 @@ int main(int argc, char** argv) {
 
 	setup();
 
-#ifndef NOPREP
-	t1 = TIMETHIS({
-		for (first = 1; first <= NODES; ++first) {
-			t2 = TIMETHIS({
-				prep_pieces(first);
-			});
-			fprintf(stderr, "pieces %u: %u [%u symsets] (%.2f)\n",
-					first, piece_array[first + 1] - piece_array[first],
-					sym_set_count, t2);
-		}
-	});
-	fprintf(stderr, "Total pieces: %u (%.2f)\n", pieces_used, t1);
-	reset_clock();
-#endif
-
-#ifndef PIECE_ONLY
 	t1 = TIMETHIS({
 		try_recurse(0);
 	});
 	printf("%u: Total %llu/%llu (%.2f)\n", NBASE, sym_result, all_result, t1);
-#endif
 	teardown();
 	return 0;
 }
