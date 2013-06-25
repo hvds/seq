@@ -40,6 +40,9 @@ build4: $(BUILDCFILES) $(HFILES)
 build5: $(BUILDCFILES) $(HFILES)
 	gcc -DNBASE=5 -o build5 $(CFLAGS) $(BUILDCFILES)
 
+clean:
+	rm $(PART) $(BUILD)
+
 allpart: $(PART)
 
 allbuild: $(BUILD)
