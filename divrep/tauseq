@@ -155,8 +155,8 @@ sub fix_square {
 		last if $x >= $f;	# divisors are returned in ascending order
 		my $fx = factorint($x);
 		my $rx = rad_factor($fx);
-		$debug && warn("Would try fix_square($x), but 0(mod $rx) is not disallowed.\n"),
-		next unless $c->disallowed($rx, 0);
+		$debug && warn("Would try fix_square($x), but 0(mod p|$rx) are not all disallowed.\n"),
+		next if grep !$c->disallowed($_, 0), @{ $fx->[0] };
 		my $xrx = $x * $rx;
 		$debug && warn("Would try fix_square($x), but $xrx does not divide $n.\n"),
 		next if gcd($xrx, $n) < $xrx;
