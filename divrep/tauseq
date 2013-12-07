@@ -539,6 +539,23 @@ OUT
 # interesting, since we can use it to start making probabilistic predictions
 # about when we'll find a solution.)
 #
+# TODO: We can improve the prime special-case by not doing a full isprime()
+# check for each candidate in turn, but rather doing single rounds of
+# maybe_prime() for each in turn looking for cheaper opportunities to reject
+# before doing the more expensive full check on a realistic set of candidates.
+# If additional rounds of maybe_prime can avoid repeating work, we could even
+# split the work into more than two passes:
+#   my @testers = (
+#       map(sub { maybe_prime($_[0], $_) }, 1 .. $MAX),
+#       sub { isprime($_) },
+#   );
+#   for my $tester (@testers) {
+#       for my $candidate (@candidates) {
+#           last THIS_SET unless $tester->($candidate);
+#       }
+#   }
+#   return \@candidates;   # found a solution
+#
 sub prepare_tester {
 	my($c) = @_;
 	my($n, $f, $tau, $min) = ($c->n, $c->f, $c->tau, $c->min);
