@@ -1,0 +1,30 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use Math::Pari qw/ PARI /;
+
+my $opt_f = 'results.rootseq';
+while (@ARGV && $ARGV[0] =~ /^-/) {
+	my $arg = shift @ARGV;
+	last if $arg eq '--';
+	($opt_f = $arg || shift(@ARGV)), next if $arg =~ s{^-f}{};
+	die "Unknown option '$arg'\n";
+}
+my($base, $mul) = @ARGV;
+
+open(my $fh, '<', $opt_f) or die "$opt_f: $!";
+my $state = 0;
+while (defined(my $line = <$fh>)) {
+	if ($state == 0) {
+		$line =~ /^n=(\d+)/ or next;
+		$1 == $base or next;
+		$state = 1;
+		$line =~ s{^(n=)(\d+)}{$1 . ($2 * $mul)}e;
+		print $line;
+	} elsif ($state == 1) {
+		$line =~ /^\d+:/ or last;
+		$line =~ s{^(\d+:)(\d+)}{$1 . (PARI($2) * $mul)}e;
+		print $line;
+	}
+}
+close $fh;
+die "Couldn't find entry for $base" unless $state;
