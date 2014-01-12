@@ -562,46 +562,42 @@ OUT
 sub prepare_tester {
 	my($c) = @_;
 	my($n, $f, $tau, $min) = ($c->n, $c->f, $c->tau, $c->min);
-	if ($tau == 2) {
-		# all the targets must be prime; it may still be useful to test them
-		# in reverse order, but I suspect the faster checking on smaller
-		# numbers more than makes up for the reduced chance they are nonprime
-		print "320 Testers: all prime, ascending order\n";
-		return [ map {
-			my $k = $_;
-			sub { isprime($n + $_[0] * $k) }
-		} 1 .. $f - 1 ];
-	}
 	my $np = [ map $_->[0], factor_exp($n) ];
-	my(%seen, @tester);
-	if (
-		$tau == 4
-		&& @$np == 2
-	) {
-		for my $p (@$np) {
-			next if $min <= $p ** 3;
-			my $q = $n / $p;
-			for my $xi (1 .. int(($f - 1) / $p)) {
-				my $ki = $p * $xi;
-				next if $seen{$ki}++;
-				# pq + xpd = p(q+xd)
-				push @tester, [ "p$ki", sub { isprime($q + $xi * $_[0]) } ];
-			}
-		}
-	}
-	# For the rest, let's put what we know most about first
-	my @known = map {
-		my $k = $_;
+	my %t;
+
+	my $all_prime = ($tau == 2) ? 1 : 0;
+	my $short_prime = ($tau == 4 && @$np == 2) ? 1 : 0;
+	my $fixed = @$opt_ts ? 1 : 0;
+
+	for my $k (1 .. $f - 1) {
+		my($legend, $tester);
 		my $g = gcd($k, $n);
-		my $tg = tau($g);
-		[ $k, $g, $tg ];
-	} grep !$seen{$_}, 1 .. $f - 1;
-	push @tester, map {
-		my $k = $_->[0];
-		[ $k, sub { $tau == tau($n + $_[0] * $k) } ]
-	} sort { $b->[2] <=> $a->[2] || $b->[1] <=> $a->[1] } @known;
-	printf "320 Testers: [%s]\n", join ', ', map $_->[0], @tester;
-	return [ map $_->[1], @tester ];
+		if ($all_prime) {
+			$legend = $k;
+			$tester = sub { is_prime($n + $_[0] * $k) };
+		} elsif ($short_prime && $g > 1 && $min > $g ** 3) {
+			my $gn = $n / $g;
+			my $gk = $k / $g;
+			$legend = "p$k";
+			$tester = sub { is_prime($gn + $_[0] * $gk) };
+		} else {
+			$legend = $k;
+			$tester = sub { $tau == tau($n + $_[0] * $k) };
+		}
+		$t{$k} = [ $legend, $tester ];
+	}
+
+	my %pref = map +($_ => gcd($n, $_)), 1 .. $f - 1;
+	my @order = map {
+		my $v = $_ + 0;
+		die "Invalid test order '$_'" unless delete $pref{$v};
+		$v
+	} @$opt_ts;
+	push @order, sort { $pref{$b} <=> $pref{$a} || $a <=> $b } keys %pref;
+	printf "320 Testers: %s\n",
+		($all_prime && !$fixed) ? 'all prime, ascending order'
+		: join ', ', map $_->[0], @t{@order};
+	return [ map $_->[1], @t{@order} ];
 }
 
 sub report_seq {
