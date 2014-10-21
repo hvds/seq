@@ -35,32 +35,53 @@ my(%pend, %free);
 # Initialize
 store_value(1, []);
 
-ELEMENT: while (1) {
+while (1) {
     # Restore to the %free list any prime factors whose coprimality
     # requirement has expired
-    my $depend = delete $pend{$index};
-    $free{$_} = 1 for @{ $depend || [] };
+    mark_free($_) for @{ delete($pend{$index}) || [] };
 
-    N: for my $n (1 .. $nextp - 1) {
-        # Skip if we've already included $n in the sequence
-        next N if vec($seen, $n, 1);
+	unless (find_free()) {
+		# We found nothing, pick the next prime
+		store_value($nextp, [ $nextp ]);
+		$nextp = nextprime($nextp + 1);
+	}
+}
 
-        # Simple but slow: trial division by free primes would almost
-        # certainly be quicker
-        my $primes = primes($n);
-        for (@$primes) {
-            # Skip if we're divisible by any currently suppressed prime
-            next N unless $free{$_};
-        }
+# Find a free value less than $nextp, save it and return TRUE; or return FALSE
+# if there's no free value to find.
+sub find_free {
+    for my $n (1 .. $nextp - 1) {
+        my $primes = is_free($n) or next;
 
         # We have a result
         store_value($n, $primes);
-        next ELEMENT;
+        return 1;
     }
-    # We found nothing, pick the next prime
-    store_value($nextp, [ $nextp ]);
-    $nextp = nextprime($nextp + 1);
-    next ELEMENT;
+    return 0;
+}
+
+# Check if the given n is free; if it is, return its arrayref of distinct
+# prime factors, else return C<undef>.
+sub is_free {
+    my($n) = @_;
+
+    # Skip if we've already included $n in the sequence
+    return undef if vec($seen, $n, 1);
+
+    # Simple but slow: trial division by free primes would almost
+    # certainly be quicker
+    my $primes = primes($n);
+    for (@$primes) {
+        # Skip if we're divisible by any currently suppressed prime
+        return undef unless $free{$_};
+    }
+    return $primes;
+}
+
+# Mark the prime factor p as free.
+sub mark_free {
+    my($p) = @_;
+    $free{$p} = 1;
 }
 
 sub store_value {
