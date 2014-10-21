@@ -29,14 +29,14 @@ my $nextp = 2;
 
 # Keep track of coprimality requirements by remembering the index at which
 # suppressed prime factors become free again, and the current list of free
-# prime factors
-my(%pend, %free);
+# prime factors (split into those smaller than sqrt($nextp) and those bigger)
+my(%pend, %smallfree, %bigfree, $nextsq);
 
 # Initialize
 store_value(1, []);
 
 while (1) {
-    # Restore to the %free list any prime factors whose coprimality
+    # Restore to the free lists any prime factors whose coprimality
     # requirement has expired
     mark_free($_) for @{ delete($pend{$index}) || [] };
 
@@ -44,13 +44,31 @@ while (1) {
 		# We found nothing, pick the next prime
 		store_value($nextp, [ $nextp ]);
 		$nextp = nextprime($nextp + 1);
+        if ($nextsq && $nextp > $nextsq) {
+            big_to_small();
+        }
 	}
+}
+
+# Move any primes from %bigfree to %smallfree that are now less than
+# sqrt($nextp), and reset $nextsq to the square of the smallest remaining
+# big free.
+sub big_to_small {
+    $nextsq = undef;
+    for my $p (keys %bigfree) {
+        my $sq = $p * $p;
+        if ($sq > $nextp) {
+            $nextsq = $sq if !$nextsq || $nextsq > $sq;
+        } else {
+            $smallfree{$p} = delete $bigfree{$p};
+        }
+    }
 }
 
 # Find a free value less than $nextp, save it and return TRUE; or return FALSE
 # if there's no free value to find.
 sub find_free {
-    return 0 unless keys %free;
+    return 0 unless keys %smallfree;
     for my $n (1 .. $nextp - 1) {
         my $primes = is_free($n) or next;
 
@@ -74,7 +92,7 @@ sub is_free {
     my $primes = primes($n);
     for (@$primes) {
         # Skip if we're divisible by any currently suppressed prime
-        return undef unless $free{$_};
+        return undef unless $smallfree{$_} || $bigfree{$_};
     }
     return $primes;
 }
@@ -82,13 +100,23 @@ sub is_free {
 # Mark the prime factor p as free.
 sub mark_free {
     my($p) = @_;
-    $free{$p} = 1;
+    my $sq = $p * $p;
+    if ($sq < $nextp) {
+        $smallfree{$p} = 1;
+    } else {
+        $bigfree{$p} = 1;
+        if (!$nextsq || $sq < $nextsq) {
+            $nextsq = $sq;
+        }
+    }
 }
 
 # Mark the prime factor p as no longer free.
 sub mark_unfree {
     my($p) = @_;
-    delete $free{$p};
+    delete $smallfree{$p};
+    delete $bigfree{$p};
+    # No point resetting $nextsq
 }
 
 sub store_value {
@@ -103,7 +131,8 @@ sub store_value {
     push @{ $pend{$index + $suppress} }, @$primes;
     mark_unfree($_) for @$primes;
 
-    printf "%s %s (%s)\n", $index, $value, join ' ', sort { $a <=> $b } keys %free;
+    printf "%s %s (%s)\n", $index, $value, join ' ',
+            sort { $a <=> $b } keys(%smallfree), keys(%bigfree);
 }
 
 # Return an arrayref of the distinct primes dividing n
