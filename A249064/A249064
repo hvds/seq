@@ -1,0 +1,91 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use Math::Pari qw{ nextprime factorint };
+$| = 1;
+
+=head1 A249064 (and A090252)
+
+A249064 is the lexically first sequence of positive integers such that
+each element a(n) is coprime to the next a(n) elements.
+
+A090252 is the lexically first sequence of positive integers such that
+each element a(n) is coprime to the next n elements.
+
+Usage: run with no arguments to calculate A249064, or with "-n" to
+calculate A090252.
+
+=cut
+
+my $A090252;
+if (@ARGV && $ARGV[0] eq '-n') {
+    $A090252 = 1;
+}
+
+# The sequence so far, and a bit-vector of the integers already used
+my($index, $seen, @seq) = (0, '');
+
+# The next unused prime
+my $nextp = 2;
+
+# Keep track of coprimality requirements by remembering the index at which
+# suppressed prime factors become free again, and the current list of free
+# prime factors
+my(%pend, %free);
+
+# Initialize
+store_value(1, []);
+
+ELEMENT: while (1) {
+    # Restore to the %free list any prime factors whose coprimality
+    # requirement has expired
+    my $depend = delete $pend{$index};
+    $free{$_} = 1 for @{ $depend || [] };
+
+    N: for my $n (1 .. $nextp - 1) {
+        # Skip if we've already included $n in the sequence
+        next N if vec($seen, $n, 1);
+
+        # Simple but slow: trial division by free primes would almost
+        # certainly be quicker
+        my $primes = primes($n);
+        for (@$primes) {
+            # Skip if we're divisible by any currently suppressed prime
+            next N unless $free{$_};
+        }
+
+        # We have a result
+        store_value($n, $primes);
+        next ELEMENT;
+    }
+    # We found nothing, pick the next prime
+    store_value($nextp, [ $nextp ]);
+    $nextp = nextprime($nextp + 1);
+    next ELEMENT;
+}
+
+sub store_value {
+    my($value, $primes) = @_;
+    push @seq, $value;
+    ++$index;
+    vec($seen, $value, 1) = 1;
+
+    # These prime factors must now be suppressed for the next a(n) terms
+    # (or for the next n terms if calculating A090252).
+    my $suppress = $A090252 ? $index : $value;
+    push @{ $pend{$index + $suppress} }, @$primes;
+    delete @free{@$primes};
+
+    printf "%s %s (%s)\n", $index, $value, join ' ', sort { $a <=> $b } keys %free;
+}
+
+# Return an arrayref of the distinct primes dividing n
+# (Some dodging required to avoid Math::Pari memory mismanagement with
+# recent libpari versions.)
+sub primes {
+    my($n) = @_;
+    my($p, $pp) = @{ factorint($n) };
+    $pp = undef;
+    my $r = [ map "$_", @$p ];
+    $p = undef;
+    return $r;
+}
