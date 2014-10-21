@@ -50,6 +50,7 @@ while (1) {
 # Find a free value less than $nextp, save it and return TRUE; or return FALSE
 # if there's no free value to find.
 sub find_free {
+    return 0 unless keys %free;
     for my $n (1 .. $nextp - 1) {
         my $primes = is_free($n) or next;
 
@@ -84,6 +85,12 @@ sub mark_free {
     $free{$p} = 1;
 }
 
+# Mark the prime factor p as no longer free.
+sub mark_unfree {
+    my($p) = @_;
+    delete $free{$p};
+}
+
 sub store_value {
     my($value, $primes) = @_;
     push @seq, $value;
@@ -94,7 +101,7 @@ sub store_value {
     # (or for the next n terms if calculating A090252).
     my $suppress = $A090252 ? $index : $value;
     push @{ $pend{$index + $suppress} }, @$primes;
-    delete @free{@$primes};
+    mark_unfree($_) for @$primes;
 
     printf "%s %s (%s)\n", $index, $value, join ' ', sort { $a <=> $b } keys %free;
 }
