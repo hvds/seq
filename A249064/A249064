@@ -131,8 +131,9 @@ sub store_value {
     push @{ $pend{$index + $suppress} }, @$primes;
     mark_unfree($_) for @$primes;
 
-    printf "%s %s (%s)\n", $index, $value, join ' ',
-            sort { $a <=> $b } keys(%smallfree), keys(%bigfree);
+    my $signature = signature($value);
+    printf "%s %s [%s] (%s; %s; %s)\n", $index, $value, $signature,
+            $nextp, 0 + keys(%smallfree), 0 + keys(%bigfree);
 }
 
 # Return an arrayref of the distinct primes dividing n, dodging
@@ -142,4 +143,11 @@ sub primes {
     my(%p) = map +($_ => 1), factor($n);
     delete $p{1};
     return [ keys %p ];
+}
+
+sub signature {
+    my($n) = @_;
+    my %p;
+    ++$p{$_} for factor($n);
+    return join ':', map $p{$_}, sort { $a <=> $b } keys %p;
 }
