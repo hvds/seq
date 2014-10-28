@@ -19,6 +19,7 @@ while (defined(my $line = <$fh>)) {
 		$1 == $base or next;
 		$state = 1;
 		$line =~ s{^(n=)(\d+)}{$1 . ($2 * $mul)}e;
+		$line =~ s{(^n=\d+: \d+/)p}{${1}d};
 		print $line;
 	} elsif ($state == 1) {
 		$line =~ /^\d+:/ or last;
