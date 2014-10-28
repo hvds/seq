@@ -1,6 +1,6 @@
 #!/opt/maths/bin/perl -w
 use strict;
-use Math::Pari qw{ nextprime factorint };
+use Math::Prime::Util::GMP qw{ next_prime factor };
 $| = 1;
 
 =head1 A249064 (and A090252)
@@ -43,7 +43,7 @@ while (1) {
 	unless (find_free()) {
 		# We found nothing, pick the next prime
 		store_value($nextp, [ $nextp ]);
-		$nextp = nextprime($nextp + 1);
+		$nextp = next_prime($nextp);
         if ($nextsq && $nextp > $nextsq) {
             big_to_small();
         }
@@ -135,14 +135,11 @@ sub store_value {
             sort { $a <=> $b } keys(%smallfree), keys(%bigfree);
 }
 
-# Return an arrayref of the distinct primes dividing n
-# (Some dodging required to avoid Math::Pari memory mismanagement with
-# recent libpari versions.)
+# Return an arrayref of the distinct primes dividing n, dodging
+# special-cased "1 is prime"
 sub primes {
     my($n) = @_;
-    my($p, $pp) = @{ factorint($n) };
-    $pp = undef;
-    my $r = [ map "$_", @$p ];
-    $p = undef;
-    return $r;
+    my(%p) = map +($_ => 1), factor($n);
+    delete $p{1};
+    return [ keys %p ];
 }
