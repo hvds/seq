@@ -40,14 +40,14 @@ while (1) {
     # requirement has expired
     mark_free($_) for @{ delete($pend{$index}) || [] };
 
-	unless (find_free()) {
-		# We found nothing, pick the next prime
-		store_value($nextp, [ $nextp ]);
-		$nextp = next_prime($nextp);
+    unless (find_free()) {
+        # We found nothing, pick the next prime
+        store_value($nextp, [ $nextp ]);
+        $nextp = next_prime($nextp);
         if ($nextsq && $nextp > $nextsq) {
             big_to_small();
         }
-	}
+    }
 }
 
 # Move any primes from %bigfree to %smallfree that are now less than
@@ -68,7 +68,11 @@ sub big_to_small {
 # Find a free value less than $nextp, save it and return TRUE; or return FALSE
 # if there's no free value to find.
 sub find_free {
+    # if there are no small primes, we can only take $nextp
     my $c = keys %smallfree or return 0;
+
+    # if there's just 1 small prime p, we should find the least unused of
+    # (p^k, p^k . q, nextp) where q is any prime in %bigfree.
     if ($c == 1) {
         my($p) = keys %smallfree;
         my $best = $nextp;
