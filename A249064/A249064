@@ -68,7 +68,41 @@ sub big_to_small {
 # Find a free value less than $nextp, save it and return TRUE; or return FALSE
 # if there's no free value to find.
 sub find_free {
-    return 0 unless keys %smallfree;
+    my $c = keys %smallfree or return 0;
+    if ($c == 1) {
+        my($p) = keys %smallfree;
+        my $best = $nextp;
+        my $pp = $p;
+        my $primes;
+        while (($pp *= $p) < $best) {
+            next if vec($seen, $pp, 1);
+            $best = $pp;
+            $primes = [ $p ];
+            last;
+        }
+        # the smallest alternative is $p * sqrt($nextsq)
+        if ($primes && (!$nextsq || $best * $best < $nextsq * $p)) {
+            store_value($best, $primes);
+            return 1;
+        }
+        # now it'd be handy if we had bigfree sorted
+        for my $q (keys %bigfree) {
+            $pp = $q;
+            while (($pp *= $p) < $best) {
+                next if vec($seen, $pp, 1);
+                $best = $pp;
+                $primes = [ $p, $q ];
+                last;
+            }
+        }
+        if ($best < $nextp) {
+            store_value($best, $primes);
+            return 1;
+        }
+        return 0;
+    }
+
+    # $c > 1, go the slow way
     for my $n (1 .. $nextp - 1) {
         my $primes = is_free($n) or next;
 
