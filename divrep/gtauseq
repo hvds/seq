@@ -27,6 +27,8 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
 
 $| = 1;
 my($n, $f) = map MBI($_), @ARGV;
+$_ = ston($_) for ($opt_n, $opt_x);
+
 my $zone = MBI(1);
 my $tn = tau($n);
 my $c = Constraint->new(
@@ -42,7 +44,7 @@ my $c = Constraint->new(
 );
 
 $c = apply($c) or exit 0;
-printf <<OUT, $c->elapsed(), 'rootseq', $n, $f, $opt_n, $opt_x, $opt_c;
+printf <<OUT, $c->elapsed(), 'rootseq', $n, $f, ntos($opt_n), ntos($opt_x), $opt_c;
 300 Init %.2f: trying %s() for (%s, %s) in [%s, %s], checks up to mod %s
 OUT
 
@@ -53,7 +55,7 @@ if ($d) {
 200 f(%s, %s) = %s  (%.3fs)
 OUT
 } else {
-	printf <<OUT, $n, $f, $opt_x, $c->elapsed();
+	printf <<OUT, $n, $f, ntos($opt_x), $c->elapsed();
 500 f(%s, %s) > %s  (%.3fs)
 OUT
 }
@@ -654,4 +656,16 @@ sub factor_exp {
 	my($n) = @_;
 	return () if $n == 1;
 	return Math::Prime::Util::factor_exp($n);
+}
+
+sub ston {
+    my($s) = @_;
+    $s =~ s{e(\d+)}{"0" x $1}ie;
+    return MBI($s);
+}
+
+sub ntos {
+    my($n) = @_;
+    $n =~ s{(0+)$}{"e" . length($1)}e;
+    return $n;
 }
