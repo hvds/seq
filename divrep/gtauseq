@@ -10,19 +10,19 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 sub MBI { return Math::GMP->new(@_) }
 
 my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_ts)
-		= (0, 0, 0, 100000, 0, 0, []);
+        = (0, 0, 0, 100000, 0, 0, []);
 while (@ARGV && $ARGV[0] =~ /^-/) {
-	my $arg = shift @ARGV;
-	last if $arg eq '--';
-	Constraint->debug_more(), next if $arg eq '-d';
-	($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
-	($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
-	($opt_cp = $arg || shift(@ARGV)), next if $arg =~ s{^-cp}{};
-	($opt_cr = $arg || shift(@ARGV)), next if $arg =~ s{^-cr}{};
-	($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
-	($opt_ts = [ split /,/, $arg || shift(@ARGV) ]), next if $arg =~ s{^-ts}{};
-	($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t}{};
-	die "Unknown option '$arg'\n";
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    Constraint->debug_more(), next if $arg eq '-d';
+    ($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
+    ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
+    ($opt_cp = $arg || shift(@ARGV)), next if $arg =~ s{^-cp}{};
+    ($opt_cr = $arg || shift(@ARGV)), next if $arg =~ s{^-cr}{};
+    ($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
+    ($opt_ts = [ split /,/, $arg || shift(@ARGV) ]), next if $arg =~ s{^-ts}{};
+    ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t}{};
+    die "Unknown option '$arg'\n";
 }
 
 $| = 1;
@@ -32,15 +32,15 @@ $_ = ston($_) for ($opt_n, $opt_x);
 my $zone = MBI(1);
 my $tn = tau($n);
 my $c = Constraint->new(
-	'n' => $n,
-	'f' => $f,
-	'tell_count' => $opt_t,
-	't0' => scalar times(),
-	'min' => $opt_n,
-	'max' => $opt_x,
-	'check' => $opt_c,
-	'min_potency' => $opt_cr,
-	'tau' => $tn,
+    'n' => $n,
+    'f' => $f,
+    'tell_count' => $opt_t,
+    't0' => scalar times(),
+    'min' => $opt_n,
+    'max' => $opt_x,
+    'check' => $opt_c,
+    'min_potency' => $opt_cr,
+    'tau' => $tn,
 );
 
 $c = apply($c) or exit 0;
@@ -50,87 +50,87 @@ OUT
 
 my $d = rootseq($c);
 if ($d) {
-	report_seq($n, $f, $d);
-	printf <<OUT, $n, $f, $d, $c->elapsed();
+    report_seq($n, $f, $d);
+    printf <<OUT, $n, $f, $d, $c->elapsed();
 200 f(%s, %s) = %s  (%.3fs)
 OUT
 } else {
-	printf <<OUT, $n, $f, ntos($opt_x), $c->elapsed();
+    printf <<OUT, $n, $f, ntos($opt_x), $c->elapsed();
 500 f(%s, %s) > %s  (%.3fs)
 OUT
 }
 exit 0;
 
 sub apply {
-	my $c = shift;
-	my $tn = $c->tau;
+    my $c = shift;
+    my $tn = $c->tau;
 
-	for my $m (2 .. $c->check) {
+    for my $m (2 .. $c->check) {
 $c->debug && warn "apply $m\n";
-		my $fm = [ factor_exp($m) ];
-		next if $opt_cp && $fm->[-1][0] > $opt_cp;
+        my $fm = [ factor_exp($m) ];
+        next if $opt_cp && $fm->[-1][0] > $opt_cp;
 
-		#
-		# If n is prime, the only thing we can usefully do is avoid primes
-		#
-		if ($tn == 2) {
-			series($c, 0, $m, $m) if @$fm == 1 && $fm->[0][1] == 1;
-			next;
-		}
+        #
+        # If n is prime, the only thing we can usefully do is avoid primes
+        #
+        if ($tn == 2) {
+            series($c, 0, $m, $m) if @$fm == 1 && $fm->[0][1] == 1;
+            next;
+        }
 
-		#
-		# If we know n+kd must not divide m (maybe only beyond some maximum
-		# value for n+kd), use that to deny various values (mod m).
-		#
-		my $max = test_series($m, $tn);
-		series($c, 0, $m, $max) if $max >= 0;
+        #
+        # If we know n+kd must not divide m (maybe only beyond some maximum
+        # value for n+kd), use that to deny various values (mod m).
+        #
+        my $max = test_series($m, $tn);
+        series($c, 0, $m, $max) if $max >= 0;
 
-		#
-		# n+kd == m (mod m rad(m)) is suppressible when tau(m) ~| tau(n)
-		#
-		# Alternatively, when tau(n) / tau(m) is odd, we can fix any other
-		# factors to be quadratic residues.
-		#
-		test_m_rad_m($c, $m, $tn);
-	}
+        #
+        # n+kd == m (mod m rad(m)) is suppressible when tau(m) ~| tau(n)
+        #
+        # Alternatively, when tau(n) / tau(m) is odd, we can fix any other
+        # factors to be quadratic residues.
+        #
+        test_m_rad_m($c, $m, $tn);
+    }
 
-	#
-	# If we know n+kd fixes all but a square for some k, that's a hugely
-	# powerful optimisation. Applicability depends on other constraints,
-	# so we check for this last.
-	#
-	# TODO: Check if pending constraints would trigger this optimisation,
-	# and schedule it if so.
-	#
-	my $fix_square = fix_square($c, $n, $tn);
-	if ($fix_square) {
-		my($k, $ty2) = @$fix_square;
-		# we require d = y^2 - n/k, with tau(y^2) = ty2
-		warn "311 Fixing square d = y^2 - n/$k, tau(y^2) = $ty2\n";
-		$c = $c->fix_square($k, $ty2);
-	}
+    #
+    # If we know n+kd fixes all but a square for some k, that's a hugely
+    # powerful optimisation. Applicability depends on other constraints,
+    # so we check for this last.
+    #
+    # TODO: Check if pending constraints would trigger this optimisation,
+    # and schedule it if so.
+    #
+    my $fix_square = fix_square($c, $n, $tn);
+    if ($fix_square) {
+        my($k, $ty2) = @$fix_square;
+        # we require d = y^2 - n/k, with tau(y^2) = ty2
+        warn "311 Fixing square d = y^2 - n/$k, tau(y^2) = $ty2\n";
+        $c = $c->fix_square($k, $ty2);
+    }
 
-	return $c;
+    return $c;
 }
 
 #
 # disallow n+kd=v (mod m) for n+kd > max
 #
 sub series {
-	my($c, $v, $m, $max) = @_;
-	$max ||= 0;
-	($c->debug > 1) && warn "series ($v, $m, $max)\n";
-	my $n = $c->n;
-	for my $k (1 .. $c->f - 1) {
-		my $g = gcd($k, $m);
-		my($gv, $gvr) = ($v - $n)->bdiv($g);
-		next if $gvr != 0;	# No constraint: this modval can't happen
-		my $m2 = $m / $g;
-		my $inv = ($k / $g)->bmodinv($m2);
-		my $v2 = ($gv * $inv) % $m2;
-		$c->suppress($m2, $v2, int(($max - $n) / $k) + 1);
-	}
-	($c->debug > 1) && warn "series ($v, $m, $max): applied\n";
+    my($c, $v, $m, $max) = @_;
+    $max ||= 0;
+    ($c->debug > 1) && warn "series ($v, $m, $max)\n";
+    my $n = $c->n;
+    for my $k (1 .. $c->f - 1) {
+        my $g = gcd($k, $m);
+        my($gv, $gvr) = ($v - $n)->bdiv($g);
+        next if $gvr != 0;    # No constraint: this modval can't happen
+        my $m2 = $m / $g;
+        my $inv = ($k / $g)->bmodinv($m2);
+        my $v2 = ($gv * $inv) % $m2;
+        $c->suppress($m2, $v2, int(($max - $n) / $k) + 1);
+    }
+    ($c->debug > 1) && warn "series ($v, $m, $max): applied\n";
 }
 
 #
@@ -154,40 +154,40 @@ sub series {
 # since we are not simply dividing by f.
 #
 sub fix_square {
-	my($c, $n, $tn) = @_;
-	my $f = $c->f();
-	my $debug = $c->debug;
-	for my $x (all_factors($n)) {
-		last if $x >= $f;	# divisors are returned in ascending order
-		my $fx = [ factor_exp($x) ];
-		my $rx = rad_factor($fx);
-		$debug && warn("Would try fix_square($x), but 0(mod p|$rx) are not all disallowed.\n"),
-		next if grep !$c->disallowed($_, 0), map $_->[0], @$fx;
-		my $xrx = $x * $rx;
-		$debug && warn("Would try fix_square($x), but $xrx does not divide $n.\n"),
-		next if gcd($xrx, $n) < $xrx;
-		my $tx = tau_factor($fx);
-		my($tdiv, $trem) = $tn->bdiv($tx);
-		$debug && warn("Would try fix_square($x), but tau($x) does not divide $tn.\n"),
-		next if $trem;
-		$debug && warn("Would try fix_square($x), but $tn/tau($x) is even.\n"),
-		next if !($tdiv & 1);
-		$debug && warn("Will fix_square($x).\n"),
-		return [$x, $tdiv];
-	}
-	return undef;
+    my($c, $n, $tn) = @_;
+    my $f = $c->f();
+    my $debug = $c->debug;
+    for my $x (all_factors($n)) {
+        last if $x >= $f;    # divisors are returned in ascending order
+        my $fx = [ factor_exp($x) ];
+        my $rx = rad_factor($fx);
+        $debug && warn("Would try fix_square($x), but 0(mod p|$rx) are not all disallowed.\n"),
+        next if grep !$c->disallowed($_, 0), map $_->[0], @$fx;
+        my $xrx = $x * $rx;
+        $debug && warn("Would try fix_square($x), but $xrx does not divide $n.\n"),
+        next if gcd($xrx, $n) < $xrx;
+        my $tx = tau_factor($fx);
+        my($tdiv, $trem) = $tn->bdiv($tx);
+        $debug && warn("Would try fix_square($x), but tau($x) does not divide $tn.\n"),
+        next if $trem;
+        $debug && warn("Would try fix_square($x), but $tn/tau($x) is even.\n"),
+        next if !($tdiv & 1);
+        $debug && warn("Will fix_square($x).\n"),
+        return [$x, $tdiv];
+    }
+    return undef;
 }
 
 #
 # n+kd == xp^y (mod p^{y+1}) is suppressible when y+1 ~| tau(n).
 #
 # More generally:
-#	tau(m) ~| tau(n)  and  n+kd == m (mod m rad(m)) => tau(n+kd) != tau(n)
+#    tau(m) ~| tau(n)  and  n+kd == m (mod m rad(m)) => tau(n+kd) != tau(n)
 #
 # However, given m = \prod p_i^a_i, if a) tau(m) > tau(n), or better:
-#	a)  \not \exists k: tau(km) = tau(n)
+#    a)  \not \exists k: tau(km) = tau(n)
 # or:
-#	b)  \exists i: tau(m / p_i^a_i) ~| tau(n)
+#    b)  \exists i: tau(m / p_i^a_i) ~| tau(n)
 # we will already have suppressed a superset of what this gives us.
 #   
 # Additionally, when tau(m) | tau(n) with tau(n) / tau(m) odd, then if
@@ -202,138 +202,138 @@ sub fix_square {
 # mod q^s. For q=2 we need a special case to cope eg with 3(mod 4).
 #
 sub test_m_rad_m {
-	my($c, $pmr, $tn) = @_;
-	my $debug = $c->debug;
-	$debug > 1 && print "m rad m: try $pmr\n";
-	my($p, $m, $r) = discern_rad($pmr) or do {
-		$debug > 2 && print "m rad m: too many spares\n";
-		return;
-	};
-	my $mf = [ factor_exp($m) ];
-	my $tm = tau_factor($mf);
+    my($c, $pmr, $tn) = @_;
+    my $debug = $c->debug;
+    $debug > 1 && print "m rad m: try $pmr\n";
+    my($p, $m, $r) = discern_rad($pmr) or do {
+        $debug > 2 && print "m rad m: too many spares\n";
+        return;
+    };
+    my $mf = [ factor_exp($m) ];
+    my $tm = tau_factor($mf);
 
-	my $rp = $r * $p;
-	my($qm, $qr, $qrp) = ($m, $r, $rp);
-	my $quad_series = sub {
-		my($mod) = @_;
-		my $vec = quadvec($mod);
-		for my $u (1 .. $qrp - 1) {
-			next if gcd($u, $qr) > 1;
-			next if vec($vec, $u % $mod, 1);
-			$debug > 2 && print "m rad m: series $u * $qm, $pmr\n";
-			series($c, $u * $qm, $pmr, 0);
-		}
-	};
+    my $rp = $r * $p;
+    my($qm, $qr, $qrp) = ($m, $r, $rp);
+    my $quad_series = sub {
+        my($mod) = @_;
+        my $vec = quadvec($mod);
+        for my $u (1 .. $qrp - 1) {
+            next if gcd($u, $qr) > 1;
+            next if vec($vec, $u % $mod, 1);
+            $debug > 2 && print "m rad m: series $u * $qm, $pmr\n";
+            series($c, $u * $qm, $pmr, 0);
+        }
+    };
 
-	if ($p > 1) {
-		$quad_series->($p) if divides_oddly($tn, $tm);
-		# all remaining tests require p==1
-		return;
-	}
+    if ($p > 1) {
+        $quad_series->($p) if divides_oddly($tn, $tm);
+        # all remaining tests require p==1
+        return;
+    }
 
-	$quad_series->($r) if divides_oddly($tn, $tm);
+    $quad_series->($r) if divides_oddly($tn, $tm);
 
-	if ($mf->[0][0] == 2) {
-		# p=2 uniquely introduce new non-residues at higher powers; eg
-		# 3 is a non-residue (mod 4).
-		my $pp2 = $mf->[0][1];
-		my $tm2 = $tm / ($pp2 + 1) * $pp2;
-		if (divides_oddly($tn, $tm2)) {
-			my $p = $mf->[0][0];
-			$qm = $m / $p;
-			$qrp = $rp * $p;
-			my $pp = $p ** ($pp2 + 1);
-			# we need to allow 2 mod 8, but not 4 mod 8
-			$qr = $r;	# not $qr = $r / $p
-			$quad_series->($p ** ($pp2 + 1));
-		}
-	}
+    if ($mf->[0][0] == 2) {
+        # p=2 uniquely introduce new non-residues at higher powers; eg
+        # 3 is a non-residue (mod 4).
+        my $pp2 = $mf->[0][1];
+        my $tm2 = $tm / ($pp2 + 1) * $pp2;
+        if (divides_oddly($tn, $tm2)) {
+            my $p = $mf->[0][0];
+            $qm = $m / $p;
+            $qrp = $rp * $p;
+            my $pp = $p ** ($pp2 + 1);
+            # we need to allow 2 mod 8, but not 4 mod 8
+            $qr = $r;    # not $qr = $r / $p
+            $quad_series->($p ** ($pp2 + 1));
+        }
+    }
 
 # I think this is entirely wrong, and correcting it would make it a useless
 # copy of a previous test.
-#	{
-#		for my $j (0 .. $#$mf) {
-#			my $pp = $mf->[$j][1] + 1;
-#			if (divides_oddly($tn, $tm / $pp)) {
-#				my $p = $mf->[$j][0];
-#				$qm = $m / $p;
-#				$qr = $r / $p;
-#				$qrp = $rp * $p;
-#				$quad_series->($p ** $pp);
-#			}
-#		}
-#	}
+#   {
+#       for my $j (0 .. $#$mf) {
+#           my $pp = $mf->[$j][1] + 1;
+#           if (divides_oddly($tn, $tm / $pp)) {
+#               my $p = $mf->[$j][0];
+#               $qm = $m / $p;
+#               $qr = $r / $p;
+#               $qrp = $rp * $p;
+#               $quad_series->($p ** $pp);
+#           }
+#       }
+#   }
 
-	# case a (coarse version)
-	return if $tm > $tn;
+    # case a (coarse version)
+    return if $tm > $tn;
 
-	# main requirement
-	return if ($tn % $tm) == 0;
+    # main requirement
+    return if ($tn % $tm) == 0;
 
-	for my $i (0 .. $#$mf) {
-		my $tm_i = $tm / ($mf->[$i][1] + 1);
-		# case b
-		return if ($tn % $tm_i) != 0;
-	}
+    for my $i (0 .. $#$mf) {
+        my $tm_i = $tm / ($mf->[$i][1] + 1);
+        # case b
+        return if ($tn % $tm_i) != 0;
+    }
 
-	for my $u (1 .. $r - 1) {
-		next if gcd($u, $r) > 1;
-		$c->debug && print "m rad m: suppress $m * $u mod $pmr\n";
-		series($c, $m * $u, $pmr, 0);
-	}
+    for my $u (1 .. $r - 1) {
+        next if gcd($u, $r) > 1;
+        $c->debug && print "m rad m: suppress $m * $u mod $pmr\n";
+        series($c, $m * $u, $pmr, 0);
+    }
 }
 
 sub test_series {
-	my($m, $tn) = @_;
-	my $fm = [ factor_exp($m) ];
-	my $tm = tau_factor($fm);
-	my $max = -1;
+    my($m, $tn) = @_;
+    my $fm = [ factor_exp($m) ];
+    my $tm = tau_factor($fm);
+    my $max = -1;
 
-	#
-	# If tau(m) >= tau(n) we can limit the options (mod m).
-	#
-	if ($tm > $tn) {
-		return 0;
-	} elsif ($tm == $tn) {
-		$max = $m;
-	}
+    #
+    # If tau(m) >= tau(n) we can limit the options (mod m).
+    #
+    if ($tm > $tn) {
+        return 0;
+    } elsif ($tm == $tn) {
+        $max = $m;
+    }
 
-	#
-	# Let m=\prod{p_i^a_i}, m_2=\prod{p_i^b_i} where b_i is least k >= a_i
-	# such that b_i + 1 divides tau(n). Then if tau(m_2) >= tau(n) we can
-	# limit the options (mod m) for n+kd > m_2.
-	# 
-	my $fm2 = [ map [ $_->[0], first_divisor($tn, $_->[1] + 1) - 1 ], @$fm ];
-	my $m2 = unfactor_exp($fm2);
-	my $tm2 = tau_factor($fm2);
-	if ($m2 > $m) {
-		if ($tm2 > $tn) {
-			return 0;
-		} elsif ($tm2 == $tn) {
-			$max = $m2 unless $max >= 0 && $max < $m2;
-		}
-	}
+    #
+    # Let m=\prod{p_i^a_i}, m_2=\prod{p_i^b_i} where b_i is least k >= a_i
+    # such that b_i + 1 divides tau(n). Then if tau(m_2) >= tau(n) we can
+    # limit the options (mod m) for n+kd > m_2.
+    # 
+    my $fm2 = [ map [ $_->[0], first_divisor($tn, $_->[1] + 1) - 1 ], @$fm ];
+    my $m2 = unfactor_exp($fm2);
+    my $tm2 = tau_factor($fm2);
+    if ($m2 > $m) {
+        if ($tm2 > $tn) {
+            return 0;
+        } elsif ($tm2 == $tn) {
+            $max = $m2 unless $max >= 0 && $max < $m2;
+        }
+    }
 
-	#
-	# Let m_3=\prod{p_i^c_i}, c^i>=b_i. Valid solutions require selecting
-	# k_j, m_{3j} such that tau(k_j m_{3j})=tau(n). If k_j=1 for all j,
-	# we can limit the options (mod m) for n+kd > max(m_{3j}).
-	#
-	if (gcd($tm2, $tn) < $tm2) {
-		my $maxm3 = 0;
-		my $good = 1;
-		my $iter = iter_factor($tn);
-		while (my $tn_factors = $iter->()) {
-			next if @$tn_factors < @$fm;
-			my $fm3 = [ map [ $fm->[$_][0], $tn_factors->[$_] - 1 ], 0 .. $#$fm ];
-			next if grep $fm3->[$_][1] < $fm2->[$_][1], 0 .. $#$fm;
-			$good = 0, last if @$tn_factors > @$fm;
-			my $m3 = unfactor_exp($fm3);
-			$maxm3 = $m3 if $maxm3 < $m3;
-		}
-		$max = $maxm3 if $good && !($max >= 0 && $max < $maxm3);
-	}
-	return $max;
+    #
+    # Let m_3=\prod{p_i^c_i}, c^i>=b_i. Valid solutions require selecting
+    # k_j, m_{3j} such that tau(k_j m_{3j})=tau(n). If k_j=1 for all j,
+    # we can limit the options (mod m) for n+kd > max(m_{3j}).
+    #
+    if (gcd($tm2, $tn) < $tm2) {
+        my $maxm3 = 0;
+        my $good = 1;
+        my $iter = iter_factor($tn);
+        while (my $tn_factors = $iter->()) {
+            next if @$tn_factors < @$fm;
+            my $fm3 = [ map [ $fm->[$_][0], $tn_factors->[$_] - 1 ], 0 .. $#$fm ];
+            next if grep $fm3->[$_][1] < $fm2->[$_][1], 0 .. $#$fm;
+            $good = 0, last if @$tn_factors > @$fm;
+            my $m3 = unfactor_exp($fm3);
+            $maxm3 = $m3 if $maxm3 < $m3;
+        }
+        $max = $maxm3 if $good && !($max >= 0 && $max < $maxm3);
+    }
+    return $max;
 }
 
 #
@@ -342,22 +342,22 @@ sub test_series {
 # prime divides s with a multiplicity of one), returns nothing.
 #
 sub discern_rad {
-	my($s) = @_;
-	my $p = $zone;
-	my $r = $zone;
-	for (factor_exp($s)) {
-		my($sp, $spp) = @$_;
-		if ($spp == 1) {
-			if ($p > 1) {
-				return;
-			} else {
-				$p *= $sp;
-			}
-		} else {
-			$r *= $sp;
-		}
-	}
-	return +($p, $s / $p / $r, $r);
+    my($s) = @_;
+    my $p = $zone;
+    my $r = $zone;
+    for (factor_exp($s)) {
+        my($sp, $spp) = @$_;
+        if ($spp == 1) {
+            if ($p > 1) {
+                return;
+            } else {
+                $p *= $sp;
+            }
+        } else {
+            $r *= $sp;
+        }
+    }
+    return +($p, $s / $p / $r, $r);
 }
 
 #
@@ -365,61 +365,61 @@ sub discern_rad {
 #
 
 sub min {
-	my($a) = @_;
-	die "No values to take min of" unless @$a;
-	my $min = $a->[0];
-	($min > $_) && ($min = $_) for @$a;
-	return $min;
+    my($a) = @_;
+    die "No values to take min of" unless @$a;
+    my $min = $a->[0];
+    ($min > $_) && ($min = $_) for @$a;
+    return $min;
 }
 
 #
 # Return product of values in arrayref.
 #
 sub prod {
-	my($a) = @_;
-	my $n = 1;
-	$n *= $_ for @$a;
-	return $n;
+    my($a) = @_;
+    my $n = 1;
+    $n *= $_ for @$a;
+    return $n;
 }
 
 #
 # Return sum of values in arrayref.
 #
 sub sum {
-	my($a) = @_;
-	my $n = 0;
-	$n += $_ for @$a;
-	return $n;
+    my($a) = @_;
+    my $n = 0;
+    $n += $_ for @$a;
+    return $n;
 }
 
 #
 # Given n, d, returns true if d divides n to give an odd number.
 #
 sub divides_oddly {
-	my($n, $d) = @_;
-	my($q, $r) = $n->bdiv($d);
-	return 0 if $r;
-	return +($q & 1) ? 1 : 0;
+    my($n, $d) = @_;
+    my($q, $r) = $n->bdiv($d);
+    return 0 if $r;
+    return +($q & 1) ? 1 : 0;
 }
 
 #
 # Given factorisation of n = [ [p_1, pow_1], ... ], return rad(n) = prod(p_i)
 #
 sub rad_factor {
-	my($f) = @_;
-	my $rad = MBI(1);
-	$rad *= $_->[0] for @$f;
-	return $rad;
+    my($f) = @_;
+    my $rad = MBI(1);
+    $rad *= $_->[0] for @$f;
+    return $rad;
 }
 
 #
 # Given factorisation of n = [ [p_1, pow_1], ... ], return tau(n) = prod(pow_i + 1)
 #
 sub tau_factor {
-	my($f) = @_;
-	my $tau = 1;
-	$tau *= $_->[1] + 1 for @$f;
-	return $tau;
+    my($f) = @_;
+    my $tau = 1;
+    $tau *= $_->[1] + 1 for @$f;
+    return $tau;
 }
 
 #
@@ -427,21 +427,21 @@ sub tau_factor {
 # Assumed d <= n.
 #
 sub first_divisor {
-	my($n, $d) = @_;
-	++$d while gcd($d, $n) < $d;
-	return $d;
+    my($n, $d) = @_;
+    ++$d while gcd($d, $n) < $d;
+    return $d;
 }
 
 #
 # Given [ [p_1, pow_1], ... ] return the n of which it is the factorisation.
 #
 sub unfactor_exp {
-	my($f) = @_;
-	my $n = 1;
-	for (@$f) {
-		$n *= $_->[0] ** $_->[1];
-	}
-	return $n;
+    my($f) = @_;
+    my $n = 1;
+    for (@$f) {
+        $n *= $_->[0] ** $_->[1];
+    }
+    return $n;
 }
 
 #
@@ -449,68 +449,68 @@ sub unfactor_exp {
 # parts > 1, or undef.
 #
 sub iter_factor {
-	my $n = shift;
-	my $f = [ $n ];
-	return sub {
-		return undef unless @$f;
-		my $r = [ @$f ];
-		my $spare = MBI(1);
-		ITERFAC: while (@$f) {
-			my $last = pop @$f;
-			my $prod = $spare * $last;
-			for my $d ($spare + 1 .. int($prod / 2)) {
-				my($q, $rem) = $prod->bdiv($d);
-				next if $rem;
-				push @$f, $q, $d;
-				last ITERFAC;
-			}
-			$spare = $prod;
-		}
-		return @$r ? $r : undef;
-	};
+    my $n = shift;
+    my $f = [ $n ];
+    return sub {
+        return undef unless @$f;
+        my $r = [ @$f ];
+        my $spare = MBI(1);
+        ITERFAC: while (@$f) {
+            my $last = pop @$f;
+            my $prod = $spare * $last;
+            for my $d ($spare + 1 .. int($prod / 2)) {
+                my($q, $rem) = $prod->bdiv($d);
+                next if $rem;
+                push @$f, $q, $d;
+                last ITERFAC;
+            }
+            $spare = $prod;
+        }
+        return @$r ? $r : undef;
+    };
 }
 
 {
-	my @seq_seen;
-	#
-	# rootseq(n, tau, f, g, constraint)
-	# - search for arithmetic sequence n+kd, 0<=k<=f, with tau(n+kd)=tau(n)
-	# - search with d in the range g=[min, max]
-	# - check only those d that satisfy constraints in the Constraint object
-	#
-	sub rootseq {
-		my($c) = @_;
-		my $count = $c->tell_count;
-		my($n, $f, $tau) = ($c->n, $c->f, $c->tau);
-		my $k = $f - 1;
-		my $tester = prepare_tester($c);
-		my $cur;
-		$c->init();
-		CUR: while ($cur = $c->next()) {
-			report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
-			for (0 .. $#$tester) {
-				$tester->[$_]->($cur)
-					#|| (report_seq($n, $f, $cur), next CUR)
-					#|| next CUR
-					|| ($seq_seen[$_]++ || report_seq($n, $f, $cur), next CUR)
-					#|| (++$seq_seen[$_-1], next CUR)
-			}
-			report_reach($n, $f, $cur, $c);
-			return $cur;
-		}
-		report_reach($n, $f, $c->cur, $c);
-		return undef;
-	}
+    my @seq_seen;
+    #
+    # rootseq(n, tau, f, g, constraint)
+    # - search for arithmetic sequence n+kd, 0<=k<=f, with tau(n+kd)=tau(n)
+    # - search with d in the range g=[min, max]
+    # - check only those d that satisfy constraints in the Constraint object
+    #
+    sub rootseq {
+        my($c) = @_;
+        my $count = $c->tell_count;
+        my($n, $f, $tau) = ($c->n, $c->f, $c->tau);
+        my $k = $f - 1;
+        my $tester = prepare_tester($c);
+        my $cur;
+        $c->init();
+        CUR: while ($cur = $c->next()) {
+            report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
+            for (0 .. $#$tester) {
+                $tester->[$_]->($cur)
+                    #|| (report_seq($n, $f, $cur), next CUR)
+                    #|| next CUR
+                    || ($seq_seen[$_]++ || report_seq($n, $f, $cur), next CUR)
+                    #|| (++$seq_seen[$_-1], next CUR)
+            }
+            report_reach($n, $f, $cur, $c);
+            return $cur;
+        }
+        report_reach($n, $f, $c->cur, $c);
+        return undef;
+    }
 
-	sub report_reach {
-		my($n, $f, $cur, $c) = @_;
-		my $t = $c->elapsed();
-		my($tests, $skipped, $kept) = ($c->tests(), $c->skipped(), $c->kept());
+    sub report_reach {
+        my($n, $f, $cur, $c) = @_;
+        my $t = $c->elapsed();
+        my($tests, $skipped, $kept) = ($c->tests(), $c->skipped(), $c->kept());
 
-		printf <<OUT, $t, $n, $f, $cur, $kept, $skipped, $tests, join ' ', map $_ || 0, @seq_seen;
+        printf <<OUT, $t, $n, $f, $cur, $kept, $skipped, $tests, join ' ', map $_ || 0, @seq_seen;
 301 After %.2fs for (%s, %s) reach d=%s (keep %s, skip %s with %s tests) seen [%s]
 OUT
-	}
+    }
 }
 
 #
@@ -562,100 +562,100 @@ OUT
 #   return \@candidates;   # found a solution
 #
 sub prepare_tester {
-	my($c) = @_;
-	my($n, $f, $tau, $min) = ($c->n, $c->f, $c->tau, $c->min);
-	my $np = [ map $_->[0], factor_exp($n) ];
-	my %t;
+    my($c) = @_;
+    my($n, $f, $tau, $min) = ($c->n, $c->f, $c->tau, $c->min);
+    my $np = [ map $_->[0], factor_exp($n) ];
+    my %t;
 
-	my $all_prime = ($tau == 2) ? 1 : 0;
-	my $short_prime = ($tau == 4 && @$np == 2) ? 1 : 0;
-	my $fixed = @$opt_ts ? 1 : 0;
+    my $all_prime = ($tau == 2) ? 1 : 0;
+    my $short_prime = ($tau == 4 && @$np == 2) ? 1 : 0;
+    my $fixed = @$opt_ts ? 1 : 0;
 
-	for my $k (1 .. $f - 1) {
-		my($legend, $tester);
-		my $g = gcd($k, $n);
-		if ($all_prime) {
-			$legend = $k;
-			$tester = sub { is_prime($n + $_[0] * $k) };
-		} elsif ($short_prime && $g > 1 && $min > $g ** 3) {
-			my $gn = $n / $g;
-			my $gk = $k / $g;
-			$legend = "p$k";
-			$tester = sub { is_prime($gn + $_[0] * $gk) };
-		} else {
-			$legend = $k;
-			$tester = sub { $tau == tau($n + $_[0] * $k) };
-		}
-		$t{$k} = [ $legend, $tester ];
-	}
+    for my $k (1 .. $f - 1) {
+        my($legend, $tester);
+        my $g = gcd($k, $n);
+        if ($all_prime) {
+            $legend = $k;
+            $tester = sub { is_prime($n + $_[0] * $k) };
+        } elsif ($short_prime && $g > 1 && $min > $g ** 3) {
+            my $gn = $n / $g;
+            my $gk = $k / $g;
+            $legend = "p$k";
+            $tester = sub { is_prime($gn + $_[0] * $gk) };
+        } else {
+            $legend = $k;
+            $tester = sub { $tau == tau($n + $_[0] * $k) };
+        }
+        $t{$k} = [ $legend, $tester ];
+    }
 
-	my %pref = map +($_ => gcd($n, $_)), 1 .. $f - 1;
-	my @order = map {
-		my $v = $_ + 0;
-		die "Invalid test order '$_'" unless delete $pref{$v};
-		$v
-	} @$opt_ts;
-	push @order, sort { $pref{$b} <=> $pref{$a} || $a <=> $b } keys %pref;
-	printf "320 Testers: %s\n",
-		($all_prime && !$fixed) ? 'all prime, ascending order'
-		: join ', ', map $_->[0], @t{@order};
-	return [ map $_->[1], @t{@order} ];
+    my %pref = map +($_ => gcd($n, $_)), 1 .. $f - 1;
+    my @order = map {
+        my $v = $_ + 0;
+        die "Invalid test order '$_'" unless delete $pref{$v};
+        $v
+    } @$opt_ts;
+    push @order, sort { $pref{$b} <=> $pref{$a} || $a <=> $b } keys %pref;
+    printf "320 Testers: %s\n",
+        ($all_prime && !$fixed) ? 'all prime, ascending order'
+        : join ', ', map $_->[0], @t{@order};
+    return [ map $_->[1], @t{@order} ];
 }
 
 sub report_seq {
-	my($n, $f, $d) = @_;
-	my $flen = length($f);
-	my $vlen = length($n + $f * $d);
-	for (0 .. $f) {
-		my $v = $n + $d * $_;
-		printf <<OUT, $flen, $_, tau($v), $vlen, $v, pf($v);
+    my($n, $f, $d) = @_;
+    my $flen = length($f);
+    my $vlen = length($n + $f * $d);
+    for (0 .. $f) {
+        my $v = $n + $d * $_;
+        printf <<OUT, $flen, $_, tau($v), $vlen, $v, pf($v);
 211 Sequence % *s: % 2s = tau(% *s = %s)
 OUT
-	}
+    }
 }
 
 sub check_limit {
-	my($n, $f) = splice @_, 0, 2;
-	my $max = 0;
-	($max < $_) && ($max = $_) for @_;
-	return 1 if $f <= $max;
-	printf <<OUT, $n, $max, $f;
+    my($n, $f) = splice @_, 0, 2;
+    my $max = 0;
+    ($max < $_) && ($max = $_) for @_;
+    return 1 if $f <= $max;
+    printf <<OUT, $n, $max, $f;
 401 Error: f(%s) <= %s, you asked for %s.
 OUT
-	return undef;
+    return undef;
 }
 
 sub phash {
-	my $max = shift;
-	return MBI(1) if $max <= 1;
-	my $mult = MBI(2);
-	my $p = 1;
-	while (1) {
-		$p = next_prime($p);
-		last if $p >= $max;
-		$mult *= $p;
-	}
-	return $mult;
+    my $max = shift;
+    return MBI(1) if $max <= 1;
+    my $mult = MBI(2);
+    my $p = 1;
+    while (1) {
+        $p = next_prime($p);
+        last if $p >= $max;
+        $mult *= $p;
+    }
+    return $mult;
 }
 
 sub pf {
-	my $n = shift;
-	return join '.', map {
-		$_->[1] == 1 ? $_->[0] : "$_->[0]^$_->[1]"
-	} factor_exp($n);
+    my $n = shift;
+    return join '.', map {
+        $_->[1] == 1 ? $_->[0] : "$_->[0]^$_->[1]"
+    } factor_exp($n);
 }
 
 sub tau {
-	my $n = shift;
-	my $k = 1;
-	$k *= $_->[1] + 1 for factor_exp($n);
-	return $k;
+    my $n = shift;
+    my $k = 1;
+    $k *= $_->[1] + 1 for factor_exp($n);
+    return $k;
 }
 
 sub factor_exp {
-	my($n) = @_;
-	return () if $n == 1;
-	return Math::Prime::Util::factor_exp($n);
+    my($n) = @_;
+    return () if $n == 1;
+    return Math::Prime::Util::factor_exp($n);
 }
 
 sub ston {
