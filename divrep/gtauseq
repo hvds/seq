@@ -9,8 +9,8 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_ts)
-        = (0, 0, 0, 100000, 0, 0, []);
+my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_ts, $opt_m)
+        = (0, 0, 0, 100000, 0, 0, [], []);
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
@@ -22,6 +22,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
     ($opt_ts = [ split /,/, $arg || shift(@ARGV) ]), next if $arg =~ s{^-ts}{};
     ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t}{};
+    push(@$opt_m, $arg || shift(@ARGV)), next if $arg =~ s{^-m}{};
     die "Unknown option '$arg'\n";
 }
 
@@ -44,26 +45,44 @@ my $c = Constraint->new(
 );
 
 $c = apply($c) or exit 0;
-printf <<OUT, $c->elapsed(), 'rootseq', $n, $f, ntos($opt_n), ntos($opt_x), $opt_c;
-300 Init %.2f: trying %s() for (%s, %s) in [%s, %s], checks up to mod %s
+printf <<OUT, $c->elapsed(), 'rootseq', $n, $f, ntos($opt_n), ntos($opt_x), modfix(), $opt_c;
+300 Init %.2f: trying %s() for (%s, %s) in [%s, %s], %schecks up to mod %s
 OUT
 
 my $d = rootseq($c);
 if ($d) {
     report_seq($n, $f, $d);
-    printf <<OUT, $n, $f, $d, $c->elapsed();
-200 f(%s, %s) = %s  (%.3fs)
+    printf <<OUT, $n, $f, $d, modfix(), $c->elapsed();
+200 f(%s, %s) = %s %s (%.3fs)
 OUT
 } else {
-    printf <<OUT, $n, $f, ntos($opt_x), $c->elapsed();
-500 f(%s, %s) > %s  (%.3fs)
+    printf <<OUT, $n, $f, ntos($opt_x), modfix(), $c->elapsed();
+500 f(%s, %s) > %s %s (%.3fs)
 OUT
 }
 exit 0;
 
+sub mod_override {
+    my($c, $override) = @_;
+    my($mod, $op, $val) = m{ ^ (\d+) ([=!]) (\d+) \z }x
+            or die "Invalid mod override '$_'";
+    if ($op eq '=') {
+        $c->require($mod, $val);
+    } else {
+        $c->suppress($mod, $val);
+    }
+}
+
+sub modfix {
+    return @$opt_m ? sprintf('mod(%s) ', join ', ', @$opt_m) : '';
+}
+
 sub apply {
     my $c = shift;
     my $tn = $c->tau;
+
+    # if options specify overriding modular constraints, apply those first
+    mod_override($c, $_) for @$opt_m;
 
     for my $m (2 .. $c->check) {
 $c->debug && warn "apply $m\n";
@@ -152,6 +171,10 @@ sub series {
 # constraints mod p^2 (for example) to show that we can guarantee
 # gcd(n+fd, p^2) = p; we'll also need to adjust the runtime calculations
 # since we are not simply dividing by f.
+#
+# FIXME: the 'x.rad(x) | n' constraint can also be too strict: for n=84, f>6
+# we can mod_override to split the cases d=1 or d=2 (mod 3); this is already
+# faster, but for d=2 we can fix_square(6).
 #
 sub fix_square {
     my($c, $n, $tn) = @_;
