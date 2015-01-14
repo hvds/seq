@@ -1,11 +1,7 @@
 #!/opt/maths/bin/perl -w
 use strict;
 use Math::BigRat;
-use Math::BigInt;
-use List::Util qw/ max reduce /;
-our($a, $b);
-my $big0 = Math::BigInt->new(0);
-my $big1 = Math::BigInt->new(1);
+my $rat0 = Math::BigRat->new(0);
 
 =head1
 
@@ -35,210 +31,218 @@ sum to 3.
 
 $| = 1;
 my $N = shift || 4;
-my $S = Math::BigRat->new(0);
+my $S = $rat0;
 my @P = (2, 3);
-my($limit, %F, %known, %cur, %consider, %incl, %excl);
+my($limit, %F, %known, @known);
 
 for ($limit = 1; 1; ++$limit) {
-	my $full = {
-		n => $limit,
-		factors => factors($limit),
-		harm => Math::BigRat->new("1/$limit"),
-	};
-	$S += $full->{harm};
-	account($_, $full, $limit / $_) for @{ $full->{factors} };
+	my $pp = PP->account($limit) or next;
 
 printf "$limit: S = %.6f (%s)\n", $S, $S;
 	next if $S < $N;
 
-	consider();
+	$pp->consider() and exit 0;
 }
 exit 0;
 
-sub account {
-	my($n, $full, $mult) = @_;
-	unless ($known{$n}) {
-		$known{$n} = [];
-		$consider{$n} = {};
+{
+	package PP;
+	sub new {
+		my($class, $pp) = @_;
+		$known{$pp} ||= do {
+			my $f = $F{$pp} || $pp;
+			my $span = "\x0" x int(($f + 8) / 8);
+			vec($span, 0, 1) = 1;
+			my $full = "\xff" x int(($f + 8) / 8);
+			$full =~ s/\xff\Z/chr((1 << ($f % 8)) - 1)/e;
+			my $self = bless {
+				pp => $pp,
+				f => $f,
+				val => [],
+				rec => [],
+				harm => [],
+				span => [ $span ],
+				full => $full,
+				kindex => scalar @known,
+				sum => $rat0,
+				match => {
+					0 => [ [ 0, '' ] ],
+				},
+				complete => {
+					0 => 1,
+				},
+			}, $class;
+			push @known, $self;
+			$self;
+		};
 	}
-	reconsider($n);
-	push @{ $known{$n} }, $mult;
-}
+	sub account {
+		my($class, $n) = @_;
+		$S += my $rn = ::rec($n);
+		my $pp = ::gpp($n);
 
-sub reconsider {
-	my $n = shift;
-	reconsider($n / $F{$n}) if $F{$n} && $F{$n} < $n;
-	if (my $cons = delete $cur{$n}) {
-		$S += $cons->{sum};
-		$consider{$n} = $cons;
-		for (@{ $known{$n} }) {
-			reconsider($_);
-			my $v = $n * $_;
-			delete $incl{$v} if ($incl{$v} || 0) == $n;
-			delete $excl{$v} if ($excl{$v} || 0) == $n;
-		}
-	}
-}
+		my $self = $class->new($pp);
+		my $f = $self->{f};
+		my $inv = $self->inverse($n / $pp);
+		my $pspan = $self->{span}[ $#{ $self->{span} } ];
 
-sub consider {
-	while ($S > $N) {
-		if ($S >= Math::BigRat->new("1/$limit") + $N) {
-			my($nom, $den) = ($S - $N)->parts;
-			if ($nom == 1 && !$excl{$den}) {
-				$excl{$den} = 'special';
-				$S -= Math::BigRat->new("1/$den");
-				last;
-			}
+		push @{ $self->{val} }, $n;
+		push @{ $self->{rec} }, $inv;
+		push @{ $self->{span} }, ::merge($pspan, $f, $inv);
+		push @{ $self->{harm} }, $rn;
+		$self->{sum} += $rn;
+
+		my $cansolve = $self->{cansolve} = vec($pspan, (-$inv) % $f, 1);
+		$self->{complete} = {
+			0 => !$cansolve && $self->{complete}{0},
+		};
+
+		# if any PP > $pp has solutions, we may need to solve for sum != 0
+		return $self if $cansolve;
+		for my $i ($self->{kindex} + 1 .. $#known) {
+			return $self if $known[$i]->{cansolve};
 		}
-		my $factor = max(keys %consider) or return;
-		my $cons = delete $consider{$factor};
-		try($factor);
-printf "  tried $factor, now S = %.6f (%s)\n", $S, $S;
+		return 0;
 	}
-	if ($S == $N) {
+
+	sub maybe_solution {
+		my($class, $index, $offset, $fly) = @_;
+		my $ointment = $class->span($index, $offset);
+		return 0 unless delete $ointment->{$fly};
+		return $class->sol($ointment);
+	}
+	sub solution {
+		my($class, $index, $offset) = @_;
+		return $class->sol($class->span($index, $offset));
+	}
+	sub sol {
+		my($class, $sol) = @_;
 		printf "a(%s) = %s : { %s }\n",
-				$N, $limit, join(' ', fullset());
-		# ??? incr $N and repeat?
-		exit 0;
+				$N, $limit, join ' ', sort { $a <=> $b } keys %$sol;
+		return 1;
 	}
-}
-
-sub fullset {
-	grep !$excl{$_}, 1 .. $limit;
-}
-
-sub exclude {
-	my($f, $all, $texcl, $sharm) = @_;
-	my %tincl = map +($_ => 1), @$all;
-	delete @tincl{@$texcl};
-	$excl{$_ * $f} = $f for @$texcl;
-	$incl{$_ * $f} ||= $f for keys %tincl;
-	my $sum = $sharm / $f;
-#print "    $f: include [ @{[ keys %tincl ]} ] exclude [ @$texcl ]\n";
-	$cur{$f} = {
-		list => $texcl,
-		sum => $sum,
-	};
-	$S -= $sum;
-}
-
-sub try {
-	my $f = shift;
-	my $ff = $F{$f} || $f;
-	my $list = [];
-	my @included;
-	my $include_min;
-#print "  ($f: @{[ scalar @{ $known{$f} } ]} known\n";
-	for (@{ $known{$f} }) {
-		my $v = $f * $_;
-		next if $excl{$v};
-		push(@$list, $_), next unless $incl{$v};
-		push @included, $_;
-		$include_min = (defined($include_min) && $include_min < $incl{$v})
-				? $include_min : $incl{$v};
-	}
-	push @included, powf($f, $ff);
-
-	my $lcm = lcm([ @$list, @included ]);
-#print "  ($f: lcm of @{[ @$list + @included ]} values gives $lcm\n";
-	my $imod = sum(map $lcm / $_, @included) % $ff;
-
-	my $mod = [ map +($lcm / $_) % $ff, @$list ];
-	my $smod = sum(@$mod);
-
-	my $harm = [ map Math::BigRat->new("1/$_"), @$list ];
-	my $sharm = sum(@$harm);
-
-print "  trying $f (with @{[ scalar @$list ]} values)\n";
-#print "  trying $f [ @$list ] => [ @$mod ], smod = $smod, imod = $imod\n";
-	return exclude($f, $list, $list, $sharm) if $smod + $imod < $ff;
-
-	my $fmod = ($smod + $imod) % $ff or return exclude($f, $list, [], 0);
-	my($best, $bestv) = ($sharm, $list);
-	my $tryexcl; $tryexcl = sub {
-		my($count, $tbest, $tbestv, $tharm, $tmod, $index, $tlist) = @_;
-		for (my $i = @$list - $count; $i >= $index; --$i) {
-			my $uharm = $tharm + $harm->[$i];
-			last if $uharm >= $tbest;
-			my $umod = ($tmod + $mod->[$i]) % $ff;
-			if ($umod == $fmod) {
-				$tbest = $uharm;
-				$tbestv = [ @$tlist, $list->[$i] ];
-				last;
-			}
-			next if $count <= 1;
-			($tbest, $tbestv) = $tryexcl->($count - 1, $tbest, $tbestv, $uharm, $umod, $i + 1, [ @$tlist, $list->[$i] ]);
-		}
-		($tbest, $tbestv);
-	};
-
-	# simplistic: loop over all possibilities
-	for (my $n = 1; $n < @$list; ++$n) {
-		($best, $bestv) = $tryexcl->($n, $best, $bestv, 0, 0, 0, []);
-	}
-	return exclude($f, $list, $bestv, $best);
-}
-
-sub powf {
-	my($f, $ff) = @_;
-	my $s = Math::BigRat->new(0);
-	for (my $powf = $f * $ff; $known{$powf}; $powf *= $ff) {
-#print "  ($f: $powf => scalar @{ $known{$powf} } ]} known\n";
-		$s += sum(map Math::BigRat->new("1/$_"),
-				grep $incl{$_}, map $_ * $powf, @{ $known{$powf} });
-	}
-	return if !$s;
-	my($nom, $den) = $s->parts;
-	return if $den % $f;
-	$den /= $f;
-
-	my @result;
-	if (my $int = int($nom / $den)) {
-#warn "int $int\n";
-		$nom -= $den * $int;
-		push @result, (1) x $int;
-	}
-	my $fact;
-#print "  ($f: powf => $s\n";
-	SIZE: while ($nom) {
-		if ($nom < $f) {
-			push @result, ($den) x $nom;
-#warn "  ($f: powf returning [@result]\n";
-			return @result;
-		}
-		$fact ||= factors($den);
-		for (@$fact) {
-			if ($nom > $den / $_) {
-				push @result, $_;
-				$nom -= $den / $_;
-				my $g = gcd($nom, $den);
-				if ($g > 1) {
-					$_ /= $g for $nom, $den;
-				}
-				next SIZE;
+	sub span {
+		my($class, $index, $offset) = @_;
+		my %sol = map +($_ => 1), 1 .. $limit;
+		for my $i ($offset .. $#known) {
+			my $pp = $known[$i];
+			my $span = $pp->{match}{0}[$index->[$i]][1];
+			if ($span eq '') {
+				delete @sol{ @{ $pp->{val} } };
+			} else {
+				delete @sol{ @{ $pp->{val} }[ grep !vec($span, $_, 1), 0 .. $#{ $pp->{val} } ] };
 			}
 		}
-		for (@$fact) {
-			if ($nom > $_) {
-				push @result, $den / $_;
-				$nom -= $_;
-				my $g = gcd($nom, $den);
-				if ($g > 1) {
-					$_ /= $g for $nom, $den;
-				}
-			}
-		}
-		last;
+		\%sol;
 	}
-#warn "  ($f: powf returning [@result, ($den) x $nom]\n";
-	(@result, ($den) x $nom);
-}
 
-sub rsum {
-	my $list = shift;
-	my $sum = Math::BigRat->new(0);
-	$sum += Math::BigRat->new("1/$_") for @$list;
-	$sum;
+	sub find {
+		my($self, $index, $mod) = @_;
+		return $self->{match}{$mod}[$index] if $self->{complete}{$mod};
+#		die "find not yet implemeneted ...\n";
+
+		# simplistic approach: complete it first
+		my $s = -1;
+		$self->{match}{$mod} = [
+			grep { my $t = ($_->[0] != $s); $s = $_->[0]; $t }
+			sort { $b->[0] <=> $a->[0] }
+			$self->findall($mod, $#{ $self->{val} })
+		];
+		$self->{complete}{$mod} = 1;
+#$self->Dump;
+		$self->{match}{$mod}[$index];
+	}
+
+	sub Dump {
+		my $self = { %{+shift} };
+		my $count = @{ $self->{val} };
+		sub unvec { unpack "b$_[1]", $_[0] }
+		sub unrat { "$_[0]" }
+		$self->{span} = [ map unvec($_, $self->{f}), @{ $self->{span} } ];
+		$self->{full} = unvec($self->{full}, $self->{f});
+		$self->{sum} = unrat($self->{sum});
+		$self->{harm} = [ map unrat($_), @{ $self->{harm} } ];
+		$self->{match} = {
+			map +($_ => [
+				map [ unrat($_->[0]), unvec($_->[1], $count) ], @{ $self->{match}{$_} }
+			]), keys %{ $self->{match} }
+		};
+		use Data::Dumper;
+		warn Dumper($self);
+	}
+
+	sub findall {
+		my($self, $mod, $max) = @_;
+		return $mod ? () : [ 0 => '' ] if $max < 0;
+		return () unless vec $self->{span}[$max + 1], $mod, 1;
+		my $incl = ($mod - $self->{rec}[$max]) % $self->{f};
+		($self->findall($mod, $max - 1), map {
+			$_->[0] += $self->{harm}[$max];
+			vec($_->[1], $max, 1) = 1;
+			$_
+		} $self->findall($incl, $max - 1));
+	}
+
+	sub consider {
+		my $self = shift;
+		my $reqpp = $self->{pp};
+		my $reqind = $#{ $self->{val} };
+		my(@index, @sum, @kept);
+		my $topkept = 0;
+		my $botseen = $limit;
+		my $try = $#known;
+		$index[$try] = -1;
+		$sum[$try + 1] = $S - $N;
+		$kept[$try + 1] = $rat0;
+		while ($try < @known) {
+			my $spare = $sum[$try + 1];
+			my $kept = $kept[$try + 1];
+			my $pp = $known[$try];
+			++$index[$try];
+			my $mod = (
+# FIXME: topkept should be the top _number_ kept, not the top power
+				$pp->{pp} * $pp->{f} <= $topkept
+				&& !($kept->denominator % $pp->{pp})
+			) ? $pp->inverse($kept->numerator % $pp->{f}) : 0;
+#warn "mod $mod - pp * f @{[ $pp->{pp} * $pp->{f} ]}; topkept $topkept; denom @{[ $kept->denominator % $pp->{pp} ]}\n";
+#warn "$pp->{pp}: trying $index[$try] mod $mod ($spare spare)\n";
+			my $match = $pp->find($index[$try], $mod) or do {
+				++$try;
+				next;
+			};
+			next if $pp->{pp} == $reqpp && !vec($match->[1], $reqind, 1);
+# FIXME: topkept should be the top _number_ kept, not the top power
+			$topkept = $pp->{pp}
+					if $match->[0] > 0 && ($topkept < $pp->{pp});
+			$kept[$try] = $kept + $match->[0];
+			$sum[$try] = $spare -= $pp->{sum} - $match->[0];
+#warn "$pp->{pp}: found [ @{[ join ' ', map $pp->{val}[$_], grep vec($match->[1], $_, 1), 0 .. $#{ $pp->{val} } ]} ] leaving $spare\n";
+			if ($spare < 0) {
+				++$try;
+				next;
+			}
+			return $self->solution(\@index, $try) if $spare == 0;
+#warn("maybe solution: $spare\n"),
+			$self->maybe_solution(\@index, $try, $spare->denominator) && return 1
+					if $spare->numerator == 1;
+			$index[--$try] = -1 if $try;
+			$botseen = $known[$try]{pp} if $botseen >= $pp->{pp};
+		}
+		warn "... reached $botseen\n";
+		return 0;
+	}
+
+	sub inverse {
+		my($self, $b) = @_;
+		my $a = $self->{f};
+		return 1 if $a == 1;
+		my($p, $q, $r, $s) = (1, 0, 0, 1);
+		while ($b) {
+			($a, $b, my $d) = ($b, $a % $b, int($a / $b));
+			($p, $q, $r, $s) = ($r, $s, $p - $d * $r, $q - $d * $s);
+		}
+		$q % $self->{f};
+	}
 }
 
 {
@@ -283,16 +287,6 @@ sub rsum {
 	}
 }
 
-# TODO: memoize?
-sub lcm {
-	my $list = shift;
-	my $lcm = Math::BigInt->new(1);
-	for (@$list) {
-		$lcm *= $_ / gcd($lcm, $_);
-	}
-	$lcm;
-}
-
 sub gcd {
 	my($a, $b) = @_;
 	return gcd($b, $a) if $a > $b;
@@ -300,7 +294,8 @@ sub gcd {
 	return gcd($b % $a, $a);
 }
 
-sub sum { reduce { $a + $b } 0, @_ }
+#use List::Util qw/ max reduce /;
+#sub sum { our($a, $b); reduce { $a + $b } 0, @_ }
 
 {
 	my %reccache;
@@ -310,3 +305,28 @@ sub sum { reduce { $a + $b } 0, @_ }
 	}
 }
 
+use Inline C => <<INLINE; no AutoLoader;
+SV* merge(unsigned char* vin, unsigned int fac, unsigned int mod) {
+	unsigned int size = (fac + 7) / 8;
+	unsigned int off, value, byte, inbyte;
+	unsigned int tail = vin[0] + ((size > 1) ? (vin[1] << 8) : 0);
+	unsigned char *vout;
+	SV* sv = newSVpvn("", 0);
+	vout = SvGROW(sv, size + 1);
+	SvCUR(sv) = size;
+	for (byte = 0; byte < size; ++byte) {
+		off = (byte * 8 + fac - mod) % fac;
+		inbyte = off / 8;
+		value = vin[inbyte] + (
+			(inbyte + 1 == size) ? 0 : (vin[inbyte + 1] << 8) 
+		) + (
+			(inbyte + 2 >= size) ? (
+				tail << ((fac & 7) + ((inbyte + 1 == size) ? 0 : 8))
+			) : 0
+		);
+		vout[byte] = vin[byte] | (unsigned char)((value >> (off % 8)) & 255);
+	}
+	vout[size - 1] &= (1 << (fac & 7)) - 1;
+	return sv;
+}
+INLINE
