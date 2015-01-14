@@ -1,0 +1,312 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use Math::BigRat;
+use Math::BigInt;
+use List::Util qw/ max reduce /;
+our($a, $b);
+my $big0 = Math::BigInt->new(0);
+my $big1 = Math::BigInt->new(1);
+
+=head1
+
+a(n): The least integer such that there is a sum of distinct unit fractions
+equal to _n_, the greatest denominator being a(n).
+
+If a(n) = k then there exist S = [ s_1, s_2, ... s_m ] such that s_m = k,
+sum_1^m{1/s_i} = n, and 1 <= i < j <= m => s_i < s_j.
+
+eg f(1) = 1: [ 1 ]
+   f(2) = 6: [ 1, 2, 3, 6 ]
+   f(3) = 24: [ 1, 2, 3, 4, 5, 6, 8, 9, 10, 15, 18, 20, 24 ]
+
+Proof of f(3): for k = 24, we have a candidate set of 1 .. 24, of which the
+prime powers greater than 12 can immediately be discarded as unusable;
+the multiples of 11 are unavailable since no partial sum of [ 2/1, 2/2 ]
+is divisible by 11; the multiples of 7 are unavailable since no partial
+sum of [ 6/1, 6/2, 6/3 ] is divisible by 7.
+
+That leaves the candidate set as S U { 12 }, with a sum of 3 1/12. It
+immediately follows that S is a candidate set with the right sum; further,
+since the greatest denominator is 24, no two fractions from this candidate
+set can be <= 1/12, so no candidate set with a lower maximal element can
+sum to 3.
+
+=cut
+
+$| = 1;
+my $N = shift || 4;
+my $S = Math::BigRat->new(0);
+my @P = (2, 3);
+my($limit, %F, %known, %cur, %consider, %incl, %excl);
+
+for ($limit = 1; 1; ++$limit) {
+	my $full = {
+		n => $limit,
+		factors => factors($limit),
+		harm => Math::BigRat->new("1/$limit"),
+	};
+	$S += $full->{harm};
+	account($_, $full, $limit / $_) for @{ $full->{factors} };
+
+printf "$limit: S = %.6f (%s)\n", $S, $S;
+	next if $S < $N;
+
+	consider();
+}
+exit 0;
+
+sub account {
+	my($n, $full, $mult) = @_;
+	unless ($known{$n}) {
+		$known{$n} = [];
+		$consider{$n} = {};
+	}
+	reconsider($n);
+	push @{ $known{$n} }, $mult;
+}
+
+sub reconsider {
+	my $n = shift;
+	reconsider($n / $F{$n}) if $F{$n} && $F{$n} < $n;
+	if (my $cons = delete $cur{$n}) {
+		$S += $cons->{sum};
+		$consider{$n} = $cons;
+		for (@{ $known{$n} }) {
+			reconsider($_);
+			my $v = $n * $_;
+			delete $incl{$v} if ($incl{$v} || 0) == $n;
+			delete $excl{$v} if ($excl{$v} || 0) == $n;
+		}
+	}
+}
+
+sub consider {
+	while ($S > $N) {
+		if ($S >= Math::BigRat->new("1/$limit") + $N) {
+			my($nom, $den) = ($S - $N)->parts;
+			if ($nom == 1 && !$excl{$den}) {
+				$excl{$den} = 'special';
+				$S -= Math::BigRat->new("1/$den");
+				last;
+			}
+		}
+		my $factor = max(keys %consider) or return;
+		my $cons = delete $consider{$factor};
+		try($factor);
+printf "  tried $factor, now S = %.6f (%s)\n", $S, $S;
+	}
+	if ($S == $N) {
+		printf "a(%s) = %s : { %s }\n",
+				$N, $limit, join(' ', fullset());
+		# ??? incr $N and repeat?
+		exit 0;
+	}
+}
+
+sub fullset {
+	grep !$excl{$_}, 1 .. $limit;
+}
+
+sub exclude {
+	my($f, $all, $texcl, $sharm) = @_;
+	my %tincl = map +($_ => 1), @$all;
+	delete @tincl{@$texcl};
+	$excl{$_ * $f} = $f for @$texcl;
+	$incl{$_ * $f} ||= $f for keys %tincl;
+	my $sum = $sharm / $f;
+#print "    $f: include [ @{[ keys %tincl ]} ] exclude [ @$texcl ]\n";
+	$cur{$f} = {
+		list => $texcl,
+		sum => $sum,
+	};
+	$S -= $sum;
+}
+
+sub try {
+	my $f = shift;
+	my $ff = $F{$f} || $f;
+	my $list = [];
+	my @included;
+	my $include_min;
+#print "  ($f: @{[ scalar @{ $known{$f} } ]} known\n";
+	for (@{ $known{$f} }) {
+		my $v = $f * $_;
+		next if $excl{$v};
+		push(@$list, $_), next unless $incl{$v};
+		push @included, $_;
+		$include_min = (defined($include_min) && $include_min < $incl{$v})
+				? $include_min : $incl{$v};
+	}
+	push @included, powf($f, $ff);
+
+	my $lcm = lcm([ @$list, @included ]);
+#print "  ($f: lcm of @{[ @$list + @included ]} values gives $lcm\n";
+	my $imod = sum(map $lcm / $_, @included) % $ff;
+
+	my $mod = [ map +($lcm / $_) % $ff, @$list ];
+	my $smod = sum(@$mod);
+
+	my $harm = [ map Math::BigRat->new("1/$_"), @$list ];
+	my $sharm = sum(@$harm);
+
+print "  trying $f (with @{[ scalar @$list ]} values)\n";
+#print "  trying $f [ @$list ] => [ @$mod ], smod = $smod, imod = $imod\n";
+	return exclude($f, $list, $list, $sharm) if $smod + $imod < $ff;
+
+	my $fmod = ($smod + $imod) % $ff or return exclude($f, $list, [], 0);
+	my($best, $bestv) = ($sharm, $list);
+	my $tryexcl; $tryexcl = sub {
+		my($count, $tbest, $tbestv, $tharm, $tmod, $index, $tlist) = @_;
+		for (my $i = @$list - $count; $i >= $index; --$i) {
+			my $uharm = $tharm + $harm->[$i];
+			last if $uharm >= $tbest;
+			my $umod = ($tmod + $mod->[$i]) % $ff;
+			if ($umod == $fmod) {
+				$tbest = $uharm;
+				$tbestv = [ @$tlist, $list->[$i] ];
+				last;
+			}
+			next if $count <= 1;
+			($tbest, $tbestv) = $tryexcl->($count - 1, $tbest, $tbestv, $uharm, $umod, $i + 1, [ @$tlist, $list->[$i] ]);
+		}
+		($tbest, $tbestv);
+	};
+
+	# simplistic: loop over all possibilities
+	for (my $n = 1; $n < @$list; ++$n) {
+		($best, $bestv) = $tryexcl->($n, $best, $bestv, 0, 0, 0, []);
+	}
+	return exclude($f, $list, $bestv, $best);
+}
+
+sub powf {
+	my($f, $ff) = @_;
+	my $s = Math::BigRat->new(0);
+	for (my $powf = $f * $ff; $known{$powf}; $powf *= $ff) {
+#print "  ($f: $powf => scalar @{ $known{$powf} } ]} known\n";
+		$s += sum(map Math::BigRat->new("1/$_"),
+				grep $incl{$_}, map $_ * $powf, @{ $known{$powf} });
+	}
+	return if !$s;
+	my($nom, $den) = $s->parts;
+	return if $den % $f;
+	$den /= $f;
+
+	my @result;
+	if (my $int = int($nom / $den)) {
+#warn "int $int\n";
+		$nom -= $den * $int;
+		push @result, (1) x $int;
+	}
+	my $fact;
+#print "  ($f: powf => $s\n";
+	SIZE: while ($nom) {
+		if ($nom < $f) {
+			push @result, ($den) x $nom;
+#warn "  ($f: powf returning [@result]\n";
+			return @result;
+		}
+		$fact ||= factors($den);
+		for (@$fact) {
+			if ($nom > $den / $_) {
+				push @result, $_;
+				$nom -= $den / $_;
+				my $g = gcd($nom, $den);
+				if ($g > 1) {
+					$_ /= $g for $nom, $den;
+				}
+				next SIZE;
+			}
+		}
+		for (@$fact) {
+			if ($nom > $_) {
+				push @result, $den / $_;
+				$nom -= $_;
+				my $g = gcd($nom, $den);
+				if ($g > 1) {
+					$_ /= $g for $nom, $den;
+				}
+			}
+		}
+		last;
+	}
+#warn "  ($f: powf returning [@result, ($den) x $nom]\n";
+	(@result, ($den) x $nom);
+}
+
+sub rsum {
+	my $list = shift;
+	my $sum = Math::BigRat->new(0);
+	$sum += Math::BigRat->new("1/$_") for @$list;
+	$sum;
+}
+
+{
+	my @p; BEGIN { @p = (2, 3) }
+	sub nextprime {
+		my $p = $p[$#p];
+		DIV: while (1) {
+			$p += 2;
+			my $pc = 0;
+			while (1) {
+				my $d = $p[$pc++];
+				last if $d * $d > $p;
+				next DIV unless $p % $d;
+			}
+			$p[@p] = $p;
+			return $p;
+		}
+	}
+
+	sub factors {
+		my $n = shift;
+		my($pc, @result) = (0);
+		while ($n > 1) {
+			my $d = $p[$pc++] || nextprime();
+			if ($d * $d > $n) {
+				push @result, $n;
+				$n = 1;
+			} else {
+				my $pp = 1;
+				$pp *= $d, $n /= $d while 0 == ($n % $d);
+				$F{$pp} = $d if $pp > $d;
+				push @result, $pp if $pp > 1;
+			}
+		}
+		\@result;
+	}
+	# return greatest prime power of n
+	sub gpp {
+		my $s = 1;
+		$s = $s < $_ ? $_ : $s for @{ factors(shift) };
+		$s;
+	}
+}
+
+# TODO: memoize?
+sub lcm {
+	my $list = shift;
+	my $lcm = Math::BigInt->new(1);
+	for (@$list) {
+		$lcm *= $_ / gcd($lcm, $_);
+	}
+	$lcm;
+}
+
+sub gcd {
+	my($a, $b) = @_;
+	return gcd($b, $a) if $a > $b;
+	return $b unless $a;
+	return gcd($b % $a, $a);
+}
+
+sub sum { reduce { $a + $b } 0, @_ }
+
+{
+	my %reccache;
+	sub rec {
+		my $n = shift;
+		$reccache{$n} ||= Math::BigRat->new("1/$n");
+	}
+}
+
