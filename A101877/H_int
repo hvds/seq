@@ -33,19 +33,33 @@ sum to 3.
 
 Established values:
   f(1) = 1; f(2) = 6; f(3) = 24; f(4) = 65; f(5) = 184; f(6) = 469
-  1200 < f(7) <= 1251
+  1200 < f(7) <= 1243
   current: 1220 (probably fail); 1240 (dubious); 1251 (solution)
 
-Hmm, when looping in find, we could notice *each* mod we pass, and
-update other caches as we go.
+Timings: H5(6, 469) =  85.81s; H5(6, 468) = 283.97s ('224s)
+		 H4(6, 469) = 174.27s; H4(6, 468) = 390.13s ('246s)
+         H3(6, 469) = 943.15s; H3(6, 468) = ?
 
-Hmm, when 0 < $spare < 1/$limit, search for $discard == $spare in a single
-pass without caching (and maybe cache failing to find it).
+FIXME: we may skip a reqpp when a different set with the same sum would
+pass the test - we'll never see the other set, so this may miss a solution.
+
+Hmm, if when searching for LFM for some count we see an LFM already
+recorded for another count, skip it and keep looking.
+
+Hmm, when looping in find, we could notice *each* mod we pass, and
+update other caches as we go. But that loses a lot of memory to store
+matches relevant only 1/pp of the time.
 
 Hmm, when processing $known[$cur], consider the minimum discard from
 $known[$cur - 1] - we must either leave at least this much spare, or
 choose our set to keep to be the value (mod $known[$cur - 1]->{f}) so
 as to change the requirements for $cur - 1.
+
+Hmm, since no pp can affect another when both are above sqrt(limit)
+(at least if this is the highest represented power of p), we can run
+through all pp > sqrt(limit) to find the least discard from each, and
+reduce spare accordingly. This will be an effective prune when
+backtracking reaches up into this range.
 
 =cut
 
@@ -158,15 +172,32 @@ exit 0;
 		\%sol;
 	}
 
+	sub find_chop {
+		my($aref, $boundary) = @_;
+		my($min, $max) = (-1, scalar @$aref);
+		while ($max - $min > 1) {
+			my $mid = ($min + $max) >> 1;
+			if ($aref->[$mid][0] < $boundary) {
+				$max = $mid;
+			} else {
+				$min = $mid;
+			}
+		}
+		return $aref->[$max];
+	}
+
 	sub find {
 		my($self, $mod, $max) = @_;
 		my $sum = $self->{sum};
 		my $min = $sum - $max;
 #warn "find: $self->{pp} mod=$mod, min=$min\n";
 #$self->Dump;
-		for (@{ $self->{match}{$mod} }) {
+		{
+			my $aref = $self->{match}{$mod};
+			if ($aref && @$aref > 0 && $aref->[$#$aref]->[0] < $max) {
 #warn("find: returned cached match for $_->[0]\n"),
-			return $_ if $_->[0] < $max;
+				return find_chop($aref, $max);
+			}
 		}
 #warn("find: complete, nothing found\n"),
 		return undef if $self->{complete}{$mod};
@@ -258,6 +289,99 @@ exit 0;
 		undef;
 	}
 
+	sub exact_chop {
+		my($aref, $boundary) = @_;
+		my($min, $max) = (-1, scalar @$aref);
+		while ($max - $min > 1) {
+			my $mid = ($min + $max) >> 1;
+			if ($aref->[$mid][0] < $boundary) {
+				$max = $mid;
+			} elsif ($aref->[$mid][0] > $boundary) {
+				$min = $mid;
+			} else {
+				return $aref->[$mid];
+			}
+		}
+		return undef;
+	}
+
+	sub find_exact {
+		my($self, $mod, $discard) = @_;
+		my $sum = $self->{sum};
+		my $keep = $sum - $discard;
+#warn "find_exact: $self->{pp} mod=$mod, discard=$discard\n";
+#$self->Dump;
+		{
+			my $aref = $self->{match}{$mod};
+			if ($aref && @$aref > 0 && $aref->[$#$aref]->[0] <= $keep) {
+#warn("find_exact: returned cached match for $_->[0]\n"),
+				return exact_chop($aref, $keep);
+			}
+		}
+#warn("find: complete, nothing found\n"),
+		return undef if $self->{complete}{$mod};
+		my $f = $self->{f};
+		my $dismod = ($self->{modsum} - $mod) % $f;
+		my $number = @{ $self->{val} };
+		my $full = ::vec1($number);
+		my $cache = $self->{cache}{$mod} || [];
+		my $rmin = ::rec($self->{val}[ $#{ $self->{val} } ]);
+		for my $count (0 .. $number) {
+#warn("cache: bail at $count (too high)\n"),
+			last if $count * $rmin > $discard;
+			my $ccache = $cache->[$count] || {};
+			my $lfm = $ccache->{lfm};
+			if ($lfm && $lfm->[0] == $discard) {
+				return [ $self->{sum} - $lfm->[0], $lfm->[1] ];
+			}
+			next if $ccache->{complete};
+
+			my $cur = $ccache->{nfm} || [];
+			my $csum = [ $rat0 ];
+			my $cmod = [ 0 ];
+			for (@$cur) {
+				push @$csum, ::rec($self->{val}[$_]) + $csum->[$#$csum];
+				push @$cmod, ($self->{rec}[$_] + $cmod->[$#$cmod]) % $f;
+			}
+			my $set = @$cur;
+			SUBSEQ: while (1) {
+#warn("cache fill for $count: $set [@{[ join ' ', @$cur[0..$set-1] ]}]\n");
+				if ($set == $count && $cmod->[$set] == $dismod && $csum->[$set] == $discard) {
+#warn "cache fill: got a match\n";
+					my $v = $full;
+					vec($v, $_, 1) = 0 for @$cur;
+					return [ $self->{sum} - $csum->[$set], $v ];
+				}
+				if ($set < $count) {
+					$cur->[$set] = @$cur ? $cur->[$set - 1] : $number;
+					++$set;
+				}
+				INDEX: while (1) {
+#warn "cache index: trying $set [@{[ join ' ', @$cur[0..$set-1] ]}]\n";
+					unless ($set) {
+						last SUBSEQ;
+					}
+					my $i = --$cur->[$set - 1];
+					if ($i < $count - $set) {
+						--$set;
+						next INDEX;
+					}
+					my $psum = $csum->[$set - 1];
+					my $rn = ::rec($self->{val}[$i]);
+					if ($psum + ($count + 1 - $set) * $rn > $discard) {
+						--$set;
+						next INDEX;
+					}
+					$csum->[$set] = $psum + $rn;
+					$cmod->[$set] = ($cmod->[$set - 1] + $self->{rec}[$i]) % $f;
+					next SUBSEQ;
+				}
+			}
+		}
+#warn "find_exact: no match\n";
+		undef;
+	}
+
 	sub Dump {
 		my $self = { %{+shift} };
 		my $count = @{ $self->{val} };
@@ -324,13 +448,21 @@ exit 0;
 			my $discard = $pp->{sum} - $keeping;
 			$kept[$try] = $kept + $keeping;
 			$sum[$try] = $spare -= $discard;
-warn "  $pp->{pp}: found [ @{[ join ' ', map $pp->{val}[$_], grep vec($vec, $_, 1), 0 .. $#{ $pp->{val} } ]} ] leaving $spare (keeping $keeping, discard $discard)\n";
+#warn "  $pp->{pp}: found [ @{[ join ' ', map $pp->{val}[$_], grep vec($vec, $_, 1), 0 .. $#{ $pp->{val} } ]} ] leaving $spare (keeping $keeping, discard $discard)\n";
 			++$try, next if $spare < $rat0;
 			next if $pp->{pp} == $reqpp && !vec($vec, $reqind, 1);
-			next if $spare > $rat0 && $spare < $rlimit;
+			if ($spare > $rat0 && $spare < $rlimit) {
+				if ($tried[$try] = $pp->find_exact($mod, $spare)) {
+					$spare = $rat0;
+				} else {
+#warn "  $pp->{pp}: overran exact $spare\n";
+					++$try;
+					next;
+				}
+			}
 			return $self->solution(\@tried, $try) if $spare == $rat0;
 			if ($spare->numerator == $int1 && $spare->denominator <= $limit) {
-warn("  maybe solution: $spare\n"),
+#warn("  maybe solution: $spare\n"),
 				$self->maybe_solution(\@tried, $try, $spare->denominator)
 						&& return 1;
 			}
