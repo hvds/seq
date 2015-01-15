@@ -1,7 +1,11 @@
 #!/opt/maths/bin/perl -w
 use strict;
 use Math::BigRat;
+use Math::BigInt;
 my $rat0 = Math::BigRat->new(0);
+my $rat1 = Math::BigRat->new(1);
+my $ratm1 = Math::BigRat->new(-1);
+my $int1 = Math::BigInt->new(1);
 
 =head1
 
@@ -27,20 +31,44 @@ since the greatest denominator is 24, no two fractions from this candidate
 set can be <= 1/12, so no candidate set with a lower maximal element can
 sum to 3.
 
+Established values:
+  f(1) = 1; f(2) = 6; f(3) = 24; f(4) = 65; f(5) = 184; f(6) = 469
+  1200 < f(7) <= 1251
+  current: 1220 (probably fail); 1240 (dubious)
+
+Next step: find() redoes an awful lot of work finding each successive
+match. Given the require modulus $mod and the number of elements to
+discard $count, we could save the array of indices @nfm leading to the
+*next found match*, and $lfm, the sum of the *least found match* greater
+than the last one actually found.
+
+Then, to find the next match:
+- find $min = min(grep defined, {$mod}{$count}->{lfm})
+- for each lfm not defined:
+  - use the existing multiloop algorithm to find the next lfm
+  - aborting if we cannot beat $min
+  - but seed it with @nfm as the starting indices
+  - and return @nfm as the starting indices of the first found match
+    (if different)
+  - and replace $min if $lfm is lower
+- then delete the selected {$mod}{$count}->{lfm} and return it
+- not forgetting to watch out for duplicate sums
+
 =cut
 
 $| = 1;
 my $N = shift || 4;
+my $skip = shift || 1;
 my $S = $rat0;
 my @P = (2, 3);
 my($limit, %F, %known, @known);
 
-for ($limit = 1; 1; ++$limit) {
+$limit = $_, PP->account($_) for 1 .. $skip - 1;
+for ($limit = $skip; 1; ++$limit) {
 	my $pp = PP->account($limit) or next;
 
 printf "$limit: S = %.6f (%s)\n", $S, $S;
 	next if $S < $N;
-
 	$pp->consider() and exit 0;
 }
 exit 0;
@@ -51,20 +79,17 @@ exit 0;
 		my($class, $pp) = @_;
 		$known{$pp} ||= do {
 			my $f = $F{$pp} || $pp;
-			my $span = "\x0" x int(($f + 8) / 8);
+			my $span = ::vec0($f);
 			vec($span, 0, 1) = 1;
-			my $full = "\xff" x int(($f + 8) / 8);
-			$full =~ s/\xff\Z/chr((1 << ($f % 8)) - 1)/e;
 			my $self = bless {
 				pp => $pp,
 				f => $f,
 				val => [],
 				rec => [],
-				harm => [],
 				span => [ $span ],
-				full => $full,
 				kindex => scalar @known,
 				sum => $rat0,
+				modsum => 0,
 				match => {
 					0 => [ [ 0, '' ] ],
 				},
@@ -89,13 +114,14 @@ exit 0;
 		push @{ $self->{val} }, $n;
 		push @{ $self->{rec} }, $inv;
 		push @{ $self->{span} }, ::merge($pspan, $f, $inv);
-		push @{ $self->{harm} }, $rn;
 		$self->{sum} += $rn;
+		$self->{modsum} = ($self->{modsum} + $inv) % $f;
 
 		my $cansolve = $self->{cansolve} = vec($pspan, (-$inv) % $f, 1);
 		$self->{complete} = {
 			0 => !$cansolve && $self->{complete}{0},
 		};
+		$self->{match} = $cansolve ? {} : { 0 => $self->{match}{0} };
 
 		# if any PP > $pp has solutions, we may need to solve for sum != 0
 		return $self if $cansolve;
@@ -106,14 +132,14 @@ exit 0;
 	}
 
 	sub maybe_solution {
-		my($class, $index, $offset, $fly) = @_;
-		my $ointment = $class->span($index, $offset);
+		my($class, $tried, $offset, $fly) = @_;
+		my $ointment = $class->span($tried, $offset);
 		return 0 unless delete $ointment->{$fly};
 		return $class->sol($ointment);
 	}
 	sub solution {
-		my($class, $index, $offset) = @_;
-		return $class->sol($class->span($index, $offset));
+		my($class, $tried, $offset) = @_;
+		return $class->sol($class->span($tried, $offset));
 	}
 	sub sol {
 		my($class, $sol) = @_;
@@ -122,35 +148,74 @@ exit 0;
 		return 1;
 	}
 	sub span {
-		my($class, $index, $offset) = @_;
+		my($class, $tried, $offset) = @_;
 		my %sol = map +($_ => 1), 1 .. $limit;
 		for my $i ($offset .. $#known) {
 			my $pp = $known[$i];
-			my $span = $pp->{match}{0}[$index->[$i]][1];
+			my $span = $tried->[$i][1];
 			if ($span eq '') {
 				delete @sol{ @{ $pp->{val} } };
 			} else {
-				delete @sol{ @{ $pp->{val} }[ grep !vec($span, $_, 1), 0 .. $#{ $pp->{val} } ] };
+				delete @sol{ @{ $pp->{val} }[
+					grep !vec($span, $_, 1), 0 .. $#{ $pp->{val} }
+				] };
 			}
 		}
 		\%sol;
 	}
 
 	sub find {
-		my($self, $index, $mod) = @_;
-		return $self->{match}{$mod}[$index] if $self->{complete}{$mod};
-#		die "find not yet implemeneted ...\n";
-
-		# simplistic approach: complete it first
-		my $s = -1;
-		$self->{match}{$mod} = [
-			grep { my $t = ($_->[0] != $s); $s = $_->[0]; $t }
-			sort { $b->[0] <=> $a->[0] }
-			$self->findall($mod, $#{ $self->{val} })
-		];
-		$self->{complete}{$mod} = 1;
+		my($self, $mod, $max) = @_;
+		my $sum = $self->{sum};
+		my $min = $sum - $max;
+#warn "find: $self->{pp} mod=$mod, min=$min\n";
 #$self->Dump;
-		$self->{match}{$mod}[$index];
+		for (@{ $self->{match}{$mod} }) {
+			return $_ if $_->[0] < $max;
+		}
+		return undef if $self->{complete}{$mod};
+		my $f = $self->{f};
+		my $dismod = ($self->{modsum} - $mod) % $f;
+		my $number = @{ $self->{val} };
+		my $full = ::vec1($number);
+		my $rtry; $rtry = sub {
+			my($count, $best, $dismod, $min, $index) = @_;
+			if ($count == 0) {
+				return +($dismod == 0 && $min < $rat0 && $best > $rat0)
+						? [ $rat0 => $full ] : undef;
+			}
+			my $newbest;
+			for (my $i = $index - 1; $i >= 0; --$i) {
+				my $r = ::rec($self->{val}[$i]);
+				last if $r >= $best;
+				my $v = $full;
+				vec($v, $i, 1) = 0;
+				my $mod2 = ($dismod - $self->{rec}[$i]) % $f;
+				next unless vec($self->{span}[$i], $mod2, 1);
+				my $nextbest = $rtry->(
+					$count - 1, $best - $r, $mod2, $min - $r, $i
+				) or next;
+				$newbest = [ $nextbest->[0] + $r, $nextbest->[1] & $v ];
+				$best = $newbest->[0];
+			}
+			$newbest;
+		};
+
+		my $best = [ $sum + $rat1, undef ];
+		my $rmin = ::rec($self->{val}[ $#{ $self->{val} } ]);
+		for (my $count = 0; $count <= $number; ++$count) {
+			last if $count * $rmin > $best->[0];
+			my $nextbest = $rtry->($count, $best->[0], $dismod, $min, $number)
+					or next;
+			$best = $nextbest;
+		}
+		if (defined $best->[1]) {
+			my $result = [ $sum - $best->[0], $best->[1] ];
+			push @{ $self->{match}{$mod} }, $result;
+			return $result;
+		}
+		$self->{complete}{$mod} = 1;
+		undef;
 	}
 
 	sub Dump {
@@ -159,73 +224,63 @@ exit 0;
 		sub unvec { unpack "b$_[1]", $_[0] }
 		sub unrat { "$_[0]" }
 		$self->{span} = [ map unvec($_, $self->{f}), @{ $self->{span} } ];
-		$self->{full} = unvec($self->{full}, $self->{f});
 		$self->{sum} = unrat($self->{sum});
-		$self->{harm} = [ map unrat($_), @{ $self->{harm} } ];
 		$self->{match} = {
 			map +($_ => [
-				map [ unrat($_->[0]), unvec($_->[1], $count) ], @{ $self->{match}{$_} }
+				map [ unrat($_->[0]), unvec($_->[1], $count) ],
+						@{ $self->{match}{$_} }
 			]), keys %{ $self->{match} }
 		};
 		use Data::Dumper;
 		warn Dumper($self);
 	}
 
-	sub findall {
-		my($self, $mod, $max) = @_;
-		return $mod ? () : [ 0 => '' ] if $max < 0;
-		return () unless vec $self->{span}[$max + 1], $mod, 1;
-		my $incl = ($mod - $self->{rec}[$max]) % $self->{f};
-		($self->findall($mod, $max - 1), map {
-			$_->[0] += $self->{harm}[$max];
-			vec($_->[1], $max, 1) = 1;
-			$_
-		} $self->findall($incl, $max - 1));
-	}
-
 	sub consider {
 		my $self = shift;
 		my $reqpp = $self->{pp};
 		my $reqind = $#{ $self->{val} };
-		my(@index, @sum, @kept);
-		my $topkept = 0;
+		my $rlimit = ::rec($limit);
+		my(@tried, @sum, @kept);
 		my $botseen = $limit;
 		my $try = $#known;
-		$index[$try] = -1;
+		$tried[$try] = undef;
 		$sum[$try + 1] = $S - $N;
 		$kept[$try + 1] = $rat0;
 		while ($try < @known) {
 			my $spare = $sum[$try + 1];
 			my $kept = $kept[$try + 1];
 			my $pp = $known[$try];
-			++$index[$try];
+			my $max = ($tried[$try] || [ $pp->{sum} + $rat1 ])->[0];
 			my $mod = (
-# FIXME: topkept should be the top _number_ kept, not the top power
-				$pp->{pp} * $pp->{f} <= $topkept
+				$pp->{pp} * $pp->{f} <= $limit
 				&& !($kept->denominator % $pp->{pp})
-			) ? $pp->inverse($kept->numerator % $pp->{f}) : 0;
-#warn "mod $mod - pp * f @{[ $pp->{pp} * $pp->{f} ]}; topkept $topkept; denom @{[ $kept->denominator % $pp->{pp} ]}\n";
-#warn "$pp->{pp}: trying $index[$try] mod $mod ($spare spare)\n";
-			my $match = $pp->find($index[$try], $mod) or do {
-				++$try;
-				next;
+			) ? do {
+				my $m = $kept->numerator % $pp->{f};
+				my $d = ($kept->denominator / $pp->{pp}) % $pp->{f};
+				(-$m * $pp->inverse($d)) % $pp->{f};
+			} : 0;
+#warn "mod $mod - pp * f @{[ $pp->{pp} * $pp->{f} ]}; denom @{[ $kept->denominator % $pp->{pp} ]}\n";
+warn "  $pp->{pp}: trying mod $mod max $max ($spare spare; kept $kept)\n";
+			my($keeping, $vec) = @{
+				$tried[$try] = $pp->find($mod, $max) or do {
+					++$try;
+					next;
+				}
 			};
-			next if $pp->{pp} == $reqpp && !vec($match->[1], $reqind, 1);
-# FIXME: topkept should be the top _number_ kept, not the top power
-			$topkept = $pp->{pp}
-					if $match->[0] > 0 && ($topkept < $pp->{pp});
-			$kept[$try] = $kept + $match->[0];
-			$sum[$try] = $spare -= $pp->{sum} - $match->[0];
-#warn "$pp->{pp}: found [ @{[ join ' ', map $pp->{val}[$_], grep vec($match->[1], $_, 1), 0 .. $#{ $pp->{val} } ]} ] leaving $spare\n";
-			if ($spare < 0) {
-				++$try;
-				next;
+			my $discard = $pp->{sum} - $keeping;
+#			next if $pp->{pp} == $reqpp && !vec($vec, $reqind, 1);
+			$kept[$try] = $kept + $keeping;
+			$sum[$try] = $spare -= $discard;
+warn "  $pp->{pp}: found [ @{[ join ' ', map $pp->{val}[$_], grep vec($vec, $_, 1), 0 .. $#{ $pp->{val} } ]} ] leaving $spare (keeping $keeping, discard $discard)\n";
+			++$try, next if $spare < $rat0;
+			next if $spare > $rat0 && $spare < $rlimit;
+			return $self->solution(\@tried, $try) if $spare == $rat0;
+			if ($spare->numerator == $int1 && $spare->denominator <= $limit) {
+warn("  maybe solution: $spare\n"),
+				$self->maybe_solution(\@tried, $try, $spare->denominator)
+						&& return 1;
 			}
-			return $self->solution(\@index, $try) if $spare == 0;
-#warn("maybe solution: $spare\n"),
-			$self->maybe_solution(\@index, $try, $spare->denominator) && return 1
-					if $spare->numerator == 1;
-			$index[--$try] = -1 if $try;
+			$tried[--$try] = undef if $try;
 			$botseen = $known[$try]{pp} if $botseen >= $pp->{pp};
 		}
 		warn "... reached $botseen\n";
@@ -243,6 +298,19 @@ exit 0;
 		}
 		$q % $self->{f};
 	}
+}
+
+sub vec0 {
+	my $bits = shift;
+	my $s = "";
+	vec($s, $bits - 1, 1) = 0;
+	$s;
+}
+sub vec1 {
+	my $bits = shift;
+	my $s = "\xff" x int(1 + ($bits / 8));
+	$s =~ s/\xff\Z/chr((1 << ($bits % 8)) - 1)/e;
+	$s;
 }
 
 {
@@ -293,9 +361,6 @@ sub gcd {
 	return $b unless $a;
 	return gcd($b % $a, $a);
 }
-
-#use List::Util qw/ max reduce /;
-#sub sum { our($a, $b); reduce { $a + $b } 0, @_ }
 
 {
 	my %reccache;
