@@ -1,7 +1,7 @@
 #!/opt/maths/bin/perl -w
 use strict;
+use Math::BigInt qw/ lib GMP /;
 use Math::BigRat;
-use Math::BigInt;
 my $rat0 = Math::BigRat->new(0);
 my $rat1 = Math::BigRat->new(1);
 my $ratm1 = Math::BigRat->new(-1);
@@ -32,13 +32,33 @@ set can be <= 1/12, so no candidate set with a lower maximal element can
 sum to 3.
 
 Established values:
-  f(1) = 1; f(2) = 6; f(3) = 24; f(4) = 65; f(5) = 184; f(6) = 469
-  1200 < f(7) <= 1243
-  current: 1220 (probably fail); 1240 (dubious); 1251 (solution)
+  f(1) = 1; f(2) = 6; f(3) = 24; f(4) = 65; f(5) = 184; f(6) = 469; f(7) = 1243
+  (H8) 21125(494s) < f(10)
+  (C7) 3131(21.5h) < f(8) <= 3231 (51h on 3230 derecursed to 137 1 131 0)
+     (64h on 3150 derecursed to 729 1 727 0, est. 175h total)
+  (C7) 7915(4103s) < f(9) <= 8507 (75m on 8505 d. to 64 4 61 5
+  (C7) 21000(98h) < f(10) <= 22825
+  (C7) 48884(1.4s/3GB) < f(11)
+  (H6) 3051 <= f(8) <= 3231 (66h on 3230 derecursed to 73 1 71 0)
+  (H6) 7501 <= f(9) <= 8498 (20h on 8497 derecursed to 79 128 73 0)
+  (H6) 19107 <= f(10) <= 22820 (2h on 22819 derecursed to 32 2108 31 0)
 
-Timings: H5(6, 469) =  85.81s; H5(6, 468) = 283.97s ('224s)
+Timings:
+         C7(8, 3231) = 43.46s; C7(8, 3230) > ?
+         C7(7, 1243) =  0.03s; C7(7, 1242) = 2742.50s
+         H6(7, 1243) = 20.08s; H6(7, 1242) = 1539h (extrapolated from 160h)
+MBI+GMP  H6(6, 469) =   1.97s; H6(6, 468) =  12.75s
+(These timings with my old computer, which was much slower.)
+MBI upgr H6(6, 469) =  23.29s; H6(6, 468) = 106.03s ('102s)
+		 H6(6, 469) =  37.23s; H6(6, 468) = 199.25s ('184s)
+		 H5(6, 469) =  85.81s; H5(6, 468) = 283.97s ('224s)
 		 H4(6, 469) = 174.27s; H4(6, 468) = 390.13s ('246s)
          H3(6, 469) = 943.15s; H3(6, 468) = ?
+
+Multiple ways to get the same total for a given prime power are common.
+I'm not sure if/when the code currently checks and skips for those cases,
+or when it is safe to - I suspect this is the reqpp problem mentioned
+below.
 
 FIXME: we may skip a reqpp when a different set with the same sum would
 pass the test - we'll never see the other set, so this may miss a solution.
@@ -61,21 +81,50 @@ through all pp > sqrt(limit) to find the least discard from each, and
 reduce spare accordingly. This will be an effective prune when
 backtracking reaches up into this range.
 
+The approach used to test optimality of a(N) is:
+- set Limit successively to 1, 2, ...
+- calculate Q_{p^k} as the subsequence of 1..Limit for which gpp(n) = p^k
+- set H(Limit) = sum_{i=1..Limit}{ 1/i }
+- set Kept = 0/1, Discarded = 0/1
+- recursively for each p^k such that Q_{p^k} is non-empty, in decreasing order
+  - calculate Req = the required sum modulo p :
+    - if denominator(Kept) is not divisible by p^k then Req = 0
+      else Req = (- numerator(Kept) * ( denominator(Kept) / p^k ) ^ -1) (mod p)
+  - for Q_{p^k}, calculate R, the sequence (q_i/p^k) ^ -1 (mod p)
+  - save the values of Kept and Discarded
+  - for each subsequence S of R such that sum(S) == Req (mod p)
+    - for each q_i in Q, add 1/q_i to Kept or Discarded depending
+      on whether the corresponding r_i was used ('kept') in S
+    - if H(Limit) - Discarded = N then terminate successfully
+    - if H(Limit) - Discarded > N then recurse to the next lower prime power
+    - restore Kept and Discarded to the saved values
+  - derecurse
+- and try the next value for Limit
+
+(All calculations are done using exact rationals; various optimisations
+are elided.)
+
+Note that this approach guarantees that denominator(H(Limit) - Discarded)
+is free of any prime power >= p^k before we recurse to the next lower
+prime power.
+
 =cut
 
 $| = 1;
 my $N = shift || 4;
-my $skip = shift || 1;
+my $first = shift || 1;
+my $last = shift || 0;
 my $S = $rat0;
 my @P = (2, 3);
 my($limit, %F, %known, @known);
+my $retry;
 
-$limit = $_, PP->account($_) for 1 .. $skip - 1;
-for ($limit = $skip; 1; ++$limit) {
+$limit = $_, PP->account($_) for 1 .. $first - 1;
+for ($limit = $first; !$last || $limit <= $last; ++$limit) {
 	my $pp = PP->account($limit) or next;
-
-printf "$limit: S = %.6f (%s)\n", $S, $S;
+printf "$limit: S = %.6f\n", $S;
 	next if $S < $N;
+	$retry = -1;
 	$pp->consider() and exit 0;
 }
 exit 0;
@@ -94,6 +143,7 @@ exit 0;
 				val => [],
 				rec => [],
 				span => [ $span ],
+				total => [],
 				kindex => scalar @known,
 				sum => $rat0,
 				modsum => 0,
@@ -124,6 +174,10 @@ exit 0;
 		$self->{sum} += $rn;
 		$self->{modsum} = ($self->{modsum} + $inv) % $f;
 		delete $self->{cache};
+
+		push @{ $self->{total} }, [ map $rn + $_, 0, @{
+			@{ $self->{total} } ? $self->{total}->[$#{ $self->{total} }] : []
+		} ];
 
 		my $cansolve = $self->{cansolve} = vec($pspan, (-$inv) % $f, 1);
 		$self->{complete} = {
@@ -183,7 +237,7 @@ exit 0;
 				$min = $mid;
 			}
 		}
-		return $aref->[$max];
+		return $max;
 	}
 
 	sub find {
@@ -196,7 +250,9 @@ exit 0;
 			my $aref = $self->{match}{$mod};
 			if ($aref && @$aref > 0 && $aref->[$#$aref]->[0] < $max) {
 #warn("find: returned cached match for $_->[0]\n"),
-				return find_chop($aref, $max);
+				my $index = find_chop($aref, $max);
+				$self->diagnose($index) if $self->{kindex} >= $retry;
+				return $aref->[$index];
 			}
 		}
 #warn("find: complete, nothing found\n"),
@@ -214,17 +270,16 @@ exit 0;
 		}
 #warn(defined($best->[1]) ? "find: best precached is $best->[0] at count $best->[2]\n" : "find: no precached\n");
 
-		my $rmin = ::rec($self->{val}[ $#{ $self->{val} } ]);
 		for my $count (0 .. $number) {
 #warn("cache: bail at $count (too high)\n"),
-			last if $count * $rmin > $best->[0];
+			last if $self->{total}[$number - 1][$count - 1] > $best->[0];
 			my $ccache = $cache->[$count] ||= {};
 			next if $ccache->{lfm} || $ccache->{complete};
 			my $cur = delete($ccache->{nfm}) || [];
 			my $csum = [ $rat0 ];
 			my $cmod = [ 0 ];
 			for (@$cur) {
-				push @$csum, ::rec($self->{val}[$_]) + $csum->[$#$csum];
+				push @$csum, $self->{total}[$_][0] + $csum->[$#$csum];
 				push @$cmod, ($self->{rec}[$_] + $cmod->[$#$cmod]) % $f;
 			}
 			my $lfm;
@@ -258,12 +313,11 @@ exit 0;
 						next INDEX;
 					}
 					my $psum = $csum->[$set - 1];
-					my $rn = ::rec($self->{val}[$i]);
-					if ($lfm && $psum + ($count + 1 - $set) * $rn > $lfm->[0]) {
+					if ($lfm && $psum + $self->{total}[$i][$count - $set] > $lfm->[0]) {
 						--$set;
 						next INDEX;
 					}
-					$csum->[$set] = $psum + $rn;
+					$csum->[$set] = $psum + $self->{total}[$i][0];
 					$cmod->[$set] = ($cmod->[$set - 1] + $self->{rec}[$i]) % $f;
 					next SUBSEQ;
 				}
@@ -282,11 +336,36 @@ exit 0;
 			}
 			my $result = [ $sum - $best->[0], $best->[1] ];
 			push @{ $self->{match}{$mod} }, $result;
+			$self->diagnose($#{ $self->{match}{$mod} })
+					if $self->{kindex} >= $retry;
 			return $result;
 		}
 #warn "find: done, complete\n";
 		$self->{complete}{$mod} = 1;
 		undef;
+	}
+
+	{
+		my $preva; BEGIN { $preva = '' }
+		my $prevb; BEGIN { $prevb = '' }
+		my $back; BEGIN { $back = "\x08 \x08" }
+		sub diagnose {
+			my($self, $index) = @_;
+			my $k = $self->{kindex};
+			$retry = $k - 1 if $k - 1 > $retry && $index;
+			return if $k > $retry && !$index;
+			if ($k > $retry) {
+				$self->undiagnose;
+				print STDERR $preva = "$self->{pp} $index";
+			} else {
+				print STDERR $back x length $prevb;
+				print STDERR $prevb = " $self->{pp} $index";
+			}
+		}
+		sub undiagnose {
+			print STDERR $back x (length($preva) + length($prevb));
+			$preva = $prevb = '';
+		}
 	}
 
 	sub exact_chop {
@@ -325,10 +404,9 @@ exit 0;
 		my $number = @{ $self->{val} };
 		my $full = ::vec1($number);
 		my $cache = $self->{cache}{$mod} || [];
-		my $rmin = ::rec($self->{val}[ $#{ $self->{val} } ]);
 		for my $count (0 .. $number) {
 #warn("cache: bail at $count (too high)\n"),
-			last if $count * $rmin > $discard;
+			last if $self->{total}[$number - 1][$count - 1] > $discard;
 			my $ccache = $cache->[$count] || {};
 			my $lfm = $ccache->{lfm};
 			if ($lfm && $lfm->[0] == $discard) {
@@ -336,11 +414,11 @@ exit 0;
 			}
 			next if $ccache->{complete};
 
-			my $cur = $ccache->{nfm} || [];
+			my $cur = delete($ccache->{nfm}) || [];
 			my $csum = [ $rat0 ];
 			my $cmod = [ 0 ];
 			for (@$cur) {
-				push @$csum, ::rec($self->{val}[$_]) + $csum->[$#$csum];
+				push @$csum, $self->{total}[$_][0] + $csum->[$#$csum];
 				push @$cmod, ($self->{rec}[$_] + $cmod->[$#$cmod]) % $f;
 			}
 			my $set = @$cur;
@@ -367,12 +445,11 @@ exit 0;
 						next INDEX;
 					}
 					my $psum = $csum->[$set - 1];
-					my $rn = ::rec($self->{val}[$i]);
-					if ($psum + ($count + 1 - $set) * $rn > $discard) {
+					if ($psum + $self->{total}[$i][$count - $set] > $discard) {
 						--$set;
 						next INDEX;
 					}
-					$csum->[$set] = $psum + $rn;
+					$csum->[$set] = $psum + $self->{total}[$i][0];
 					$cmod->[$set] = ($cmod->[$set - 1] + $self->{rec}[$i]) % $f;
 					next SUBSEQ;
 				}
@@ -415,8 +492,8 @@ exit 0;
 
 	sub consider {
 		my $self = shift;
-		my $reqpp = $self->{pp};
-		my $reqind = $#{ $self->{val} };
+#		my $reqpp = $self->{pp};
+#		my $reqind = $#{ $self->{val} };
 		my $rlimit = ::rec($limit);
 		my(@tried, @sum, @kept);
 		my $botseen = $limit;
@@ -450,7 +527,7 @@ exit 0;
 			$sum[$try] = $spare -= $discard;
 #warn "  $pp->{pp}: found [ @{[ join ' ', map $pp->{val}[$_], grep vec($vec, $_, 1), 0 .. $#{ $pp->{val} } ]} ] leaving $spare (keeping $keeping, discard $discard)\n";
 			++$try, next if $spare < $rat0;
-			next if $pp->{pp} == $reqpp && !vec($vec, $reqind, 1);
+#			next if $pp->{pp} == $reqpp && !vec($vec, $reqind, 1);
 			if ($spare > $rat0 && $spare < $rlimit) {
 				if ($tried[$try] = $pp->find_exact($mod, $spare)) {
 					$spare = $rat0;
@@ -462,14 +539,15 @@ exit 0;
 			}
 			return $self->solution(\@tried, $try) if $spare == $rat0;
 			if ($spare->numerator == $int1 && $spare->denominator <= $limit) {
-#warn("  maybe solution: $spare\n"),
+print("  maybe solution: $spare\n"),
 				$self->maybe_solution(\@tried, $try, $spare->denominator)
 						&& return 1;
 			}
 			$tried[--$try] = undef if $try;
 			$botseen = $known[$try]{pp} if $botseen >= $pp->{pp};
 		}
-		warn "... reached $botseen\n";
+$self->undiagnose;
+print "... reached $botseen\n";
 		return 0;
 	}
 
@@ -539,13 +617,6 @@ sub vec1 {
 		$s = $s < $_ ? $_ : $s for @{ factors(shift) };
 		$s;
 	}
-}
-
-sub gcd {
-	my($a, $b) = @_;
-	return gcd($b, $a) if $a > $b;
-	return $b unless $a;
-	return gcd($b % $a, $a);
 }
 
 {
