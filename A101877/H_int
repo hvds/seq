@@ -34,25 +34,18 @@ sum to 3.
 Established values:
   f(1) = 1; f(2) = 6; f(3) = 24; f(4) = 65; f(5) = 184; f(6) = 469
   1200 < f(7) <= 1251
-  current: 1220 (probably fail); 1240 (dubious)
+  current: 1220 (probably fail); 1240 (dubious); 1251 (solution)
 
-Next step: find() redoes an awful lot of work finding each successive
-match. Given the require modulus $mod and the number of elements to
-discard $count, we could save the array of indices @nfm leading to the
-*next found match*, and $lfm, the sum of the *least found match* greater
-than the last one actually found.
+Hmm, when looping in find, we could notice *each* mod we pass, and
+update other caches as we go.
 
-Then, to find the next match:
-- find $min = min(grep defined, {$mod}{$count}->{lfm})
-- for each lfm not defined:
-  - use the existing multiloop algorithm to find the next lfm
-  - aborting if we cannot beat $min
-  - but seed it with @nfm as the starting indices
-  - and return @nfm as the starting indices of the first found match
-    (if different)
-  - and replace $min if $lfm is lower
-- then delete the selected {$mod}{$count}->{lfm} and return it
-- not forgetting to watch out for duplicate sums
+Hmm, when 0 < $spare < 1/$limit, search for $discard == $spare in a single
+pass without caching (and maybe cache failing to find it).
+
+Hmm, when processing $known[$cur], consider the minimum discard from
+$known[$cur - 1] - we must either leave at least this much spare, or
+choose our set to keep to be the value (mod $known[$cur - 1]->{f}) so
+as to change the requirements for $cur - 1.
 
 =cut
 
@@ -116,6 +109,7 @@ exit 0;
 		push @{ $self->{span} }, ::merge($pspan, $f, $inv);
 		$self->{sum} += $rn;
 		$self->{modsum} = ($self->{modsum} + $inv) % $f;
+		delete $self->{cache};
 
 		my $cansolve = $self->{cansolve} = vec($pspan, (-$inv) % $f, 1);
 		$self->{complete} = {
@@ -171,49 +165,95 @@ exit 0;
 #warn "find: $self->{pp} mod=$mod, min=$min\n";
 #$self->Dump;
 		for (@{ $self->{match}{$mod} }) {
+#warn("find: returned cached match for $_->[0]\n"),
 			return $_ if $_->[0] < $max;
 		}
+#warn("find: complete, nothing found\n"),
 		return undef if $self->{complete}{$mod};
 		my $f = $self->{f};
 		my $dismod = ($self->{modsum} - $mod) % $f;
 		my $number = @{ $self->{val} };
 		my $full = ::vec1($number);
-		my $rtry; $rtry = sub {
-			my($count, $best, $dismod, $min, $index) = @_;
-			if ($count == 0) {
-				return +($dismod == 0 && $min < $rat0 && $best > $rat0)
-						? [ $rat0 => $full ] : undef;
-			}
-			my $newbest;
-			for (my $i = $index - 1; $i >= 0; --$i) {
-				my $r = ::rec($self->{val}[$i]);
-				last if $r >= $best;
-				my $v = $full;
-				vec($v, $i, 1) = 0;
-				my $mod2 = ($dismod - $self->{rec}[$i]) % $f;
-				next unless vec($self->{span}[$i], $mod2, 1);
-				my $nextbest = $rtry->(
-					$count - 1, $best - $r, $mod2, $min - $r, $i
-				) or next;
-				$newbest = [ $nextbest->[0] + $r, $nextbest->[1] & $v ];
-				$best = $newbest->[0];
-			}
-			$newbest;
-		};
-
-		my $best = [ $sum + $rat1, undef ];
-		my $rmin = ::rec($self->{val}[ $#{ $self->{val} } ]);
-		for (my $count = 0; $count <= $number; ++$count) {
-			last if $count * $rmin > $best->[0];
-			my $nextbest = $rtry->($count, $best->[0], $dismod, $min, $number)
-					or next;
-			$best = $nextbest;
+		my $cache = $self->{cache}{$mod} ||= [];
+		my $best = [ $sum + $rat1, undef, undef ];
+		for my $count (0 .. $#$cache) {
+			my $lfm = $cache->[$count]{lfm} or next;
+			next unless $lfm->[0] < $best->[0];
+			$best = [ $lfm->[0], $lfm->[1], $count ];
 		}
-		if (defined $best->[1]) {
+#warn(defined($best->[1]) ? "find: best precached is $best->[0] at count $best->[2]\n" : "find: no precached\n");
+
+		my $rmin = ::rec($self->{val}[ $#{ $self->{val} } ]);
+		for my $count (0 .. $number) {
+#warn("cache: bail at $count (too high)\n"),
+			last if $count * $rmin > $best->[0];
+			my $ccache = $cache->[$count] ||= {};
+			next if $ccache->{lfm} || $ccache->{complete};
+			my $cur = delete($ccache->{nfm}) || [];
+			my $csum = [ $rat0 ];
+			my $cmod = [ 0 ];
+			for (@$cur) {
+				push @$csum, ::rec($self->{val}[$_]) + $csum->[$#$csum];
+				push @$cmod, ($self->{rec}[$_] + $cmod->[$#$cmod]) % $f;
+			}
+			my $lfm;
+			my $set = @$cur;
+			SUBSEQ: while (1) {
+#warn("cache fill for $count: $set [@{[ join ' ', @$cur[0..$set-1] ]}]\n");
+				if ($set == $count && $cmod->[$set] == $dismod && $csum->[$set] > $min) {
+#warn "cache fill: got a match\n";
+#$ccache->{nfm} || warn "cache fill: set nfm\n";
+					$ccache->{nfm} ||= [ @$cur ];
+					if (!$lfm || $lfm->[0] > $csum->[$set]) {
+#warn "cache fill: new best match\n";
+						my $v = $full;
+						vec($v, $_, 1) = 0 for @$cur;
+						$lfm = [ $csum->[$set], $v ];
+					}
+				}
+				if ($set < $count) {
+					$cur->[$set] = @$cur ? $cur->[$set - 1] : $number;
+					++$set;
+				}
+				INDEX: while (1) {
+#warn "cache index: trying $set [@{[ join ' ', @$cur[0..$set-1] ]}]\n";
+					unless ($set) {
+						$ccache->{complete} = 1 unless $ccache->{nfm};
+						last SUBSEQ;
+					}
+					my $i = --$cur->[$set - 1];
+					if ($i < $count - $set) {
+						--$set;
+						next INDEX;
+					}
+					my $psum = $csum->[$set - 1];
+					my $rn = ::rec($self->{val}[$i]);
+					if ($lfm && $psum + ($count + 1 - $set) * $rn > $lfm->[0]) {
+						--$set;
+						next INDEX;
+					}
+					$csum->[$set] = $psum + $rn;
+					$cmod->[$set] = ($cmod->[$set - 1] + $self->{rec}[$i]) % $f;
+					next SUBSEQ;
+				}
+			}
+
+			$ccache->{lfm} = $lfm or next;
+			my $cmp = $lfm->[0] <=> $best->[0];
+			next if ($cmp > 0) || ($cmp == 0 && $count > $best->[2]);
+			$best = [ $lfm->[0], $lfm->[1], $count ];
+		}
+		if (defined $best->[2]) {
+#warn "find: done, returning sum @{[ unrat($best->[0]) ]} for vec @{[ unvec($best->[1], $number) ]}\n";
+			delete $cache->[$best->[2]]{lfm};
+			for (@$cache[ $best->[2] + 1 .. $#$cache ]) {
+				delete $_->{lfm} if $_->{lfm} && $_->{lfm}[0] == $best->[0];
+			}
 			my $result = [ $sum - $best->[0], $best->[1] ];
 			push @{ $self->{match}{$mod} }, $result;
 			return $result;
 		}
+#warn "find: done, complete\n";
 		$self->{complete}{$mod} = 1;
 		undef;
 	}
@@ -230,6 +270,20 @@ exit 0;
 				map [ unrat($_->[0]), unvec($_->[1], $count) ],
 						@{ $self->{match}{$_} }
 			]), keys %{ $self->{match} }
+		};
+		$self->{cache} = +{
+			map {
+				my $mod = $_;
+				+($mod => [
+					map {
+						my $obj = { %$_ };
+						$obj->{lfm} &&= [
+							unrat($obj->{lfm}[0]), unvec($obj->{lfm}[1], $count)
+						];
+						$obj
+					} @{ $self->{cache}{$mod} }
+				])
+			} keys %{ $self->{cache} }
 		};
 		use Data::Dumper;
 		warn Dumper($self);
@@ -260,7 +314,7 @@ exit 0;
 				(-$m * $pp->inverse($d)) % $pp->{f};
 			} : 0;
 #warn "mod $mod - pp * f @{[ $pp->{pp} * $pp->{f} ]}; denom @{[ $kept->denominator % $pp->{pp} ]}\n";
-warn "  $pp->{pp}: trying mod $mod max $max ($spare spare; kept $kept)\n";
+#warn "  $pp->{pp}: trying mod $mod max $max ($spare spare; kept $kept)\n";
 			my($keeping, $vec) = @{
 				$tried[$try] = $pp->find($mod, $max) or do {
 					++$try;
@@ -268,11 +322,11 @@ warn "  $pp->{pp}: trying mod $mod max $max ($spare spare; kept $kept)\n";
 				}
 			};
 			my $discard = $pp->{sum} - $keeping;
-#			next if $pp->{pp} == $reqpp && !vec($vec, $reqind, 1);
 			$kept[$try] = $kept + $keeping;
 			$sum[$try] = $spare -= $discard;
 warn "  $pp->{pp}: found [ @{[ join ' ', map $pp->{val}[$_], grep vec($vec, $_, 1), 0 .. $#{ $pp->{val} } ]} ] leaving $spare (keeping $keeping, discard $discard)\n";
 			++$try, next if $spare < $rat0;
+			next if $pp->{pp} == $reqpp && !vec($vec, $reqind, 1);
 			next if $spare > $rat0 && $spare < $rlimit;
 			return $self->solution(\@tried, $try) if $spare == $rat0;
 			if ($spare->numerator == $int1 && $spare->denominator <= $limit) {
@@ -309,7 +363,7 @@ sub vec0 {
 sub vec1 {
 	my $bits = shift;
 	my $s = "\xff" x int(1 + ($bits / 8));
-	$s =~ s/\xff\Z/chr((1 << ($bits % 8)) - 1)/e;
+	$s =~ s/\xff\Z/chr((1 << ($bits % 8)) - 1)/e if $bits % 8;
 	$s;
 }
 
