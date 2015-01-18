@@ -102,6 +102,29 @@ void teardown_pp(void) {
 	teardown_usable();
 }
 
+int pp_listcmp(const void* a, const void* b) {
+	pp_pp* left = *(pp_pp**)a;
+	pp_pp* right = *(pp_pp**)b;
+
+	if (left->depend) {
+		if (right->depend) {
+			/* dependent PP sort in descending order */
+			return right->pp - left->pp;
+		} else {
+			/* dependent PP sorts after any independent it depends on */
+			return (left->pp * right->pp <= k0) ? +1 : -1;
+		}
+	} else { /* !left->depend */
+		if (right->depend) {
+			/* independent PP sorts before any PP dependent on it */
+			return (left->pp * right->pp <= k0) ? -1 : +1;
+		} else {
+			/* independent PP sort in ascending order */
+			return left->pp - right->pp;
+		}
+	}
+}
+
 void pp_grow(pp_pp* pp, int size) {
 	int i;
 	if (pp->valmax < size) {
@@ -313,6 +336,10 @@ void pp_study(int target) {
 	}
 	ZCLEAR(&maxtotal, "pp_study maxtotal");
 
+	/* now sort so as to satisfy dependencies as early as possible, and
+	 * handle dependent PP as soon as dependencies are satisfied */
+	qsort(pplist, pplistsize, sizeof(pplist[0]), &pp_listcmp);
+
 	QINIT(&spare, "pp_study spare");
 	top = pplist[0];
 	mpq_set_ui(top->need, target, 1);
@@ -388,10 +415,10 @@ int pp_solution(int index) {
 	v = calloc((k0 + 32) >> 5, sizeof(int));
 	for (i = 0; i < pplistsize; ++i) {
 		pp = pplist[i];
-		if (i >= index && pp->depend) {
-			pp_setvec(v, pp, (int*)NULL);
-		} else {
+		if (pp->wr) {
 			pp_setvec(v, pp, &pp->wr->vec[0]);
+		} else {
+			pp_setvec(v, pp, (int*)NULL);
 		}
 	}
 
