@@ -1,0 +1,16 @@
+#!/usr/bin/perl -w
+use strict;
+my %seen;
+while (<>) {
+	my($addr, $type, $legend) = /^(0x[0-9a-f]+) (init|clear): (.*)/
+			or next;
+	if ($type eq 'clear') {
+		next if delete $seen{$addr};
+		warn "double clear $addr: $legend ($.)\n";
+	} else {
+		warn "double init $addr: $legend ($.) <after $seen{$addr}>\n"
+				if $seen{$addr};
+		$seen{$addr} = $legend;
+	}
+}
+warn "leak $_: $seen{$_}\n" for keys %seen;
