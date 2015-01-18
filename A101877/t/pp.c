@@ -9,14 +9,8 @@ double timing(void) { return 0; }
 
 void dump_pp(int n) {
 	int i, j;
-	pp_n* ppi;
 	pp_pp* pp;
 
-	for (i = 1; i <= n; ++i) {
-		ppi = &ppn[i];
-		printf("ppn[%d] = { n = %d; p = %d; pp = %d; d = %d; usable = %d }\n",
-				i, ppi->n, ppi->p, ppi->pp, ppi->d, ppi->usable);
-	}
 	printf("pp list(%d): ", pplistsize);
 	for (i = 0; i < pplistsize; ++i) {
 		printf("%p(%d), ", pplist[i], pplist[i]->pp);
@@ -41,7 +35,6 @@ void dump_pp(int n) {
 
 int main(int argc, char** argv) {
 	int i, j;
-	pp_n* ppi;
 	pp_pp* pp;
 
 	setup_pp(24);

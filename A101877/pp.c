@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "pp.h"
-#include "usable.h"
 #include "prime.h"
 #include "inverse.h"
 #include "walker.h"
@@ -21,7 +20,6 @@ static inline Dprintf(char* format, ...) {
 }
 #endif
 
-pp_n* ppn = (pp_n*)NULL;
 pp_pp* pppp = (pp_pp*)NULL;
 pp_pp** pplist;
 int pplistsize;
@@ -45,13 +43,10 @@ static inline void mpq_mul_z(mpq_t dest, mpq_t src1, mpz_t src2) {
 
 void setup_pp(int k) {
 	int i, d, q;
-	pp_n* ppi;
 
 	k0 = k;
-	setup_usable(k + 1);
 	setup_inverse();
 	setup_walker();
-	ppn = calloc(k + 1, sizeof(pp_n));
 	pppp = calloc(k + 1, sizeof(pp_pp));
 	pplist = (pp_pp**)NULL;
 	pplistsize = 0;
@@ -60,13 +55,9 @@ void setup_pp(int k) {
 	mpz_set_si(z_no_previous, -1);
 	
 	for (i = 1; i <= k; ++i) {
-		ppi = &ppn[i];
-		ppi->n = i;
-		ppi->pp = greatest_prime_power(i, &ppi->p);
-		ppi->d = i / ppi->pp;
-		ppi->usable = is_usable(ppi->p, ppi->pp, k);
-		if (ppi->usable)
-			pp_save_r(ppi);
+		int prime, power;
+		power = greatest_prime_power(i, &prime);
+		pp_save_r(i, prime, power);
 	}
 }
 
@@ -76,7 +67,6 @@ void pp_free(pp_pp* pp) {
 		ZCLEAR(&pp->value[i].value, "pp_%d.value[%d]", pp->pp, i);
 	free(pp->value);
 	QCLEAR(&pp->spare, "pp_%d.spare", pp->pp);
-	QCLEAR(&pp->need, "pp_%d.need", pp->pp);
 	ZCLEAR(&pp->min_discard, "pp_%d.min_discard", pp->pp);
 	ZCLEAR(&pp->denominator, "pp_%d.denominator", pp->pp);
 	ZCLEAR(&pp->total, "pp_%d.total", pp->pp);
@@ -89,7 +79,6 @@ void teardown_pp(void) {
 	pp_pp* pp;
 
 	ZCLEAR(&z_no_previous, "z_no_previous");
-	free(ppn);
 	for (i = 0; i < pplistsize; ++i)
 		pplist[i]->wr = (walk_result*)NULL;
 	for (i = 0; i <= k0; ++i)
@@ -99,7 +88,6 @@ void teardown_pp(void) {
 	free(pppp);
 	teardown_walker();
 	teardown_inverse();
-	teardown_usable();
 }
 
 int pp_listcmp(const void* a, const void* b) {
@@ -246,14 +234,14 @@ void pp_save_any(pp_pp* pp, mpq_t value, int parent) {
 	pp_insert_last(pp);
 }
 
-void pp_save_r(pp_n* ppi) {
-	pp_pp* pp = &pppp[ppi->pp];
+void pp_save_r(int n, int prime, int power) {
+	pp_pp* pp = &pppp[power];
 	pp_value* v;
 	int i, raise;
 	mpq_t q;
 	if (!pp->p) {
-		pp->p = ppi->p;
-		pp->pp = ppi->pp;
+		pp->p = prime;
+		pp->pp = power;
 		pp_grow(pp, MINPPSET);
 		if (pp->p == pp->pp)
 			inverse_table(pp->p);
@@ -261,14 +249,13 @@ void pp_save_r(pp_n* ppi) {
 		ZINIT(&pp->total, "pp_%d.total", pp->pp);
 		ZINIT(&pp->denominator, "pp_%d.denominator", pp->pp);
 		ZINIT(&pp->min_discard, "pp_%d.min_discard", pp->pp);
-		QINIT(&pp->need, "pp_%d.need", pp->pp);
 		QINIT(&pp->spare, "pp_%d.spare", pp->pp);
 		pp->invdenom = 1;
 		mpz_set_ui(pp->denominator, 1);
 	}
 	QINIT(&q, "pp_save_r temp");
-	mpq_set_ui(q, 1, (unsigned int)ppi->d);
-	pp_save_any(pp, q, ppi->n);
+	mpq_set_ui(q, 1, (unsigned int)(n / power));
+	pp_save_any(pp, q, n);
 	QCLEAR(&q, "pp_save_r temp");
 }
 
@@ -342,7 +329,6 @@ void pp_study(int target) {
 
 	QINIT(&spare, "pp_study spare");
 	top = pplist[0];
-	mpq_set_ui(top->need, target, 1);
 	mpq_set_si(top->spare, -target, 1);
 	for (i = 0; i < pplistsize; ++i) {
 		int g;
@@ -411,7 +397,7 @@ int pp_solution(int index) {
 	r = (r == 0) ? 0 : mpz_get_ui(mpq_denref(cur->spare));
 
 	/* probable solution: spare == 0 or spare == 1/r, 1 <= r <= k0 */
-	gmp_printf("probable solution, spare = %Qd (need = %Qd)\n", cur->spare, cur->need);
+	gmp_printf("probable solution, spare = %Qd\n", cur->spare);
 	v = calloc((k0 + 32) >> 5, sizeof(int));
 	for (i = 0; i < pplistsize; ++i) {
 		pp = pplist[i];
@@ -464,6 +450,7 @@ int pp_find(int target) {
 	pp_pp *pp, *nextpp;
 	int i, g, inv;
 	int success = 0;
+	int have_discard;
 	int invsum;
 	mpz_t z, zr;
 	mpq_t q, limit;
@@ -490,11 +477,11 @@ int pp_find(int target) {
 			}
 
 			mpq_set(limit, pp->spare);
-			invsum = pp->invtotal;
 
 Dprintf("at pp_%d spare = %Qd\n", pp->pp, limit);
 			mpz_mul_ui(z, pp->denominator, pp->pp);
-			if (!pp->depend && mpz_sgn(pp->min_discard) != 0) {
+			have_discard = (!pp->depend && mpz_sgn(pp->min_discard) != 0);
+			if (have_discard) {
 				/* (limit_r) += min_discard / denominator / pp */
 				mpz_set(mpq_numref(q), pp->min_discard);
 				mpz_set(mpq_denref(q), z);
@@ -507,14 +494,17 @@ Dprintf("at pp_%d spare = %Qd\n", pp->pp, limit);
 			/* limit is now denormal, but we won't be using it again */
 
 			if (pp->depend) {
-				/* must additionally discard -need_num * inv(need_den) */
-				mpz_fdiv_qr_ui(z, zr, mpq_denref(pp->need), pp->pp);
+				/* must additionally discard spare^-1 (mod p) */
+				mpz_fdiv_qr_ui(z, zr, mpq_denref(pp->spare), pp->pp);
 				if (mpz_sgn(zr) == 0) {
 					inv = invfast(mod_ui(z, pp->p), pp->p);
-					mpz_mul_ui(z, mpq_numref(pp->need), inv);
-					inv = pp->p - mod_ui(z, pp->p);
-					invsum = (invsum + inv) % pp->p;
+					mpz_mul_ui(z, mpq_numref(pp->spare), inv);
+					invsum = mod_ui(z, pp->p);
+				} else {
+					invsum = 0;
 				}
+			} else {
+				invsum = pp->invtotal;
 			}
 Dprintf("effective limit is %Zd, invsum = %d\n", mpq_numref(limit), invsum);
 
@@ -546,12 +536,7 @@ Dprintf("pp_%d walker found discard %Zd/%Zd\n", pp->pp, pp->wr->discard, pp->den
 		mpq_canonicalize(q);
 		mpq_sub(nextpp->spare, pp->spare, q);
 
-		mpz_sub(mpq_numref(q), pp->total, pp->wr->discard);
-		mpz_mul_ui(mpq_denref(q), pp->denominator, pp->pp);
-		mpq_canonicalize(q);
-		mpq_sub(nextpp->need, pp->need, q);
-
-Dprintf("new spare %Qd; new need %Qd\n", nextpp->spare, nextpp->need);
+Dprintf("new spare %Qd\n", nextpp->spare);
 
 		if (mpq_sgn(nextpp->spare) < 0) {
 			/* we've overrun */

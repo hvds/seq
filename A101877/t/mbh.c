@@ -7,8 +7,8 @@ uint g_fail = 0;
 uint g_test = 0;
 
 int mbh_compare(void* context, void* left, void* right) {
-	bhsize_t il = P2I(left);
-	bhsize_t ir = P2I(right);
+	int il = P2I(left);
+	int ir = P2I(right);
 	return (il < ir) ? -1 : (il == ir) ? 0 : +1;
 }
 
