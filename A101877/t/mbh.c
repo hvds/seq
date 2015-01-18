@@ -6,9 +6,9 @@
 uint g_fail = 0;
 uint g_test = 0;
 
-int mbh_compare(bhp h, bhsize_t left, bhsize_t right) {
-	int il = P2I(BHP(h)->heap[left]);
-	int ir = P2I(BHP(h)->heap[right]);
+int mbh_compare(void* context, void* left, void* right) {
+	bhsize_t il = P2I(left);
+	bhsize_t ir = P2I(right);
 	return (il < ir) ? -1 : (il == ir) ? 0 : +1;
 }
 

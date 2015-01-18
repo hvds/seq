@@ -1,5 +1,5 @@
-#include "prime.h"
 #include <stdio.h>
+#include "prime.h"
 
 int g_fail = 0;
 int g_test = 0;
@@ -32,24 +32,32 @@ void test_gpp(int n, int expectpower, int expectprime) {
 	++g_test;
 }
 
-void test_gp(int n, int expect) {
-	int result = greatest_prime(n);
-	if (result != expect) {
-		printf("Error: for greatest_prime(%d) expected %d, got %d\n",
-				n, expect, result);
+void test_gppz(mpz_t z, int expectpower, int expectprime) {
+	int result = z_greatest_prime_power(z, (int*)NULL);
+	int prime = -1;
+	if (result != expectpower) {
+		printf("Error: for greatest_prime_power(");
+		mpz_out_str(stdout, 10, z);
+		printf(") expected %d, got %d\n", expectpower, result);
+		++g_fail;
+	}
+	++g_test;
+	result = z_greatest_prime_power(z, &prime);
+	if (result != expectpower || prime != expectprime) {
+		printf("Error: for greatest_prime_power(");
+		mpz_out_str(stdout, 10, z);
+		printf(") expected (%d, %d), got (%d, %d)\n",
+				expectpower, expectprime, result, prime);
 		++g_fail;
 	}
 	++g_test;
 }
 
-void test_gppair(int n, int expectgp, int expectgpp, int expectgpprime) {
-	test_gp(n, expectgp);
-	test_gpp(n, expectgpp, expectgpprime);
-}
-
 int main(int argc, char** argv) {
 	int i, j;
 	int fib0 = 1, fib1 = 2, fib2;
+	mpz_t z;
+	ZINIT(&z, "test temp");
 	for (i = 1; i < 10; ++i) {
 		testgcd(1, i, 1);
 		testgcd(i, 1, 1);
@@ -66,14 +74,21 @@ int main(int argc, char** argv) {
 		int pow = 1;
 		for (i = 1; i < 10; ++i) {
 			pow *= j;
-			test_gppair(pow, j, pow, j);
+			test_gpp(pow, pow, j);
 		}
 	}
-	test_gppair(121, 11, 121, 11);
-	test_gppair(1237, 1237, 1237, 1237);
-	test_gppair(78, 13, 13, 13);
-	test_gppair(234, 13, 13, 13);
-	test_gppair(702, 13, 27, 3);
+	test_gpp(121, 121, 11);
+	test_gpp(1237, 1237, 1237);
+	test_gpp(78, 13, 13);
+	test_gpp(234, 13, 13);
+	test_gpp(702, 27, 3);
+	mpz_set_ui(z, 2 * 3 * 5 * 7 * 11 * 13 * 17);
+	mpz_mul_ui(z, z, 19 * 23 * 29 * 31);
+	test_gppz(z, 31, 31);
+	mpz_mul_ui(z, z, 19 * 19 * 31);
+	test_gppz(z, 19 * 19 * 19, 19);
+
+	ZCLEAR(&z, "test temp");
 	if (g_fail) {
 		printf("FAIL: failed %u of %u tests.\n", g_fail, g_test);
 	} else {

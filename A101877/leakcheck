@@ -1,16 +1,20 @@
 #!/usr/bin/perl -w
 use strict;
+my %count;
 my %seen;
 while (<>) {
-	my($addr, $type, $legend) = /^(0x[0-9a-f]+) (init|clear): (.*)/
+	my($type, $func, $addr, $legend) = /^(z|q)(init|clear) (0x[0-9a-f]+): (.*)/
 			or next;
-	if ($type eq 'clear') {
-		next if delete $seen{$addr};
-		warn "double clear $addr: $legend ($.)\n";
+	++$count{"$type$func"};
+	if ($func eq 'clear') {
+		next if delete $seen{$type}{$addr};
+		warn "double ${type}clear $addr: $legend ($.)\n";
 	} else {
-		warn "double init $addr: $legend ($.) <after $seen{$addr}>\n"
-				if $seen{$addr};
-		$seen{$addr} = $legend;
+		warn "double ${type}init $addr: $legend ($.) <after $seen{$type}{$addr}>\n"
+				if $seen{$type}{$addr};
+		$seen{$type}{$addr} = $legend;
 	}
 }
-warn "leak $_: $seen{$_}\n" for keys %seen;
+warn "q leak $_: $seen{'q'}{$_}\n" for keys %{ $seen{'q'} };
+warn "z leak $_: $seen{'z'}{$_}\n" for keys %{ $seen{'z'} };
+print join('; ', map "$count{$_} $_", keys %count), "\n";

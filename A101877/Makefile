@@ -1,17 +1,59 @@
+INCS=-I.
+LIBS=-lgmp
+LIBOPTS=
+
 all: debug opt
 	true
 
-debug: t/d_inverse t/d_mbh t/d_prime t/d_usable t/d_walker t/d_pp dC_int
-	true
+.SUFFIXES: .c .oo .do
 
-opt: t/inverse t/mbh t/prime t/usable t/walker t/pp C_int
-	true
+.c.oo:
+	gcc -g -O6 ${INCS} -c -o $*.oo $*.c
 
-dC_int: C_int.c pp.c pp.h inverse.c inverse.h mbh.c mbh.h prime.c prime.h usable.c usable.h walker.c walker.h
-	gcc -g -DDEBUG -I. -o dC_int C_int.c pp.c inverse.c mbh.c prime.c usable.c walker.c
+.c.do:
+	gcc -g -DDEBUG ${INCS} -c -o $*.do $*.c
+	# gcc -g -DDEBUG -DDEBUG_GMP_LEAK ${INCS} -c -o $*.do $*.c
 
-C_int: C_int.c pp.c pp.h inverse.c inverse.h mbh.c mbh.h prime.c prime.h usable.c usable.h walker.c walker.h
-	gcc -g -O6 -I. -o C_int C_int.c pp.c inverse.c mbh.c prime.c usable.c walker.c
+TEST=t/inverse t/mbh t/prime t/usable t/walker t/pp
+DTEST=t/d_inverse t/d_mbh t/d_prime t/d_usable t/d_walker t/d_pp
+
+opt: C_int ${TEST}
+debug: d_C_int ${DTEST}
+
+C_int d_C_int ${TEST} ${DTEST}:
+	gcc -o $@ $^ ${LIBOPTS} ${LIBS}
+
+# Object dependencies
+mygmp.do mygmp.oo: mygmp.c mygmp.h
+inverse.do inverse.oo: inverse.c inverse.h
+mbh.do mbh.oo: mbh.c mbh.h
+prime.do prime.oo: prime.c prime.h mygmp.h
+usable.do usable.oo: usable.c usable.h prime.h
+walker.do walker.oo: walker.c walker.h mbh.h mygmp.h
+pp.do pp.oo: pp.c pp.h walker.h mbh.h inverse.h usable.h prime.h mygmp.h
+C_int.do C_int.oo: C_int.c pp.h walker.h mbh.h inverse.h usable.h prime.h mygmp.h
+t/inverse.do t/inverse.oo: t/inverse.c inverse.h
+t/mbh.do t/mbh.oo: t/mbh.c mbh.h
+t/prime.do t/prime.oo: t/prime.c prime.h mygmp.h
+t/usable.do t/usable.oo: t/usable.c usable.h prime.h
+t/walker.do t/walker.oo: t/walker.c walker.h mbh.h mygmp.h
+t/pp.do t/pp.oo: t/pp.c pp.h walker.h mbh.h inverse.h usable.h prime.h mygmp.h
+
+# Program dependencies
+t/d_inverse: t/inverse.do inverse.do
+t/inverse: t/inverse.oo inverse.oo
+t/d_mbh: t/mbh.do mbh.do
+t/mbh: t/mbh.oo mbh.oo
+t/d_prime: t/prime.do prime.do mygmp.do
+t/prime: t/prime.oo prime.oo mygmp.oo
+t/d_usable: t/usable.do usable.do prime.do mygmp.do
+t/usable: t/usable.oo usable.oo prime.oo mygmp.oo
+t/d_walker: t/walker.do walker.do mbh.do mygmp.do
+t/walker: t/walker.oo walker.oo mbh.oo mygmp.oo
+t/d_pp: t/pp.do pp.do inverse.do mbh.do prime.do usable.do walker.do mygmp.do
+t/pp: t/pp.oo pp.oo inverse.oo mbh.oo prime.oo usable.oo walker.oo mygmp.oo
+d_C_int: C_int.do pp.do inverse.do mbh.do prime.do usable.do walker.do mygmp.do
+C_int: C_int.oo pp.oo inverse.oo mbh.oo prime.oo usable.oo walker.oo mygmp.oo
 
 dtest: debug
 	echo -n "t/d_inverse: " ; t/d_inverse
@@ -29,41 +71,5 @@ test: opt
 	echo -n "t/walker: " ; t/walker
 	echo -n "t/pp: " ; t/pp
 
-t/d_inverse: t/inverse.c inverse.c inverse.h
-	gcc -g -DDEBUG -I. -o t/d_inverse t/inverse.c inverse.c
-
-t/inverse: t/inverse.c inverse.c inverse.h
-	gcc -g -O6 -I. -o t/inverse t/inverse.c inverse.c
-
-t/d_mbh: t/mbh.c mbh.c mbh.h
-	gcc -g -DDEBUG -I. -o t/d_mbh t/mbh.c mbh.c
-
-t/mbh: t/mbh.c mbh.c mbh.h
-	gcc -g -O6 -I. -o t/mbh t/mbh.c mbh.c
-
-t/d_prime: t/prime.c prime.c prime.h
-	gcc -g -DDEBUG -I. -o t/d_prime t/prime.c prime.c
-
-t/prime: t/prime.c prime.c prime.h
-	gcc -g -O6 -I. -o t/prime t/prime.c prime.c
-
-t/d_usable: t/usable.c usable.c usable.h prime.c prime.h
-	gcc -g -DDEBUG -I. -o t/d_usable t/usable.c usable.c prime.c
-
-t/usable: t/usable.c usable.c usable.h prime.c prime.h
-	gcc -g -O6 -I. -o t/usable t/usable.c usable.c prime.c
-
-t/d_walker: t/walker.c walker.c walker.h mbh.c mbh.h
-	gcc -g -DDEBUG -I. -o t/d_walker t/walker.c walker.c mbh.c
-
-t/walker: t/walker.c walker.c walker.h mbh.c mbh.h
-	gcc -g -O6 -I. -o t/walker t/walker.c walker.c mbh.c
-
-t/d_pp: t/pp.c pp.c pp.h inverse.c inverse.h mbh.c mbh.h prime.c prime.h usable.c usable.h walker.c walker.h
-	gcc -g -DDEBUG -I. -o t/d_pp t/pp.c pp.c inverse.c mbh.c prime.c usable.c walker.c
-
-t/pp: t/pp.c pp.c pp.h inverse.c inverse.h mbh.c mbh.h prime.c prime.h usable.c usable.h walker.c walker.h
-	gcc -g -O6 -I. -o t/pp t/pp.c pp.c inverse.c mbh.c prime.c usable.c walker.c
-
 clean:
-	rm -f t/d_inverse t/inverse t/d_mbh t/mbh t/d_prime t/prime t/d_usable t/usable t/d_walker t/walker t/d_pp t/pp C_int dC_int core* vgcore*
+	rm -f ${TEST} ${DTEST} C_int d_C_int *.do *.oo t/*.do t/*.oo core* vgcore*

@@ -4,26 +4,102 @@
 #include <stdint.h>
 
 typedef size_t bhsize_t;    /* must be same size as void* */
+typedef bhsize_t bhp;
 
+/*
+ * Initialize for use. Must be called before any other functions are called.
+ */
+extern void setup_mbh(void);
+
+/*
+ * Clean up after use. After calling this, state should be as it was before
+ * setup_mbh() was called.
+ */
+extern void teardown_mbh(void);
+
+/*
+ * Initialize a new heap.
+ * Input:
+ *   void* context: an opaque context pointer
+ * Returns:
+ *   A bhp referring to the new heap.
+ * Notes:
+ *   The context pointer is accessible as BHP(h)->context.
+ *   Any bhp acquired before this should not be modified until after this
+ *   one has been deleted with mbh_delete().
+ */
+extern bhp mbh_new(void* context);
+
+/*
+ * Free a heap.
+ * Input:
+ *   bhp h: the pointer to the heap to be freed.
+ * Returns:
+ *   Nothing.
+ */
+extern void mbh_delete(bhp h);
+
+/*
+ * Insert a new node into a heap.
+ * Input:
+ *   bhp h: the pointer to the heap.
+ *   void* v: an opaque value object to insert.
+ * Returns:
+ *   Nothing.
+ * Notes:
+ *   The value becomes referenced by the heap until either it is shifted
+ * out (i.e. returned by a call to mbh_shift(h)), or the heap is deleted
+ * (with mbh_delete(h)).
+ */
+extern void mbh_insert(bhp h, void* v);
+
+/*
+ * Shift the least node out of the heap.
+ * Input:
+ *   bhp h: the pointer to the heap.
+ * Returns:
+ *   void* v, the opaque value object shift out of the heap.
+ */
+extern void* mbh_shift(bhp h);
+
+/*
+ * Compare two values (user-supplied).
+ * Input:
+ *   void* context: the context object supplied to mbh_new()
+ *   void* left, void* right: the two value objects to compare
+ * Returns:
+ *   a negative integer to represent 'left < right'
+ *   a positive integer to represent 'left > right'
+ *   zero to represent 'left == right'
+ */
+extern int mbh_compare(void* context, void* left, void* right);
+
+#ifdef SAFE_BUT_SLOW
+extern bhsize_t mbh_size(bhp h);
+#else /* ifdef SAFE_BUT_SLOW */
+
+/* Note: mbharena, bh_heap and BHP(h) are not intended for use by callers.
+ * They are exposed here purely so that mbh_size() can be inlined.
+ */
 extern bhsize_t* mbharena;
 typedef struct bh_s_heap {
 	bhsize_t size;
 	void* context;
 	void* heap[0];
 } bh_heap;
-typedef bhsize_t bhp;
 #define BHP(h) ((bh_heap*)&mbharena[h])
 
-extern void setup_mbh(void);
-extern void teardown_mbh(void);
-extern bhp mbh_new(void* context);
-extern void mbh_delete(bhp h);
-extern void mbh_insert(bhp h, void* v);
-extern void* mbh_shift(bhp h);
+/*   
+ * The current size of the heap.
+ * Input:
+ *   bhp h: the pointer to the heap.
+ * Returns:
+ *   bhsize_t size, the number of items currently stored in the heap.
+ */
 extern inline bhsize_t mbh_size(bhp h) {
 	return BHP(h)->size;
 }
-extern int mbh_compare(bhp h, bhsize_t left, bhsize_t right);
+#endif /* ifdef SAFE_BUT_SLOW */
 
 #define P2I(x) (int)(intptr_t)(x)
 #define I2P(x) (void*)(intptr_t)(x)

@@ -5,6 +5,8 @@
 int g_fail = 0;
 int g_test = 0;
 
+double timing(void) { return 0; }
+
 void dump_pp(int n) {
 	int i, j;
 	pp_n* ppi;
@@ -27,10 +29,10 @@ void dump_pp(int n) {
 					i, pp->p, pp->pp, pp->depend, pp->valsize, pp->valmax);
 			for (j = 0; j < pp->valsize; ++j) {
 				pp_value* v = &pp->value[j];
-				printf("{ value = %d; parent = %d; inv = %d }",
+				gmp_printf("{ value = %Zd; parent = %d; inv = %d }",
 						v->value, v->parent, v->inv);
 			}
-			printf("}; min_discard = %d; invtotal = %d; total = %d; denominator = %d; invdenom = %d }\n",
+			gmp_printf("}; min_discard = %Zd; invtotal = %d; total = %Zd; denominator = %Zd; invdenom = %d }\n",
 					pp->min_discard, pp->invtotal, pp->total, pp->denominator, pp->invdenom);
 		}
 	}
@@ -44,7 +46,7 @@ int main(int argc, char** argv) {
 
 	setup_pp(24);
 	dump_pp(24);
-	pp_study(24);
+	pp_study(3);
 	dump_pp(24);
 
 	if (g_fail) {
