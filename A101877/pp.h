@@ -31,25 +31,24 @@ typedef struct pp_s_pp {
 	int denominator;
 	int invdenom;
 	struct s_walk_result* wr;
-} pp_pp;
-
-typedef struct pp_s_list {
-	pp_pp* pp;
 	struct s_walker* w;
 	int need_num;
 	int need_den;
 	int spare_num;
 	int spare_den;
-} pp_list;
+} pp_pp;
 
 extern pp_n* ppn;
 extern pp_pp* pppp;
-extern pp_list* pplist;
+extern pp_pp** pplist;
 extern int pplistsize;
 extern int pplistmax;
 #define MINPPSET 10
 
-extern void init_pp(int k);
+extern void setup_pp(int k);
+extern void teardown_pp(void);
+extern void pp_study(int target);
+extern int pp_find(int target);
 extern void pp_save_r(pp_n* ppi);
 
 #endif /* PP_H */

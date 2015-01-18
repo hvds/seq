@@ -11,13 +11,7 @@ void usable_grow(int size) {
 	usable = realloc((void*)usable, usable_size * sizeof(int));
 }
 
-void free_usable(void) {
-	free(usable);
-	usable = (int*)NULL;
-	usable_size = 0;
-}
-
-void init_usable(int k) {
+void setup_usable(int k) {
 	int hnum = 0, hden = 1, rnum, rden, shared;
 	int index = 0;
 	usable_grow(10);
@@ -36,6 +30,12 @@ void init_usable(int k) {
 	}
 	usable[index] = hnum;
 	usable_limit = index;
+}
+
+void teardown_usable(void) {
+	free(usable);
+	usable = (int*)NULL;
+	usable_size = 0;
 }
 
 int is_usable(int p, int pp, int k) {

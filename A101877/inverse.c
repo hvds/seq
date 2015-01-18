@@ -80,7 +80,7 @@ void setup_inverse(void) {
 /*
  * Free memory used for inverse caching (see invfast())
  */
-void clear_inverse(void) {
+void teardown_inverse(void) {
 	int i;
 	for (i = 0; i < inverse_size; ++i) {
 		if (inverse[i]) free(inverse[i]);
@@ -93,7 +93,7 @@ void clear_inverse(void) {
  * Input:
  *   unsigned int p, 2 <= p < 2^31, p prime
  *   previous initialization call to setup_inverse()
- *   eventual teardown call to clear_inverse()
+ *   eventual teardown call to teardown_inverse()
  * Returns:
  *   Nothing, but caches all inverses (mod p) for later calls to invfast()
  * Time:

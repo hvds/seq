@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
 	test_all(11);
 	test_all(17);
 	test_all(257);
-	clear_inverse();
+	teardown_inverse();
 	if (g_fail) {
 		printf("FAIL: failed %u of %u tests.\n", g_fail, g_test);
 	} else {

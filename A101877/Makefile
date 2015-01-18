@@ -1,10 +1,10 @@
 all: debug opt
 	true
 
-debug: t/d_inverse t/d_mbh t/d_prime t/d_usable t/d_walker t/d_pp
+debug: t/d_inverse t/d_mbh t/d_prime t/d_usable t/d_walker t/d_pp dC_int
 	true
 
-opt: t/inverse t/mbh t/prime t/usable t/walker t/pp
+opt: t/inverse t/mbh t/prime t/usable t/walker t/pp C_int
 	true
 
 dC_int: C_int.c pp.c pp.h inverse.c inverse.h mbh.c mbh.h prime.c prime.h usable.c usable.h walker.c walker.h

@@ -21,21 +21,22 @@ void test_cusp(int p, int pp, int m) {
 
 int main(int argc, char** argv) {
 	int i;
-	init_usable(1250);
+	setup_usable(1250);
 	for (i = 1; i <= 9; ++i) {
 		test_usable(2, 1 << i, 1250, 1);
 	}
 	test_usable(2, 1 << 10, 1250, 0);
 	test_cusp(137, 137, 5);
 	test_cusp(139, 139, 6);
-	free_usable();
-	init_usable(4096);	/* try to force realloc */
+	teardown_usable();
+	setup_usable(4096);	/* try to force realloc */
 	test_cusp(2, 2048, 2);
-	free_usable();
+	teardown_usable();
 	if (g_fail) {
 		printf("FAIL: failed %u of %u tests.\n", g_fail, g_test);
 	} else {
 		printf("PASS: passed %u tests.\n", g_test);
 	}
+	teardown_usable();
 	return 0;
 }

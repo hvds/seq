@@ -14,8 +14,8 @@ typedef struct bh_s_heap {
 typedef bhsize_t bhp;
 #define BHP(h) ((bh_heap*)&mbharena[h])
 
-extern void mbh_init(void);
-extern void mbh_final(void);
+extern void setup_mbh(void);
+extern void teardown_mbh(void);
 extern bhp mbh_new(void* context);
 extern void mbh_delete(bhp h);
 extern void mbh_insert(bhp h, void* v);

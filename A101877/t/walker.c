@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
 	walker *w, *w2;
 	walk_result* wr;
 
-	walker_init();
+	setup_walker();
 	++g_test;
 	pp.p = 3;
 	pp.pp = 27;
@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
 	test_wr(walker_next(w), 22, 1, 7);
 	test_empty(walker_next(w));
 	delete_walker(w);
-	walker_final();
+	teardown_walker();
 	if (g_fail) {
 		printf("FAIL: failed %u of %u tests.\n", g_fail, g_test);
 	} else {

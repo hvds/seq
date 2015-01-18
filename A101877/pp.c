@@ -8,21 +8,24 @@
 
 pp_n* ppn = (pp_n*)NULL;
 pp_pp* pppp = (pp_pp*)NULL;
-pp_list* pplist = (pp_list*)NULL;
-int pplistsize = 0;
-int pplistmax = 0;
+pp_pp** pplist;
+int pplistsize;
+int pplistmax;
 int k0;
 
-void init_pp(int k) {
+void setup_pp(int k) {
 	int i, d, q;
 	pp_n* ppi;
 
 	k0 = k;
-	init_usable(k + 1);
+	setup_usable(k + 1);
 	setup_inverse();
-	walker_init();
+	setup_walker();
 	ppn = calloc(k + 1, sizeof(pp_n));
 	pppp = calloc(k + 1, sizeof(pp_pp));
+	pplist = (pp_pp**)NULL;
+	pplistsize = 0;
+	pplistmax = 0;
 	
 	for (i = 1; i <= k; ++i) {
 		ppi = &ppn[i];
@@ -35,6 +38,28 @@ void init_pp(int k) {
 	}
 }
 
+void teardown_pp(void) {
+	int i;
+	pp_pp* pp;
+
+	free(ppn);
+	for (i = 0; i < pplistsize; ++i) {
+		pplist[i]->wr = (walk_result*)NULL;
+	}
+	for (i = 0; i <= k0; ++i) {
+		pp = &pppp[i];
+		if (pp->value)
+			free(pp->value);
+		if (pp->wr)
+			free(pp->wr);
+	}
+	free(pplist);
+	free(pppp);
+	teardown_walker();
+	teardown_inverse();
+	teardown_usable();
+}
+
 void pp_grow(pp_pp* pp, int size) {
 	if (pp->valmax < size) {
 		pp->valmax = size;
@@ -44,12 +69,16 @@ void pp_grow(pp_pp* pp, int size) {
 
 void pp_pushlist(pp_pp* pp) {
 	if (pplistsize + 1 >= pplistmax) {
+		int old = pplistmax;
 		pplistmax = pplistmax * 3 / 2;
 		if (pplistmax < MINPPSET)
 			pplistmax = MINPPSET;
-		pplist = realloc(pplist, pplistmax * sizeof(pp_list));
+		pplist = realloc(pplist, pplistmax * sizeof(pplist[0]));
 	}
-	pplist[pplistsize++].pp = pp;
+	if (pplistsize)
+		memmove(&pplist[1], &pplist[0], pplistsize * sizeof(pplist[0]));
+	++pplistsize;
+	pplist[0] = pp;
 }
 
 void pp_free(pp_pp* pp) {
@@ -58,12 +87,10 @@ void pp_free(pp_pp* pp) {
 }
 
 void pp_listsplice(int i) {
-	pp_pp* pp = pplist[i].pp;
-	/* FIXME: do we need to keep order, or can we just move down the last? */
+	pp_pp* pp = pplist[i];
 	if (i < --pplistsize)
-		memmove(&pplist[i], &pplist[i + 1], (pplistsize - i) * sizeof(pp_list));
-	/* Cannot free pp, since parentvec elsewhere may hold refs */
-	/* pp_free(pp); */
+		memmove(&pplist[i], &pplist[i + 1], (pplistsize - i) * sizeof(pplist[0]));
+	/* Cannot free pp, the values are still referenced */
 }
 
 void pp_insert_last(pp_pp* pp) {
@@ -147,7 +174,6 @@ printf("save wr: %d / %d [%d] from %d (%d)\n", wr->discard, from->denominator, w
 		actual_num /= shared;
 		actual_den /= shared;
 	}
-printf("actual %d / %d (shared %d)\n", actual_num, actual_den, shared);
 	while (pp_applied != pp_effective) {
 		q = actual_num / pp_p;
 		if (q * pp_p != actual_num)
@@ -157,27 +183,27 @@ printf("actual %d / %d (shared %d)\n", actual_num, actual_den, shared);
 	}
 	if (pp_applied != pp_effective)
 		actual_den *= pp_effective / pp_applied;
-printf("actual %d / %d\n", actual_num, actual_den);
 
 	to = greatest_prime_power(actual_den, (int*)NULL);
 	actual_den /= to;
 	pp_save_any(&pppp[to], actual_num, actual_den, from->pp);
 }
 
-void pp_study(void) {
-	int i, target;
-	pp_pp* pp;
+void pp_study(int target) {
+	int i, dest;
+	pp_pp *pp, *top;
 	walker* w;
 	walk_result *wr1, *wr2;
-	for (i = pplistsize - 1; i >= 0; --i) {
-		pp = pplist[i].pp;
-		if (!pp->depend) {
+
+	for (i = 0; i < pplistsize; ++i) {
+		pp = pplist[i];
+		if (i == 0 || pp->pp * pplist[i - 1]->pp > k0) {
 			w = new_walker(pp, pp->total - 1, pp->invtotal);
 			wr1 = walker_find(w);
 			if (!wr1) {
-printf("discard %d, no solutions\n", pp->pp);
 				delete_walker(w);
 				pp_listsplice(i);
+				--i;
 				continue;
 			}
 			wr1 = wr_clone(w, wr1);
@@ -186,16 +212,45 @@ printf("discard %d, no solutions\n", pp->pp);
 				pp_save_w(wr1, pp);
 				delete_walker(w);
 				pp_listsplice(i);
+				--i;
 				continue;
 			}
 			pp->min_discard = wr1->discard;
 			free(wr1);
 			delete_walker(w);
 		}
-		target = greatest_prime_power(pp->denominator, (int*)NULL);
-		pppp[target].depend = 1;
-printf("for %d set first dependent %d (denominator %d)\n", pp->pp, target, pp->denominator);
+		dest = greatest_prime_power(pp->denominator, (int*)NULL);
+		pppp[dest].depend = 1;
 	}
+
+	top = pplist[0];
+	top->need_num = target;
+	top->need_den = 1;
+	top->spare_num = -target;
+	top->spare_den = 1;
+	for (i = 0; i < pplistsize; ++i) {
+		int num, den, g;
+
+		pp = pplist[i];
+		num = pp->total - pp->min_discard;
+		den = pp->denominator * pp->pp;
+		/* rat_add(&top->spare_num, &top->spare_den, max, den); */
+		g = gcd(num, den);
+		if (g > 1) {
+			num /= g;
+			den /= g;
+		}
+		g = gcd(top->spare_den, den);
+		den /= g;
+		top->spare_num = top->spare_num * den + num * (top->spare_den / g);
+		top->spare_den *= den;
+		g = gcd(abs(top->spare_num), top->spare_den);
+		if (g > 1) {
+			top->spare_num /= g;
+			top->spare_den /= g;
+		}
+	}
+printf("study: spare = %d/%d\n", top->spare_num, top->spare_den);
 }
 
 static inline void pp_setbit(int* vec, int bit) {
@@ -228,87 +283,67 @@ void pp_setvec(int* vec, pp_pp* pp, int* invec) {
 }
 
 int pp_solution(int index) {
-	pp_list* ppl = &pplist[index];
-	pp_pp* pp;
+	pp_pp *pp, *cur;
 	int* v;
 	int i, j;
 
-	if (ppl->spare_num > 1)
+	cur = pplist[index];
+	if (cur->spare_num > 1)
 		return 0;
-	if (ppl->spare_num == 1 && ppl->spare_den > k0)
+	if (cur->spare_num == 1 && cur->spare_den > k0)
 		return 0;
 	/* probable solution: spare == 0 or spare == 1/r, 1 <= r <= k0 */
-	printf("probable solution, spare = %d/%d (need = %d/%d)\n", ppl->spare_num, ppl->spare_den, ppl->need_num, ppl->need_den);
+	printf("probable solution, spare = %d/%d (need = %d/%d)\n", cur->spare_num, cur->spare_den, cur->need_num, cur->need_den);
 	v = calloc((k0 + 31) >> 5, sizeof(int));
 	for (i = 0; i < pplistsize; ++i) {
-		pp = pplist[i].pp;
-		if (i <= index && pp->depend) {
+		pp = pplist[i];
+		if (i >= index && pp->depend) {
 			pp_setvec(v, pp, (int*)NULL);
 		} else {
 			pp_setvec(v, pp, &pp->wr->vec[0]);
 		}
 	}
 
-	if (pp_testbit(v, ppl->spare_den)) {
+	if (pp_testbit(v, cur->spare_den)) {
 		/* exact solution */
-		v[ppl->spare_den >> 5] &= ~(1 << (ppl->spare_den & 31));
+		v[cur->spare_den >> 5] &= ~(1 << (cur->spare_den & 31));
 	} else {
 		/* inexact, maybe fixable */
-		printf("inexact(%d): ", ppl->spare_den);
+		printf("inexact(%d): ", cur->spare_den);
 	}
 	for (i = 0; i <= k0; ++i)
 		if (pp_testbit(v, i))
 			printf("%d ", i);
 	printf("\n");
+	free(v);
 	return 1;
 }
 
-void pp_find(int target) {
-	pp_list* ppl = &pplist[pplistsize - 1];
-	pp_pp* pp;
-	int i, num, den, g;
+int pp_find(int target) {
+	pp_pp *pp, *nextpp;
+	int i, num, den, g, inv;
+	int success = 0;
 
-	ppl->need_num = target;
-	ppl->need_den = 1;
-	ppl->spare_num = -target;
-	ppl->spare_den = 1;
-	for (i = pplistsize - 1; i >= 0; --i) {
-		pp = pplist[i].pp;
-		num = pp->total - (pp->depend ? 0 : pp->min_discard);
-		den = pp->denominator * pp->pp;
-		/* rat_add(&ppl->spare_num, &ppl->spare_den, max, den); */
-		g = gcd(num, den);
-		if (g > 1) {
-			num /= g;
-			den /= g;
-		}
-		g = gcd(ppl->spare_den, den);
-		den /= g;
-		ppl->spare_num = ppl->spare_num * den + num * (ppl->spare_den / g);
-		ppl->spare_den *= den;
-		g = gcd(abs(ppl->spare_num), ppl->spare_den);
-		if (g > 1) {
-			ppl->spare_num /= g;
-			ppl->spare_den /= g;
-		}
-printf("spare at pp_%d = %d/%d\n", pp->pp, ppl->spare_num, ppl->spare_den);
+	pp_study(target);
+
+	i = 0;
+	pplist[i]->w = (walker*)NULL;
+	if (pplist[i]->spare_num < 0) {
+		printf("Optimizer finds no solution is possible.\n");
+		return 0;
 	}
-
-	i = pplistsize - 1;
-	pplist[i].w = (walker*)NULL;
-	while (i < pplistsize) {
-		ppl = &pplist[i];
-		pp = ppl->pp;
-		if (!ppl->w) {
-			int limit_num = ppl->spare_num;
-			int limit_den = ppl->spare_den;
+	while (i >= 0) {
+		pp = pplist[i];
+		if (!pp->w) {
+			int limit_num = pp->spare_num;
+			int limit_den = pp->spare_den;
 			int invsum = pp->invtotal;
 
 printf("at pp_%d spare = %d / %d\n", pp->pp, limit_num, limit_den);
 			if (!pp->depend && pp->min_discard) {
 				/* (limit_r) -= min_discard / denominator / pp */
-				int num = pp->min_discard;
-				int den = pp->denominator * pp->pp;
+				num = pp->min_discard;
+				den = pp->denominator * pp->pp;
 				g = gcd(num, den);
 				if (g > 1) {
 					num /= g;
@@ -317,75 +352,79 @@ printf("at pp_%d spare = %d / %d\n", pp->pp, limit_num, limit_den);
 				g = gcd(limit_den, den);
 				limit_num = limit_num * (den / g) + num * (limit_den / g);
 				limit_den *= den / g;
-printf("with min_discard = %d / %d / %d, actual spare = %d / %d\n", pp->min_discard, pp->denominator, pp->pp, limit_num, limit_den);
 			}
 			/* effective limit = limit * denominator * pp */
 			g = gcd(limit_den, pp->denominator);
 			limit_den /= g;
 			limit_num *= pp->denominator / g;
 			limit_num = limit_num * pp->pp / limit_den;
-printf("effective limit is %d / %d\n", limit_num, pp->denominator);
 
-printf("at pp_%d invsum = %d\n", pp->pp, invsum);
 			if (pp->depend) {
 				/* must additionally discard -need_num * inv(need_den) */
-				int need_num = ppl->need_num;
-				int need_den = ppl->need_den / pp->pp;
-				if (need_den * pp->pp == ppl->need_den) {
-					int inv = invfast(need_den % pp->p, pp->p);
-					inv = pp->p - ((need_num * inv) % pp->p);
+				num = pp->need_num;
+				den = pp->need_den / pp->pp;
+				if (den * pp->pp == pp->need_den) {
+					inv = invfast(den % pp->p, pp->p);
+					inv = pp->p - ((num * inv) % pp->p);
 					invsum = (invsum + inv) % pp->p;
 				}
-printf("with need = %d / %d, actual invsum = %d\n", ppl->need_num, ppl->need_den, invsum);
 			}
+printf("effective limit is %d / %d, invsum = %d\n", limit_num, pp->denominator, invsum);
 
-			ppl->w = new_walker(pp, limit_num, invsum);
+			pp->w = new_walker(pp, limit_num, invsum);
 		}
 
-		pp->wr = walker_find(ppl->w);
+		pp->wr = walker_find(pp->w);
 		if (!pp->wr) {
-			delete_walker(ppl->w);
-			++i;
-printf("no lines for %d, recurse back to %d\n", pp->pp, pplist[i].pp->pp);
+			delete_walker(pp->w);
+			pp->w = (walker*)NULL;
+			--i;
+printf("no lines for %d, recurse back to %d\n", pp->pp, (i >= 0) ? pplist[i]->pp : -1);
 			continue;
 		}
-		--i;
-if (i < 0) {
-	fprintf(stderr, "underflow\n");
+
+		++i;
+if (i >= pplistsize) {
+	fprintf(stderr, "overflow\n");
 	exit(1);
 }
-		{
-			int num = pp->wr->discard - (pp->depend ? 0 : pp->min_discard);
-			int den = pp->denominator * pp->pp;
-			g = gcd(ppl->spare_den, den);
-			pplist[i].spare_num = ppl->spare_num * (den / g) - num * (ppl->spare_den / g);
-			pplist[i].spare_den = ppl->spare_den * (den / g);
-			g = gcd(pplist[i].spare_num, pplist[i].spare_den);
-			pplist[i].spare_num /= g;
-			pplist[i].spare_den /= g;
-printf("new spare %d / %d = old spare %d / %d - (new discard %d - min discard %d) / %d / %d\n", pplist[i].spare_num, pplist[i].spare_den, ppl->spare_num, ppl->spare_den, pp->wr->discard, (pp->depend ? 0 : pp->min_discard), pp->denominator, pp->pp);
-		}
+		nextpp = pplist[i];
 
-		{
-			int num = pp->total - pp->wr->discard;
-			int den = pp->denominator * pp->pp;
-			g = gcd(ppl->need_den, den);
-			pplist[i].need_num = ppl->need_num * (den / g) - num * (ppl->need_den / g);
-			pplist[i].need_den = ppl->need_den * (den / g);
-			g = gcd(pplist[i].need_num, pplist[i].need_den);
-			pplist[i].need_num /= g;
-			pplist[i].need_den /= g;
-printf("new need %d / %d = old need %d / %d - (total %d - discard %d) / %d / %d\n", pplist[i].need_num, pplist[i].need_den, ppl->need_num, ppl->need_den, pp->total, pp->wr->discard, pp->denominator, pp->pp);
-		}
-		pplist[i].w = (walker*)NULL;
+		num = pp->wr->discard - (pp->depend ? 0 : pp->min_discard);
+		den = pp->denominator * pp->pp;
+		g = gcd(pp->spare_den, den);
+		nextpp->spare_num = pp->spare_num * (den / g) - num * (pp->spare_den / g);
+		nextpp->spare_den = pp->spare_den * (den / g);
+		g = gcd(nextpp->spare_num, nextpp->spare_den);
+		nextpp->spare_num /= g;
+		nextpp->spare_den /= g;
 
-		if (pplist[i].need_num < 0) {
+		num = pp->total - pp->wr->discard;
+		den = pp->denominator * pp->pp;
+		g = gcd(pp->need_den, den);
+		nextpp->need_num = pp->need_num * (den / g) - num * (pp->need_den / g);
+		nextpp->need_den = pp->need_den * (den / g);
+		g = gcd(nextpp->need_num, nextpp->need_den);
+		nextpp->need_num /= g;
+		nextpp->need_den /= g;
+printf("new spare %d / %d; new need %d / %d\n", nextpp->spare_num, nextpp->spare_den, nextpp->need_num, nextpp->need_den);
+
+		nextpp->w = (walker*)NULL;
+		if (nextpp->need_num < 0) {
 			/* we've overrun */
-			++i;
+			--i;
 			continue;
 		}
-		if (pplist[i].pp->depend && pp_solution(i))
-			return;
+		if (nextpp->depend && pp_solution(i)) {
+			success = 1;
+			break;
+		}
 	}
-	printf("no solution found\n");
+	for (i = 0; i < pplistsize; ++i) {
+		if (pplist[i]->w)
+			delete_walker(pplist[i]->w);
+	}
+	if (!success)
+		printf("no solution found\n");
+	return success;
 }

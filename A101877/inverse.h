@@ -14,7 +14,7 @@ typedef unsigned int uint;
 extern uint inveuclid(uint n, uint m);
 extern void invtable(uint p, uint* t);
 extern void setup_inverse(void);
-extern void clear_inverse(void);
+extern void teardown_inverse(void);
 extern void inverse_table(uint p);
 
 extern uint** inverse;

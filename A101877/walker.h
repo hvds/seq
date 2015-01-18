@@ -28,8 +28,8 @@ typedef struct s_walker {
 
 #define MINARENA 16
 
-extern void walker_init(void);
-extern void walker_final(void);
+extern void setup_walker(void);
+extern void teardown_walker(void);
 extern walker* new_walker(struct pp_s_pp* pp, int limit, int invsum);
 extern void w_push_heap(walker* w, int sum, int nextbit);
 extern walk_result* walker_next(walker* w);

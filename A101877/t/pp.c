@@ -17,7 +17,7 @@ void dump_pp(int n) {
 	}
 	printf("pp list(%d): ", pplistsize);
 	for (i = 0; i < pplistsize; ++i) {
-		printf("%p(%d), ", pplist[i].pp, pplist[i].pp->pp);
+		printf("%p(%d), ", pplist[i], pplist[i]->pp);
 	}
 	printf("\n");
 	for (i = 1; i <= n; ++i) {
@@ -42,12 +42,7 @@ int main(int argc, char** argv) {
 	pp_n* ppi;
 	pp_pp* pp;
 
-/*	init_pp(6);
-	dump_pp(6);
-	pp_study();
-	dump_pp(6);
-*/
-	init_pp(24);
+	setup_pp(24);
 	dump_pp(24);
 	pp_study(24);
 	dump_pp(24);

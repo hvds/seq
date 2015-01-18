@@ -8,13 +8,13 @@ bhsize_t mbhsize;
 
 #define OVERHEAD (sizeof(bh_heap) / sizeof(bhsize_t))
 
-void mbh_init(void) {
+void setup_mbh(void) {
 	mbhmaxsize = MINARENA;
 	mbharena = (bhsize_t*)malloc(mbhmaxsize * sizeof(bhsize_t));
 	mbhsize = 0;
 }
 
-void mbh_final(void) {
+void teardown_mbh(void) {
 	free(mbharena);
 }
 

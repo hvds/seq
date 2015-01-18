@@ -83,9 +83,9 @@ void test_a(void) {
 int main(int argc, char** argv) {
 	bhp a, b;
 	int i, j;
-	mbh_init();
+	setup_mbh();
 	test_a();
-	mbh_final();
+	teardown_mbh();
 
 	if (g_fail) {
 		printf("FAIL: failed %u of %u tests.\n", g_fail, g_test);

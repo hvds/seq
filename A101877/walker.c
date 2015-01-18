@@ -12,12 +12,12 @@ static inline walk_result* wr_concrete(walker* w, void* abstract) {
 	return (walk_result*)(w->arena + P2I(abstract));
 }
 
-void walker_init(void) {
-	mbh_init();
+void setup_walker(void) {
+	setup_mbh();
 }
 
-void walker_final(void) {
-	mbh_final();
+void teardown_walker(void) {
+	teardown_mbh();
 }
 
 static inline int wr_size(walker* w) {
