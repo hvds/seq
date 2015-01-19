@@ -7,6 +7,18 @@ typedef size_t bhsize_t;    /* must be same size as void* */
 typedef bhsize_t bhp;
 
 /*
+ * Typedef for function to compare two heap objects
+ * Input:
+ *   void* context: the context object supplied to mbh_new()
+ *   void* left, void* right: the two value objects to compare
+ * Returns:
+ *   a negative integer to represent 'left < right'
+ *   a positive integer to represent 'left > right'
+ *   zero to represent 'left == right'
+ */
+typedef int (mbh_compare_func)(void* context, void* left, void* right);
+
+/*
  * Initialize for use. Must be called before any other functions are called.
  */
 extern void setup_mbh(void);
@@ -28,7 +40,7 @@ extern void teardown_mbh(void);
  *   Any bhp acquired before this should not be modified until after this
  *   one has been deleted with mbh_delete().
  */
-extern bhp mbh_new(void* context);
+extern bhp mbh_new(void* context, mbh_compare_func* comparator);
 
 /*
  * Free a heap.
@@ -62,18 +74,6 @@ extern void mbh_insert(bhp h, void* v);
  */
 extern void* mbh_shift(bhp h);
 
-/*
- * Compare two values (user-supplied).
- * Input:
- *   void* context: the context object supplied to mbh_new()
- *   void* left, void* right: the two value objects to compare
- * Returns:
- *   a negative integer to represent 'left < right'
- *   a positive integer to represent 'left > right'
- *   zero to represent 'left == right'
- */
-extern int mbh_compare(void* context, void* left, void* right);
-
 #ifdef SAFE_BUT_SLOW
 extern bhsize_t mbh_size(bhp h);
 #else /* ifdef SAFE_BUT_SLOW */
@@ -85,6 +85,7 @@ extern bhsize_t* mbharena;
 typedef struct bh_s_heap {
 	bhsize_t size;
 	void* context;
+	mbh_compare_func* comparator;
 	void* heap[0];
 } bh_heap;
 #define BHP(h) ((bh_heap*)&mbharena[h])

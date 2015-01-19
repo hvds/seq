@@ -6,7 +6,7 @@
  * returned by mbh_new() (and not yet freed by mbh_delete()) should ever be
  * modified.
  *
- * Sorting is done by a (compile-time) user-supplied comparison routine:
+ * Sorting is done by a user-supplied comparison routine:
  *   extern int mbh_compare(void* context, void* left, void* right);
  * which should return a negative integer to represent 'left < right',
  * zero to represent 'left == right' and a positive integer to represent
@@ -80,11 +80,12 @@ void mbh_assert(bhp h, bhsize_t size) {
  *   Any bhp acquired before this should not be modified until after this
  *   one has been deleted with mbh_delete().
  */
-bhp mbh_new(void* context) {
+bhp mbh_new(void* context, mbh_compare_func* comparator) {
 	bhp h = mbhsize;
 	mbh_assert(h, 0);
 	BHP(h)->size = 0;
 	BHP(h)->context = context;
+	BHP(h)->comparator = comparator;
 	return h;
 }
 
@@ -133,7 +134,7 @@ void mbh_insert(bhp h, void* v) {
 	BHP(h)->heap[node] = v;
 	while (node > 0) {
 		parent = (node - 1) >> 1;
-		if (mbh_compare(
+		if (BHP(h)->comparator(
 			BHP(h)->context, BHP(h)->heap[parent], BHP(h)->heap[node]
 		) <= 0) {
 			return;
@@ -162,12 +163,12 @@ void* mbh_shift(bhp h) {
 		child = (node << 1) + 1;
 		if (child >= BHP(h)->size)
 			break;
-		if (child + 1 < BHP(h)->size && mbh_compare(
+		if (child + 1 < BHP(h)->size && BHP(h)->comparator(
 			BHP(h)->context, BHP(h)->heap[child], BHP(h)->heap[child + 1]
 		) > 0) {
 			child = child + 1;
 		}
-		if (mbh_compare(
+		if (BHP(h)->comparator(
 			BHP(h)->context, BHP(h)->heap[node], BHP(h)->heap[child]
 		) <= 0) {
 			break;

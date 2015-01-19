@@ -14,8 +14,8 @@ all: debug opt
 	gcc -g -DDEBUG ${INCS} -c -o $*.do $*.c
 	# gcc -g -DDEBUG -DDEBUG_GMP_LEAK ${INCS} -c -o $*.do $*.c
 
-TEST=t/inverse t/mbh t/prime t/walker t/pp
-DTEST=t/d_inverse t/d_mbh t/d_prime t/d_walker t/d_pp
+TEST=t/mygmp t/inverse t/mbh t/prime t/walker t/pp
+DTEST=t/d_mygmp t/d_inverse t/d_mbh t/d_prime t/d_walker t/d_pp
 
 opt: C_int ${TEST}
 debug: d_C_int ${DTEST}
@@ -31,6 +31,7 @@ prime.do prime.oo: prime.c prime.h mygmp.h
 walker.do walker.oo: walker.c walker.h mbh.h mygmp.h
 pp.do pp.oo: pp.c pp.h walker.h mbh.h inverse.h prime.h mygmp.h
 C_int.do C_int.oo: C_int.c pp.h walker.h mbh.h inverse.h prime.h mygmp.h
+t/mygmp.do t/mygmp.oo: t/mygmp.c mygmp.h
 t/inverse.do t/inverse.oo: t/inverse.c inverse.h
 t/mbh.do t/mbh.oo: t/mbh.c mbh.h
 t/prime.do t/prime.oo: t/prime.c prime.h mygmp.h
@@ -38,6 +39,8 @@ t/walker.do t/walker.oo: t/walker.c walker.h mbh.h mygmp.h
 t/pp.do t/pp.oo: t/pp.c pp.h walker.h mbh.h inverse.h prime.h mygmp.h
 
 # Program dependencies
+t/d_mygmp: t/mygmp.do mygmp.do
+t/mygmp: t/mygmp.oo mygmp.oo
 t/d_inverse: t/inverse.do inverse.do
 t/inverse: t/inverse.oo inverse.oo
 t/d_mbh: t/mbh.do mbh.do
@@ -52,6 +55,7 @@ d_C_int: C_int.do pp.do inverse.do mbh.do prime.do walker.do mygmp.do
 C_int: C_int.oo pp.oo inverse.oo mbh.oo prime.oo walker.oo mygmp.oo
 
 dtest: debug
+	echo -n "t/d_mygmp: " ; t/d_mygmp
 	echo -n "t/d_inverse: " ; t/d_inverse
 	echo -n "t/d_mbh: " ; t/d_mbh
 	echo -n "t/d_prime: " ; t/d_prime
@@ -59,6 +63,7 @@ dtest: debug
 	echo -n "t/d_pp: " ; t/d_pp
 
 test: opt
+	echo -n "t/mygmp: " ; t/mygmp
 	echo -n "t/inverse: " ; t/inverse
 	echo -n "t/mbh: " ; t/mbh
 	echo -n "t/prime: " ; t/prime

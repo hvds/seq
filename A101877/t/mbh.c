@@ -6,7 +6,7 @@
 uint g_fail = 0;
 uint g_test = 0;
 
-int mbh_compare(void* context, void* left, void* right) {
+int mbh_compare_int(void* context, void* left, void* right) {
 	int il = P2I(left);
 	int ir = P2I(right);
 	return (il < ir) ? -1 : (il == ir) ? 0 : +1;
@@ -50,7 +50,7 @@ void test_cycle(bhp h) {
 
 void test_b(void) {
 	bhp b;
-	b = mbh_new((void*)NULL);
+	b = mbh_new((void*)NULL, &mbh_compare_int);
 	test_cycle(b);
 }
 
@@ -58,7 +58,7 @@ void test_a(void) {
 	bhp a;
 	int i;
 	void* v;
-	a = mbh_new((void*)NULL);
+	a = mbh_new((void*)NULL, &mbh_compare_int);
 	test_cycle(a);
 	for (i = 0; i < 3; ++i) {
 		mbh_insert(a, I2P(i));
