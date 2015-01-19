@@ -7,13 +7,15 @@
 int g_fail = 0;
 int g_test = 0;
 
-void test_empty(walker* w, walk_result* wr) {
-	if (wr) {
+double timing(void) { return 0; }
+
+void test_empty(whp wh, wrhp wrh) {
+	if (wrh) {
 		mpz_t z;
 		ZINIT(&z, "test_empty temp");
-		mpz_set_x(z, DISCARD(w, wr), w->numsize);
+		mpz_set_x(z, wr_discard(wh, wrh), WP(wh)->numsize);
 		gmp_printf("Error: expected end of walker iterator, got <%Zd %d %d>\n",
-				z, wr->invsum, VEC(w, wr)[0]);
+				z, WRP(wh, wrh)->invsum, wr_vec(wh, wrh)[0]);
 		ZCLEAR(&z, "test_empty temp");
 		++g_fail;
 	} else {
@@ -22,20 +24,20 @@ void test_empty(walker* w, walk_result* wr) {
 	++g_test;
 }
 
-void test_wr(walker* w, walk_result* wr, int discard, int invsum, int vec0) {
+void test_wr(whp wh, wrhp wrh, int discard, int invsum, int vec0) {
 	mpz_t z;
-	if (!wr) {
+	if (!wrh) {
 		printf("Error: expected walker iteration <%d %d %d>, got empty\n",
 			discard, invsum, vec0);
 		++g_fail;
 	} else {
 		ZINIT(&z, "test_wr temp");
-		mpz_set_x(z, DISCARD(w, wr), w->numsize);
+		mpz_set_x(z, wr_discard(wh, wrh), WP(wh)->numsize);
 		if (mpz_cmp_ui(z, discard) != 0
-				|| wr->invsum != invsum
-				|| VEC(w, wr)[0] != vec0) {
+				|| WRP(wh, wrh)->invsum != invsum
+				|| wr_vec(wh, wrh)[0] != vec0) {
 			gmp_printf("Error: expected walk_result <%d %d %d>, got <%Zd %d %d>\n",
-				discard, invsum, vec0, z, wr->invsum, VEC(w, wr)[0]);
+				discard, invsum, vec0, z, WRP(wh, wrh)->invsum, wr_vec(wh, wrh)[0]);
 			ZCLEAR(&z, "test_wr temp");
 			++g_fail;
 		} else {
@@ -46,15 +48,15 @@ void test_wr(walker* w, walk_result* wr, int discard, int invsum, int vec0) {
 }
 
 void set_value(pp_pp* pp, int index, int val, int inv) {
-	mpx_set_ui(MPX(VALUE_I(pp, index)), pp->valnumsize, val);
-	VALUE_I(pp, index)->inv = inv;
+	mpx_set_ui(ppv_mpx(pp_value_i(pp, index)), pp->valnumsize, val);
+	pp_value_i(pp, index)->inv = inv;
 }
 
 int main(int argc, char** argv) {
 	int i, j;
 	pp_pp pp;
-	walker *w, *w2;
-	walk_result* wr;
+	whp wh, wh2;
+	wrhp wrh;
 	mpz_t limit;
 	mpx_support* xsup;
 
@@ -65,7 +67,7 @@ int main(int argc, char** argv) {
 	pp.pp = 27;
 	pp.valsize = 3;
 	pp.valnumsize = 1;
-	pp.value = calloc(10, VALSIZE_N(3));
+	pp.value = calloc(10, pp_valsize_n(3));
 	xsup = mpx_support_n(1);
 	pp.adder = xsup->adder;
 	pp.cmper = xsup->cmper;
@@ -73,24 +75,25 @@ int main(int argc, char** argv) {
 	set_value(&pp, 1, 7, 1);
 	set_value(&pp, 2, 5, 2);
 	mpz_set_ui(limit, 22);
-	w = new_walker(&pp, limit, -1);
+
+	wh = new_walker(&pp, limit, -1);
 	++g_test;
-	test_wr(w, walker_next(w), 0, 0, 0);
-	test_wr(w, walker_next(w), 5, 2, 4);
-	test_wr(w, walker_next(w), 7, 1, 2);
-	test_wr(w, walker_next(w), 10, 1, 1);
+	test_wr(wh, walker_findnext(wh), 0, 0, 0);
+	test_wr(wh, walker_findnext(wh), 5, 2, 4);
+	test_wr(wh, walker_findnext(wh), 7, 1, 2);
+	test_wr(wh, walker_findnext(wh), 10, 1, 1);
 	mpz_set_ui(limit, 13);
-	w2 = new_walker(&pp, limit, 0);
-	test_wr(w2, walker_findnext(w2), 0, 0, 0);
-	test_wr(w2, walker_findnext(w2), 12, 0, 6);
-	test_empty(w2, walker_findnext(w2));
-	delete_walker(w2);
-	test_wr(w, walker_next(w), 12, 0, 6);
-	test_wr(w, walker_next(w), 15, 0, 5);
-	test_wr(w, walker_next(w), 17, 2, 3);
-	test_wr(w, walker_next(w), 22, 1, 7);
-	test_empty(w, walker_next(w));
-	delete_walker(w);
+	wh2 = new_walker(&pp, limit, 0);
+	test_wr(wh2, walker_findnext(wh2), 0, 0, 0);
+	test_wr(wh2, walker_findnext(wh2), 12, 0, 6);
+	test_empty(wh2, walker_findnext(wh2));
+	delete_walker(wh2);
+	test_wr(wh, walker_findnext(wh), 12, 0, 6);
+	test_wr(wh, walker_findnext(wh), 15, 0, 5);
+	test_wr(wh, walker_findnext(wh), 17, 2, 3);
+	test_wr(wh, walker_findnext(wh), 22, 1, 7);
+	test_empty(wh, walker_findnext(wh));
+	delete_walker(wh);
 	teardown_walker();
 	free(pp.value);
 	ZCLEAR(&limit, "test limit");

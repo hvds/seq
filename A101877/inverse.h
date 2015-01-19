@@ -20,8 +20,12 @@ extern void inverse_table(uint p);
 extern uint** inverse;
 extern uint inverse_size;
 
+#ifdef ALL_C
+inline uint invfast(uint n, uint p);
+#else /* ALL_C */
 extern inline uint invfast(uint n, uint p) {
 	return inverse[p][n];
 }
+#endif /* ALL_C */
 
 #endif /* INVERSE_H */

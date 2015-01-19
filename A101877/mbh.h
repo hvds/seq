@@ -97,9 +97,13 @@ typedef struct bh_s_heap {
  * Returns:
  *   bhsize_t size, the number of items currently stored in the heap.
  */
+#ifdef ALL_C
+inline bhsize_t mbh_size(bhp h);
+#else /* ALL_C */
 extern inline bhsize_t mbh_size(bhp h) {
 	return BHP(h)->size;
 }
+#endif /* ALL_C */
 #endif /* ifdef SAFE_BUT_SLOW */
 
 #define P2I(x) (int)(intptr_t)(x)

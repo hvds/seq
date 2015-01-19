@@ -20,14 +20,14 @@
 bhsize_t* mbharena;
 bhsize_t mbhmaxsize;
 bhsize_t mbhsize;
-#define MINARENA 100
+#define MBH_MINARENA 100
 #define OVERHEAD (sizeof(bh_heap) / sizeof(bhsize_t))
 
 /*
  * Initialize for use. Must be called before any other functions are called.
  */
 void setup_mbh(void) {
-	mbhmaxsize = MINARENA;
+	mbhmaxsize = MBH_MINARENA;
 	mbharena = (bhsize_t*)malloc(mbhmaxsize * sizeof(bhsize_t));
 	mbhsize = 0;
 }

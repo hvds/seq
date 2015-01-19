@@ -9,14 +9,17 @@ extern double timing(void);
 
 #ifdef DEBUG
 #include <stdarg.h>
-static inline Dprintf(char* format, ...) {
+static inline int Dprintf(char* format, ...) {
+	int result;
 	va_list ap;
 	va_start(ap, format);
-	gmp_vprintf(format, ap);
+	result = gmp_vprintf(format, ap);
 	va_end(ap);
+	return result;
 }
 #else
-static inline Dprintf(char* format, ...) {
+static inline int Dprintf(char* format, ...) {
+	return 0;
 }
 #endif
 
@@ -43,6 +46,26 @@ static inline void mpq_mul_z(mpq_t dest, mpq_t src1, mpz_t src2) {
 	if (&dest != &src1)
 		mpz_set(mpq_denref(dest), mpq_denref(src1));
 	mpq_canonicalize(dest);
+}
+
+inline mpx_t ppv_mpx(pp_value* ppv) {
+	return (mpx_t)&ppv->limbs[0];
+}
+
+inline int pp_valsize_n(int numsize) {
+	return sizeof(pp_value) + numsize * sizeof(mp_limb_t);
+}
+
+inline int pp_valsize(pp_pp* pp) {
+	return pp_valsize_n(pp->valnumsize);
+}
+
+inline pp_value* ppv_value_n_i(pp_value* ppv, int numsize, int index) {
+	return (pp_value*)((char*)ppv + index * pp_valsize_n(numsize));
+}
+
+inline pp_value* pp_value_i(pp_pp* pp, int index) {
+	return ppv_value_n_i(pp->value, pp->valnumsize, index);
 }
 
 void setup_pp(int k) {
@@ -72,8 +95,10 @@ void pp_free(pp_pp* pp) {
 	ZCLEAR(&pp->min_discard, "pp_%d.min_discard", pp->pp);
 	ZCLEAR(&pp->denominator, "pp_%d.denominator", pp->pp);
 	ZCLEAR(&pp->total, "pp_%d.total", pp->pp);
-	if (pp->wr)
-		wr_clone_free(pp->wr);
+	if (pp->wrh)
+		wr_clone_free(pp->wh, pp->wrh);
+	if (pp->wh)
+		delete_walker(pp->wh);
 }
 
 void teardown_pp(void) {
@@ -81,9 +106,9 @@ void teardown_pp(void) {
 	pp_pp* pp;
 
 	ZCLEAR(&z_no_previous, "z_no_previous");
-	/* non-NULL pp->wr is a clone (needing free()) iff pp is not in pplist */
+	/* pp->wrh is not a clone (needing free()) iff pp is in pplist */
 	for (i = 0; i < pplistsize; ++i)
-		pplist[i]->wr = (walk_result*)NULL;
+		pplist[i]->wrh = (wrhp)0;
 	for (i = 0; i <= k0; ++i)
 		if (pppp[i].pp)
 			pp_free(&pppp[i]);
@@ -125,7 +150,7 @@ int pp_listcmp(const void* a, const void* b) {
 void pp_grow(pp_pp* pp, int size) {
 	int i;
 	if (pp->valmax < size) {
-		pp->value = realloc(pp->value, size * VALSIZE(pp));
+		pp->value = realloc(pp->value, size * pp_valsize(pp));
 		pp->valmax = size;
 	}
 }
@@ -135,14 +160,14 @@ void pp_grownum(pp_pp* pp, int newsize) {
 	pp_value *newpv, *newi, *oldi;
 	mpx_support* xsup = mpx_support_n(newsize);
 
-	newpv = malloc(pp->valmax * VALSIZE_N(newsize));
+	newpv = malloc(pp->valmax * pp_valsize_n(newsize));
 	for (i = 0; i < pp->valsize; ++i) {
-		newi = VALUE_N_I(newpv, newsize, i);
-		oldi = VALUE_I(pp, i);
+		newi = ppv_value_n_i(newpv, newsize, i);
+		oldi = pp_value_i(pp, i);
 		newi->self = oldi->self;
 		newi->parent = oldi->parent;
 		newi->inv = oldi->inv;
-		mpx_set(MPX(newi), newsize, MPX(oldi), pp->valnumsize);
+		mpx_set(ppv_mpx(newi), newsize, ppv_mpx(oldi), pp->valnumsize);
 	}
 	free(pp->value);
 	pp->valnumsize = newsize;
@@ -205,26 +230,26 @@ void pp_listsplice(int i) {
  */
 void pp_insert_last(pp_pp* pp) {
 	int size = pp->valsize - 1;
-	pp_value* v = malloc(VALSIZE(pp));
+	pp_value* v = malloc(pp_valsize(pp));
 	mpx_support* xsup = mpx_support_n(pp->valnumsize);
 	int low, high, med, sign;
 
-	memcpy(v, VALUE_I(pp, size), VALSIZE(pp));
-	/* invariant: VALUE_I(pp, low) <= v <= VALUE_I(pp, high) */
+	memcpy(v, pp_value_i(pp, size), pp_valsize(pp));
+	/* invariant: pp_value_i(pp, low) <= v <= pp_value_i(pp, high) */
 	low = -1;
 	high = size + 1;
 	while (low + 1 < high) {
 		med = (low + high) >> 1;
-		sign = xsup->cmper(MPX(v), MPX(VALUE_I(pp, med)));
+		sign = xsup->cmper(ppv_mpx(v), ppv_mpx(pp_value_i(pp, med)));
 		if (sign < 0)
 			low = med;
 		else
 			high = med;
 	}
 	if (high + 1 < size) {
-		memmove(VALUE_I(pp, high + 1), VALUE_I(pp, high),
-				(size - high) * VALSIZE(pp));
-		memcpy(VALUE_I(pp, high), v, VALSIZE(pp));
+		memmove(pp_value_i(pp, high + 1), pp_value_i(pp, high),
+				(size - high) * pp_valsize(pp));
+		memcpy(pp_value_i(pp, high), v, pp_valsize(pp));
 	}
 	free(v);
 }
@@ -277,11 +302,11 @@ void pp_save_any(pp_pp* pp, mpq_t value, int parent, int self) {
 
 	++pp->valsize;
 	pp_grow(pp, pp->valsize);
-	v = VALUE_I(pp, pp->valsize - 1);
+	v = pp_value_i(pp, pp->valsize - 1);
 	v->parent = parent;
 	v->self = self;
 	v->inv = (pp->invdenom * mod_ui(zvalue, pp->p)) % pp->p; /* ref: MAX_P */
-	mpx_set_z(MPX(v), pp->valnumsize, zvalue);
+	mpx_set_z(ppv_mpx(v), pp->valnumsize, zvalue);
 	pp->invtotal = (pp->invtotal + v->inv) % pp->p;
 	pp_insert_last(pp);
 	ZCLEAR(&zvalue, "pp_save_any zvalue");
@@ -352,7 +377,7 @@ void pp_save_r(int n, int prime, int power) {
 	QCLEAR(&q, "pp_save_r temp");
 }
 
-void pp_save_w(walker* w, walk_result* wr, pp_pp* from) {
+void pp_save_w(whp wh, wrhp wrh, pp_pp* from) {
 	mpq_t actual;
 	mpz_t discard;
 	int pp_effective = from->pp;
@@ -364,10 +389,9 @@ void pp_save_w(walker* w, walk_result* wr, pp_pp* from) {
 
 	ZINIT(&discard, "pp_save_w discard");
 	QINIT(&actual, "pp_save_w temp");
-	mpz_set_x(discard, DISCARD(w, wr), from->valnumsize);
+	mpz_set_x(discard, wr_discard(wh, wrh), from->valnumsize);
 	Dprintf("save wr: %Zd / %Zd [%d] from %d (%d)\n",
-			discard, from->denominator, VEC(w, wr)[0], from->pp, from->p);
-	from->wr = wr;
+			discard, from->denominator, wr_vec(wh, wrh)[0], from->pp, from->p);
 	mpz_sub(mpq_numref(actual), from->total, discard);
 	mpz_set(mpq_denref(actual), from->denominator);
 	mpq_canonicalize(actual);
@@ -383,20 +407,19 @@ void pp_save_w(walker* w, walk_result* wr, pp_pp* from) {
  * For each PP structure, in descending order of pp value:
  * - if a walker finds no way to keep any of the values, discard the PP
  * - if a walker find precisely one way to keep some values:
- *   - save a clone of the walk_result representing that way in the PP structure
+ *   - save the walk_result representing that way in the PP structure
  *   - add the relevant sum to the appropriate PP structure
  *   - remove this PP from the pp list
- *   - note that a) this is safe to do only because we know this PP's
- *     total can no longer change, so valnumsize is fixed; b) we need to
- *     take some care to free the walk_result at the appropriate time
+ *   - note that this is safe to do only because we know this PP's
+ *     total can no longer change, so valnumsize is fixed
  * - for remaining PP structures, mark whether they are dependent on any
  *   higher pp in the pp list
  */
 void pp_resolve_simple(void) {
 	int i, dest;
 	pp_pp *pp;
-	walker* w;
-	walk_result *wr1, *wr2;
+	whp wh;
+	wrhp wrh1, wrh2;
 	mpz_t ztotal;
 
 	ZINIT(&ztotal, "pp_resolve_simple ztotal");
@@ -407,26 +430,27 @@ void pp_resolve_simple(void) {
 			 * element, so we set the discard limit to (total - 1)
 			 */
 			mpz_sub_ui(ztotal, pp->total, 1);
-			w = new_walker(pp, ztotal, pp->invtotal);
-			wr1 = walker_findnext(w);
-			if (!wr1) {
-				delete_walker(w);
+			wh = new_walker(pp, ztotal, pp->invtotal);
+			wrh1 = walker_findnext(wh);
+			if (!wrh1) {
+				delete_walker(wh);
 				pp_listsplice(i);
 				--i;
 				continue;
 			}
-			wr1 = wr_clone(w, wr1);
-			wr2 = walker_findnext(w);
-			if (!wr2) {
-				pp_save_w(w, wr1, pp);
-				delete_walker(w);
+			wrh1 = wr_clone(wh, wrh1);
+			wrh2 = walker_findnext(wh);
+			if (!wrh2) {
+				pp->wh = wh;
+				pp->wrh = wrh1;
+				pp_save_w(wh, wrh1, pp);
 				pp_listsplice(i);
 				--i;
 				continue;
 			}
-			mpz_set_x(pp->min_discard, DISCARD(w, wr1), pp->valnumsize);
-			wr_clone_free(wr1);
-			delete_walker(w);
+			mpz_set_x(pp->min_discard, wr_discard(wh, wrh1), pp->valnumsize);
+			wr_clone_free(wh, wrh1);
+			delete_walker(wh);
 		}
 		for (dest = pplistsize - 1; dest > i; --dest) {
 			if (pp->pp * pplist[dest]->pp <= k0)
@@ -495,17 +519,18 @@ static inline int pp_testbit(int* vec, int bit) {
 void pp_setvec(int* vec, pp_pp* pp, int* invec) {
 	int i;
 	pp_value* v;
+	pp_pp* dad;
 
 	for (i = 0; i < pp->valsize; ++i) {
 		if (invec && pp_testbit(invec, i)) 
 			continue;
-		v = VALUE_I(pp, i);
+		v = pp_value_i(pp, i);
 		if (v->self) {
 			pp_setbit(vec, v->parent);
 		} else {
 			/* this entry comprises multiple values from the parent */
-			pp_setvec(vec, &pppp[v->parent],
-					VEC_N(pppp[v->parent].wr, pppp[v->parent].valnumsize));
+			dad = &pppp[v->parent];
+			pp_setvec(vec, dad, wr_vec(dad->wh, dad->wrh));
 		}
 	}
 }
@@ -513,8 +538,7 @@ void pp_setvec(int* vec, pp_pp* pp, int* invec) {
 int pp_solution(int index) {
 	pp_pp *pp, *cur;
 	int* v;
-	int i, j, r;
-	mpz_t discard;
+	int i, r;
 
 	cur = pplist[index];
 	if (mpz_cmp_ui(mpq_numref(cur->spare), 1) > 0)
@@ -525,35 +549,16 @@ int pp_solution(int index) {
 	r = (r == 0) ? 0 : mpz_get_ui(mpq_denref(cur->spare));
 
 	/* probable solution: spare == 0 or spare == 1/r, 1 <= r <= k0 */
-	ZINIT(&discard, "pp_solution discard");
 	gmp_printf("probable solution, spare = %Qd\n", cur->spare);
 	v = calloc((k0 + 32) >> 5, sizeof(int));
 	for (i = 0; i < pplistsize; ++i) {
 		pp = pplist[i];
-		if (pp->wr) {
-			pp_setvec(v, pp, VEC_N(pp->wr, pp->valnumsize));
-		} else if (i >= index && mpz_cmp_ui(pp->min_discard, 0) != 0) {
-			/* our solution assumes the unrecorded best line for this pp */
-			walker* w = new_walker(pp, pp->total, pp->invtotal);
-			walk_result* wr = walker_findnext(w);
-			if (!wr) {
-				gmp_printf("Solution cannot recreate min_discard for pp_%d\n",
-						pp->pp);
-				exit(1);
-			}
-			mpz_set_x(discard, DISCARD(w, wr), pp->valnumsize);
-			if (mpz_cmp(pp->min_discard, discard) != 0) {
-				gmp_printf("Solution cannot recreate min_discard %Zd for pp_%d "
-						"(got %Zd)\n", pp->min_discard, pp->pp, discard);
-				exit(1);
-			}
-			pp_setvec(v, pp, VEC(w, wr));
-			delete_walker(w);
+		if (pp->wrh) {
+			pp_setvec(v, pp, wr_vec(pp->wh, pp->wrh));
 		} else {
 			pp_setvec(v, pp, (int*)NULL);
 		}
 	}
-	ZCLEAR(&discard, "pp_solution discard");
 
 	if (pp_testbit(v, r)) {
 		/* exact solution */
@@ -605,7 +610,7 @@ int pp_find(int target) {
 	pp_study(target);
 
 	i = 0;
-	pplist[i]->w = (walker*)NULL;
+	pplist[i]->wh = (whp)0;
 	if (mpq_sgn(pplist[i]->spare) < 0) {
 		printf("n=%d, k=%d: optimizer finds no solution is possible. [%.2fs]\n",
 				target, k0, timing());
@@ -617,7 +622,7 @@ int pp_find(int target) {
 	QINIT(&limit, "pp_find limit");
 	while (i >= 0) {
 		pp = pplist[i];
-		if (!pp->w) {
+		if (!pp->wh) {
 			if (diag_signal_seen) {
 				diag_signal_seen = 0;
 				pp_diagnose(i);
@@ -656,14 +661,14 @@ int pp_find(int target) {
 			Dprintf("effective limit is %Zd, invsum = %d\n",
 					mpq_numref(limit), invsum);
 
-			pp->w = new_walker(pp, mpq_numref(limit), invsum);
+			pp->wh = new_walker(pp, mpq_numref(limit), invsum);
 			pp->wrnum = 0;
 		}
 
-		pp->wr = walker_findnext(pp->w);
-		if (!pp->wr) {
-			delete_walker(pp->w);
-			pp->w = (walker*)NULL;
+		pp->wrh = walker_findnext(pp->wh);
+		if (!pp->wrh) {
+			delete_walker(pp->wh);
+			pp->wh = (whp)0;
 			pp->wrcount = pp->wrnum;
 			--i;
 			Dprintf("no lines for %d, recurse back to %d\n",
@@ -681,7 +686,7 @@ int pp_find(int target) {
 
 		/* new spare = old spare - (actual discard - min discard) / denominator
 		 */
-		mpz_set_x(mpq_numref(q), DISCARD(pp->w, pp->wr), pp->valnumsize);
+		mpz_set_x(mpq_numref(q), wr_discard(pp->wh, pp->wrh), pp->valnumsize);
 		Dprintf("pp_%d walker found discard %Zd/%Zd\n",
 				pp->pp, mpq_numref(q), pp->denominator);
 		mpz_sub(mpq_numref(q), mpq_numref(q), pp->min_discard);
@@ -696,7 +701,7 @@ int pp_find(int target) {
 			--i;
 			continue;
 		}
-		nextpp->w = (walker*)NULL;
+		nextpp->wh = (whp)0;
 		if (pp_solution(i)) {
 			success = 1;
 			break;
@@ -706,10 +711,6 @@ int pp_find(int target) {
 	QCLEAR(&q, "pp_find q");
 	ZCLEAR(&zr, "pp_find zr");
 	ZCLEAR(&z, "pp_find z");
-	for (i = 0; i < pplistsize; ++i) {
-		if (pplist[i]->w)
-			delete_walker(pplist[i]->w);
-	}
 	if (!success)
 		printf("n=%d k=%d: no solution found. [%.2fs]\n",
                 target, k0, timing());

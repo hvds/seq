@@ -18,6 +18,12 @@
 #define DEBUG_PRINT(q, string, format)
 #endif /* DEBUG_GMP_LEAK */
 
+#ifdef ALL_C
+inline void QINIT(mpq_t* q, char* format, ...);
+inline void QCLEAR(mpq_t* q, char* format, ...);
+inline void ZINIT(mpz_t* z, char* format, ...);
+inline void ZCLEAR(mpz_t* z, char* format, ...);
+#else /* ALL_C */
 extern inline void QINIT(mpq_t* q, char* format, ...) {
 	mpq_init(*q);
 	DEBUG_PRINT(q, "qinit", format);
@@ -37,6 +43,7 @@ extern inline void ZCLEAR(mpz_t* z, char* format, ...) {
 	mpz_clear(*z);
 	DEBUG_PRINT(z, "zclear", format);
 }
+#endif /* ALL_C */
 
 #define MPX_MAXLIMBS 8
 typedef mp_limb_t* mpx_t;

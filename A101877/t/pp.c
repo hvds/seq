@@ -5,6 +5,7 @@
 int g_fail = 0;
 int g_test = 0;
 
+/* pp_diagnose wants to resolve this */
 double timing(void) { return 0; }
 
 void dump_pp(int n) {
@@ -24,8 +25,8 @@ void dump_pp(int n) {
 			printf("pppp[%d] = { p = %d; pp = %d; depend = %d; valsize = %d; valmax = %d; value = {",
 					i, pp->p, pp->pp, pp->depend, pp->valsize, pp->valmax);
 			for (j = 0; j < pp->valsize; ++j) {
-				pp_value* v = VALUE_I(pp, j);
-				mpz_set_x(zv, MPX(v), pp->valnumsize);
+				pp_value* v = pp_value_i(pp, j);
+				mpz_set_x(zv, ppv_mpx(v), pp->valnumsize);
 				gmp_printf("{ value = %Zd; parent = %d; inv = %d }",
 						zv, v->parent, v->inv);
 			}

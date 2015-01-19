@@ -13,33 +13,52 @@ typedef struct pp_s_value {
 	/* the actual rational represented is MPX(vp) / pp->denominator */
 	mp_limb_t limbs[0];
 } pp_value;
-#define MPX(vp) ((mpx_t)&((vp)->limbs[0]))
-#define VALSIZE_N(n) (sizeof(pp_value) + (n) * sizeof(mp_limb_t))
-#define VALSIZE(pp) VALSIZE_N((pp)->valnumsize)
-#define VALUE_N_I(v, n, i) ((pp_value*)((char*)(v) + (i) * VALSIZE_N(n)))
-#define VALUE_I(pp, i) VALUE_N_I((pp)->value, (pp)->valnumsize, i)
 
 typedef struct pp_s_pp {
-	int p;
-	int pp;
-	int depend;
-	int valsize;
-	int valmax;
-	int valnumsize;
-	mpx_add_func* adder;
-	mpx_cmp_func* cmper;
-	pp_value* value;
-	mpz_t min_discard;
-	mpz_t total;
-	mpz_t denominator;
-	int invtotal;
-	int invdenom;
-	struct s_walker* w;
-	struct s_walk_result* wr;
-	int wrnum;
-	int wrcount;
-	mpq_t spare;
+	int p;				/* prime p */
+	int pp;				/* prime power p^k */
+	int depend;			/* TRUE if dependent on higher pp */
+	int valsize;		/* number of values stored */
+	int valmax;			/* max number of values storable without realloc */
+	int valnumsize;		/* mpx size of values */
+	mpx_add_func* adder; /* mpx add function */
+	mpx_cmp_func* cmper; /* mpx compare function */
+	pp_value* value;	/* container for the values stored */
+	mpz_t min_discard;	/* minimum discard is always zero if dependent */
+	mpz_t total;		/* sum of the values */
+	mpz_t denominator;	/* common denominator for values */
+	int invtotal;		/* sum of inverse of values (mod p) */
+	int invdenom;		/* inverse of denominator (mod p) */
+	whp wh;				/* handle of current walker */
+	wrhp wrh;			/* handle of latest walk_result */
+	int wrnum;			/* index of latest walk_result */
+	int wrcount;		/* count of results for previous walk */
+	mpq_t spare;		/* total to discard at this level */
 } pp_pp;
+
+#ifdef ALL_C
+inline mpx_t ppv_mpx(pp_value* ppv);
+inline int pp_valsize_n(int numsize);
+inline int pp_valsize(pp_pp* pp);
+inline pp_value* ppv_value_n_i(pp_value* ppv, int numsize, int index);
+inline pp_value* pp_value_i(pp_pp* pp, int index);
+#else /* ALL_C */
+extern inline mpx_t ppv_mpx(pp_value* ppv) {
+	return (mpx_t)&ppv->limbs[0];
+}
+extern inline int pp_valsize_n(int numsize) {
+	return sizeof(pp_value) + numsize * sizeof(mp_limb_t);
+}
+extern inline int pp_valsize(pp_pp* pp) {
+	return pp_valsize_n(pp->valnumsize);
+}
+extern inline pp_value* ppv_value_n_i(pp_value* ppv, int numsize, int index) {
+	return (pp_value*)((char*)ppv + index * pp_valsize_n(numsize));
+}
+extern inline pp_value* pp_value_i(pp_pp* pp, int index) {
+	return ppv_value_n_i(pp->value, pp->valnumsize, index);
+}
+#endif /* ALL_C */
 
 extern pp_pp* pppp;
 extern pp_pp** pplist;
