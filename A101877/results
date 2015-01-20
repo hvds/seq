@@ -1,0 +1,59 @@
+a(n): The least integer such that there is a sum of distinct unit fractions
+equal to _n_, the greatest denominator being a(n).
+
+If a(n) = k then there exist S = [ s_1, s_2, ... s_m ] such that s_m = k,
+sum_1^m{1/s_i} = n, and 1 <= i < j <= m => s_i < s_j.
+
+Established values:
+  f(1) = 1; f(2) = 6; f(3) = 24; f(4) = 65; f(5) = 184; f(6) = 469;
+  f(7) = 1243; f(8) = 3231
+
+   8492 <  f(9) <=  8507
+  22788 < f(10) <= 22820
+  60577 < f(11) <= 60639
+
+Timings:
+n=7 k=1239 C7:   250.58s
+n=7 k=1239 C9.3:   1.67s
+n=7 k=1239 C9.4:   0.00s
+
+n=7 k=1240 C9.3: 15.88s
+n=7 k=1240 C9.4:  0.00s
+
+n=7 k=1241 C9.3: 38.53s
+n=7 k=1241 C9.4:  0.01s
+
+n=7 k=1242 C7:   2742.50s
+n=7 k=1242 C9.3:  315.62s
+n=7 k=1242 C9.4:    0.04s
+n=7 k=1242 C9.5:    0.06s
+n=7 k=1242 C9.6:    0.03s
+n=7 k=1242 C9.7:    0.02s
+
+n=7 k=1243 P6:    20.08s
+n=7 k=1243 C7:     0.01s
+n=7 k=1243 C9.4: 111.35s
+n=7 k=1243 C9.5:   0.01s
+
+
+n=8 k=3225 C9.4: 0.16s
+n=8 k=3225 C9.5: 0.16s
+n=8 k=3225 C9.6: 0.08s
+n=8 k=3225 C9.7: 0.08s
+
+n=8 k=3230 C9.7: 69201.09s
+
+n=8 k=3231 C7: 14.22s
+
+
+n=9 k=8489 C9.7: 591.32s
+
+n=9 k=8507 C7: 0.21s
+
+
+n=10 k=22788 C9.7: 0.28s
+
+n=10 k=22820 C7: 595.74s
+
+
+n=11 k=60639 C7: 8.47s
