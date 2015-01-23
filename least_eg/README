@@ -1,0 +1,18 @@
+Code to find f(n), the simplest rational [1] that cannot be expressed as
+the sum of any fewer than n distinct unit fractions, as represented by
+OEIS sequences A097048 and A097049 [2].
+
+f(n) for 1 <= n <= 8 is: 1/2, 2/3, 4/5, 8/11, 16/17, 77/79, 732/733, 27538/27539
+
+The 'results' file first lists known values of f(), followed by the vector
+summarising the results for each denominator from 2 to 27539. This is
+included in case it may prove useful for further analysis.
+
+See [3] for motivation and some further detail.
+
+[1] We define "simplest rational" as that rational p/q with 0 < p/q < 1
+that minimizes q, and breaks ties by minimizing p.
+
+[2] <https://oeis.org/A097048>, <https://oeis.org/A097049>
+
+[3] <http://mathoverflow.net/questions/33628/>
