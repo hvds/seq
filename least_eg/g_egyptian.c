@@ -1,7 +1,9 @@
 #include <gmp.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/times.h>
 
 /* Search recursively for representations of p/q as a sum of <depth> distinct
    unit fractions. */
@@ -14,6 +16,8 @@
 
 /* we are searching for depth = 8, so 16 should be more than we'll ever need */
 #define MAXDEPTH 16
+
+long clock_tick;    /* ticks per second */
 
 /* a prime p, used for factorizing */
 typedef struct prime_s {
@@ -148,6 +152,13 @@ void clear_gmp(void) {
     for (i = 0; i < primesize; ++i)
         ZCLEAR(primes[i].zp_squared);
     free(primes);
+}
+
+/* time used so far (CPU seconds) */
+double timing(void) {
+    struct tms ttd;
+    times(&ttd);
+    return ((double)ttd.tms_utime) / clock_tick;
 }
 
 /* boolean gcd test; assumes 0 <= p < q */
@@ -386,6 +397,7 @@ int main(int argc, char** argv) {
     depth = atoi(argv[arg++]);
     mpz_set_si(MINI(0), 0);    /* min_0 never changes */
 
+    clock_tick = sysconf(_SC_CLK_TCK);
     setvbuf(stdout, NULL, _IOLBF, 0);
 
     while (++q <= qend) {
@@ -418,12 +430,12 @@ int main(int argc, char** argv) {
                 ++vec[result];
         }
         if (opt_u) {
-            printf("%d: %d\n", q, result);
+            printf("%d: %d [%.2fs]\n", q, result, timing());
         } else {
             printf("%d:", q);
             for (i = 1; i <= depth; ++i)
                 printf(" %d", vec[i]);
-            printf("\n");
+            printf(" [%.2fs]\n", timing());
         }
     }
     clear_gmp();
