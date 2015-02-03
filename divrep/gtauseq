@@ -1,7 +1,7 @@
 #!/opt/maths/bin/perl -w
 use strict;
 use Math::GMP;
-use Math::Prime::Util qw{ is_prime next_prime all_factors factor_exp };
+use Math::Prime::Util qw{ is_prime next_prime divisors factor_exp };
 
 use lib './glib';
 use Constraint;
@@ -180,7 +180,7 @@ sub fix_square {
     my($c, $n, $tn) = @_;
     my $f = $c->f();
     my $debug = $c->debug;
-    for my $x (all_factors($n)) {
+    for my $x (divisors($n)) {
         last if $x >= $f;    # divisors are returned in ascending order
         my $fx = [ factor_exp($x) ];
         my $rx = rad_factor($fx);
