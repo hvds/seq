@@ -17,3 +17,28 @@ jacobsthal:
 divrep:
   Investigation of sequences involving arithmetic series related to tau(n),
   including A064491, A088430, A165497, A165498, A165499, A165500, A165501.
+
+zerofree:
+  Given a calculation such as s->s^2, find the minimal set that includes 2
+  and is fixed under the transformation: apply the calculation to each
+  element, write the resulting value in some base <n>, split on any zero
+  digits, and collate the resulting substrings as base <n> values.
+  This gives A113917 and A113918.
+
+A101877:
+  Given n, find the least integer such that there is a sum of distinct unit
+  fractions equal to n, the greatest denominator being a(n).
+
+A249064:
+  Find the lexically first sequence of positive integers such that each
+  element a(n) is coprime to the next a(n) elements. Also find A090252,
+  where each element a(n) is coprime to the next n elements.
+
+least_eg:
+  Find A097048(n) and A097049(n), the numerator and denominator of the
+  simplest rationals that cannot be expressed as the sum of fewer than
+  n unit fractions.
+
+part:
+  Count the partitions of a n-dimensional cube of side 2, with or without
+  symmetries.
