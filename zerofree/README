@@ -1,0 +1,35 @@
+For a given base <base>, start with the set S_0 = { 2 }, and repeatedly
+make a new set S_{g+1} by taking all the elements of S_g, applying a
+calculation to them, writing them in base <base>, and then split the
+result at all zero digits. Repeat until S_{g+1} = S_g (ie this is the
+minimal set fixed by the operation).
+
+For the original idea from David Wilson, the calculation for an integer
+s is s -> s^2; in OEIS we therefore have A113917(n) as the largest element
+in the fixed set and A113918(n) as the cardinality of that set. The
+corresponding sequences for the calculation s -> 2s also seem interesting.
+
+The perl code (pzerofree.pl) is a simple reference implementation using
+the Math::GMP module; the approach in the C code is to record which values
+have previously been seen by using a bit vector for small values (up to
+2^32), and a sequence of hash arrays for larger values, one hash for each
+GMP limb size we encounter. The hash entries are recorded simply as offsets
+into an arena of values, and in the arena we pack the actual limb data.
+
+For the calculation s -> s^2, the current C code easily calculates the fixed
+set up to base 8; when trying to calculate base 9 it exceeds the current
+32-bit limit on arena offsets on the 75th generation, but fixing that would
+quickly lead on to the 32-bit constraint on number of buckets (for the size=1
+hash), and then quickly lead on to exceeding 64GB in memory requirements.
+
+It might be possible to work around that by storing all the seen values on
+disk instead, and spotting new values in each generation during the process
+of merging two sorted files; not sure how horrendously slow that might be -
+a rough extrapolation from earlier results suggests the cardinality for
+base 9 should be between 10^10 and 10^13, which suggests storage requirements
+of somewhere between 100GB and 100TB.
+
+For the calculation s -> 2s, the current C code easily calculates max value
+and cardinality for all bases 2..62, the limit of what GMp's mpz_get_str()
+supports; it'd be easy enough to rewrite the base conversion for larger
+bases.
