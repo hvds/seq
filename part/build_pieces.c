@@ -16,7 +16,10 @@ uint pieces_size;
 uint pieces_used;
 uint piece_array_used;
 uint piece_array[NODES + 2];
+uint piece_count[NODES];
 piece_t* pieces;
+uint counts_size;
+uint* counts;
 vec_t* canonical_v;
 
 char* sym_set_arena;
@@ -407,6 +410,26 @@ void prep_pieces(uint size) {
 	piece_array_used = size;
 }
 
+void prep_counts(void) {
+	uint i, j;
+	uint* base;
+
+	counts_size = 0;
+	for (i = 1; i <= NODES; ++i) {
+		piece_count[i - 1] = piece_array[i + 1] - piece_array[i];
+		counts_size += i * piece_count[i - 1];
+	}
+	counts = (uint*)calloc(counts_size, sizeof(uint));
+	/* init count(piece, 1) = 1 for all pieces */
+	base = counts;
+	for (i = 1; i <= NODES; ++i) {
+		for (j = 0; j < piece_count[i - 1]; ++j) {
+			base[j * i] = 1;
+		}
+		base += piece_count[i - 1] * i;
+	}
+}
+
 /*
   Writes out the data for pieces, a sequence of sections of the form:
 	typedef struct section_s {
@@ -423,11 +446,17 @@ void prep_pieces(uint size) {
 		uint count_of_size_n_plus_1[NODES];
 		// symset offsets match the section 0 data
 		piece_t pieces[total count];
-	section 2: end marker (no data)
+	section 2: counts, data is of form:
+		// entries in same order as for pieces above
+		counts for size 1 pieces (1 * 4 bytes each)
+		counts for size 2 pieces (2 * 4 bytes each)
+		...
+		counts for size NODES pieces (NODES * 4 bytes each)
+	section 3: end marker (no data)
 */
 
 void write_pieces(void) {
-	uint section, size, piece_count[NODES], i;
+	uint section, size, i;
 
 	section = 0;
 	size = sizeof(uint) + sym_set_used * sizeof(char);
@@ -438,14 +467,18 @@ void write_pieces(void) {
 
 	section = 1;
 	size = NODES * sizeof(uint) + pieces_used * sizeof(piece_t);
-	for (i = 1; i <= NODES; ++i)
-		piece_count[i - 1] = piece_array[i + 1] - piece_array[i];
 	fwrite(&section, sizeof(uint), 1, stdout);
 	fwrite(&size, sizeof(uint), 1, stdout);
 	fwrite(piece_count, sizeof(uint), NODES, stdout);
 	fwrite(pieces, sizeof(piece_t), pieces_used, stdout);
 
 	section = 2;
+	size = counts_size * sizeof(uint);
+	fwrite(&section, sizeof(uint), 1, stdout);
+	fwrite(&size, sizeof(uint), 1, stdout);
+	fwrite(counts, sizeof(uint), counts_size, stdout);
+
+	section = 3;
 	size = 0;
 	fwrite(&section, sizeof(uint), 1, stdout);
 	fwrite(&size, sizeof(uint), 1, stdout);
@@ -484,6 +517,7 @@ int main(int argc, char** argv) {
 			sym_set_count - sc, sym_set_count, t0
 		);
 	}
+	prep_counts();
 	write_pieces();
 	teardown();
 	return 0;

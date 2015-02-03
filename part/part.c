@@ -304,7 +304,7 @@ void import_pieces(char* filename) {
 		uint section;
 		uint size;
 	} section_header;
-	int expect = (1 << 0) | (1 << 1);
+	int expect = (1 << 0) | (1 << 1) | (1 << 2);
 	int seen = 0;
 	FILE* f = fopen(filename, "r");
 	int read_ok;
@@ -340,6 +340,15 @@ void import_pieces(char* filename) {
 			seen = seen | (1 << 1);
 			break;
 		  case 2:
+			if (seen & (1 << 2)) {
+				fprintf(stderr, "%s: repeated section 2\n", filename);
+				fclose(f);
+				exit(-1);
+			}
+			load_counts(f, section_header.size);
+			seen = seen | (1 << 2);
+			break;
+		  case 3:
 			if (seen == expect) {
 				fclose(f);
 				return;

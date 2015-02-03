@@ -8,6 +8,8 @@
 
 uint piece_array[NODES + 2];
 piece_t* pieces;
+uint count_array[NODES + 1];
+uint* counts;
 
 void setup_pieces(void) {
 }
@@ -56,6 +58,32 @@ void load_pieces(FILE* f, uint size) {
 	fprintf(stderr,
 		"load_pieces: loaded %u pieces, size %u + %u\n",
 		total, NODES * sizeof(uint), setsize
+	);
+	return;
+}
+
+void load_counts(FILE* f, uint size) {
+	uint read, i;
+
+	counts = (uint*)malloc(size);
+	read = fread(counts, size, 1, f);
+	if (read < 1) {
+		fprintf(stderr,
+			"load_counts error reading counts (want 1 * %u, got %u): %s (%d)\n",
+			size, read, strerror(errno), errno
+		);
+		fclose(f);
+		exit(-1);
+	}
+
+	count_array[0] = 0;
+	for (i = 1; i <= NODES; ++i) {
+		count_array[i] = count_array[i - 1] + i * (piece_array[i + 1] - piece_array[i]);
+	}
+	assert(count_array[NODES] * sizeof(uint) == size);
+	fprintf(stderr,
+		"load_counts: loaded %u counts, size %u\n",
+		count_array[NODES], size
 	);
 	return;
 }
