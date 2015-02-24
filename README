@@ -42,3 +42,8 @@ least_eg:
 part:
   Count the partitions of a n-dimensional cube of side 2, with or without
   symmetries.
+
+wilson:
+  Explore rationals r that may be solutions to David Wilson's puzzle:
+  starting at 1, add r and then repeatedly either add r or take the
+  reciprocal, trying to get back to 1.

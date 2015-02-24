@@ -1,0 +1,96 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use Math::BigInt only => 'GMP';
+use Math::BigRat only => 'GMP';
+sub I { Math::BigInt->new(@_) }
+sub R { Math::BigRat->new(@_) }
+my $rone = R(1);
+
+=head1 Wilson's puzzle
+
+Choose any real r >= 0. Starting with n = 1, on the first step add r, on
+subsequent steps either add r or take the reciprocal as you choose.
+
+For example, if r = 1/4, we can generate the sequence:
+  1, 5/4, 3/2, 7/4, 2, 1/2, 3/4, 1.
+
+For which r is it possible to return to 1 as does this sequence?
+
+=head1 ANALYSIS
+
+We must always start and end with an addition, and it is never useful
+to have consecutive reciprocals, so we can represent the traversal as
+a vector of positive integers [a, b, c, ... z] representing the number
+of additions to perform, each set of additions separated by a reciprocal.
+This also immediately tells us we must have 0 < r < 1 (since intermediate
+values are always positive, and we must end with an addition).
+
+To search for the shortest vector, we can apply the sequence in reverse -
+sets of subtractions separated by a reciprocal - since we then have only
+a finite set of reachable values to consider at each stage.
+
+There is interesting work to be done in finding irrational algebraic
+solutions, but for now we'll stick with rationals.
+
+=head1 USE
+
+Given positive integer arguments a, b with a < b, will search for the
+shortest vector yielding a solution for the rational r = a / b.
+
+=cut
+
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    die "Invalid option '$arg'";
+}
+my $r = parse_args(\@ARGV) or die "Usage: $0 a b, with 0 < a < b are integers";
+my $lim = $r + 1/$r;
+
+my($gen, %seen) = (0);
+my($cur, $new) = (undef, [[$rone]]);
+my $solved = 0;
+while (1) {
+    ++$gen;
+    ($cur, $new) = ($new, []);
+    print "Generation $gen: @{[ scalar @$cur ]} new values\n";
+    for my $v (@$cur) {
+        my $count = 0;
+        my $vr = $v->[0];
+        if ($vr > $lim) {
+            $count = (($vr - $lim) / $r)->bfloor;
+            $vr -= $r * $count;
+        }
+        while ($vr > $r) {
+            $vr -= $r;
+            ++$count;
+            if ($vr == $rone) {
+                report($v, $count);
+                $solved = 1;    # look for more solutions in same gen
+                delete $seen{$vr};  # .. without suppressing them
+            }
+            push @$new, [ 1 / $vr, $v, $count ] unless $solved || $seen{$vr}++;
+        }
+    }
+    last if $solved;
+    die "No new values to look at" unless @$new;
+}
+exit 0;
+
+sub parse_args {
+    my($args) = @_;
+    @$args == 2 or return;
+    my($a, $b) = map Math::BigInt->new($_), @$args;
+    $a && $b && (0 < $a) && ($a < $b) or return;
+    return Math::BigRat->new($a, $b);
+}
+
+sub report {
+    my($v, @vec) = @_;
+    while ($v->[1]) {
+        push @vec, $v->[2];
+        $v = $v->[1];
+    }
+    printf "$r is solved by [ %s ]\n", join ' ', @vec;
+    exit;
+}
