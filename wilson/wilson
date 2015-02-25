@@ -40,13 +40,18 @@ shortest vector yielding a solution for the rational r = a / b.
 Option C<-x [n]> will stop at the end of a generation if the queue size
 for the next generation exceeds I<n>.
 
+Option C<-f> means "find only": it will search for a solution and report
+the generation number, but not record the backtrace that would allow
+printing the solution itself.
+
 =cut
 
-my($opt_x) = (0);
+my($opt_x, $opt_f) = (0, 0);
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
+    ($opt_f = 1), next if $arg eq '-f';
     ($opt_x = length($1) ? $1 : shift @ARGV), next if $arg =~ /^-x(\d*)$/;
     die "Invalid option '$arg'";
 }
@@ -54,7 +59,7 @@ my $r = parse_args(\@ARGV) or die "Usage: $0 a b, with 0 < a < b are integers";
 my $lim = $r + 1/$r;
 
 my($gen, %seen) = (0);
-my($cur, $new) = (undef, [[$rone, '']]);
+my($cur, $new) = (undef, [$opt_f ? $rone : [$rone, '']]);
 my $solved = 0;
 while (1) {
     ++$gen;
@@ -66,7 +71,7 @@ while (1) {
         print "Generation $gen: @{[ scalar @$cur ]} new values\n";
     }
     for (@$cur) {
-        my($v, $s) = @$_;
+        my($v, $s) = $opt_f ? ($_) : @$_;
         my $count = 0;
         if ($v > $lim) {
             $count = (($v - $lim) / $r)->bfloor->numify;
@@ -80,7 +85,7 @@ while (1) {
                 $solved = 1;    # look for more solutions in same gen
                 delete $seen{$v};  # .. without suppressing them
             }
-            push @$new, [ 1 / $v, pack("L", $count) . $s ]
+            push @$new, $opt_f ? 1 / $v : [ 1 / $v, pack("L", $count) . $s ]
                     unless $solved || $seen{$v}++;
         }
     }
@@ -99,6 +104,11 @@ sub parse_args {
 
 sub report {
     my($v, $count, $vec) = @_;
-    printf "$r is solved by [ %s ]\n", join ' ', $count, unpack "L*", $vec;
-    exit;
+    if (defined $vec) {
+        printf "%s is solved in %s steps by [ %s ]\n",
+                $r, $gen, join ' ', $count, unpack "L*", $vec;
+    } else {
+        printf "%s is solved in %s steps starting with %s -> %s\n",
+                $r, $gen, $count, $rone + $count * $r;
+    }
 }
