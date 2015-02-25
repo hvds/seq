@@ -37,39 +37,51 @@ solutions, but for now we'll stick with rationals.
 Given positive integer arguments a, b with a < b, will search for the
 shortest vector yielding a solution for the rational r = a / b.
 
+Option C<-x [n]> will stop at the end of a generation if the queue size
+for the next generation exceeds I<n>.
+
 =cut
+
+my($opt_x) = (0);
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
+    ($opt_x = length($1) ? $1 : shift @ARGV), next if $arg =~ /^-x(\d*)$/;
     die "Invalid option '$arg'";
 }
 my $r = parse_args(\@ARGV) or die "Usage: $0 a b, with 0 < a < b are integers";
 my $lim = $r + 1/$r;
 
 my($gen, %seen) = (0);
-my($cur, $new) = (undef, [[$rone]]);
+my($cur, $new) = (undef, [[$rone, '']]);
 my $solved = 0;
 while (1) {
     ++$gen;
     ($cur, $new) = ($new, []);
-    print "Generation $gen: @{[ scalar @$cur ]} new values\n";
-    for my $v (@$cur) {
+    if ($opt_x) {
+        die "Queue too large (@{[ scalar @$cur ]}) at generation $gen"
+                if @$cur > $opt_x;
+    } else {
+        print "Generation $gen: @{[ scalar @$cur ]} new values\n";
+    }
+    for (@$cur) {
+        my($v, $s) = @$_;
         my $count = 0;
-        my $vr = $v->[0];
-        if ($vr > $lim) {
-            $count = (($vr - $lim) / $r)->bfloor;
-            $vr -= $r * $count;
+        if ($v > $lim) {
+            $count = (($v - $lim) / $r)->bfloor->numify;
+            $v -= $r * $count;
         }
-        while ($vr > $r) {
-            $vr -= $r;
+        while ($v > $r) {
+            $v -= $r;
             ++$count;
-            if ($vr == $rone) {
-                report($v, $count);
+            if ($v == $rone) {
+                report($v, $count, $s);
                 $solved = 1;    # look for more solutions in same gen
-                delete $seen{$vr};  # .. without suppressing them
+                delete $seen{$v};  # .. without suppressing them
             }
-            push @$new, [ 1 / $vr, $v, $count ] unless $solved || $seen{$vr}++;
+            push @$new, [ 1 / $v, pack("L", $count) . $s ]
+                    unless $solved || $seen{$v}++;
         }
     }
     last if $solved;
@@ -86,11 +98,7 @@ sub parse_args {
 }
 
 sub report {
-    my($v, @vec) = @_;
-    while ($v->[1]) {
-        push @vec, $v->[2];
-        $v = $v->[1];
-    }
-    printf "$r is solved by [ %s ]\n", join ' ', @vec;
+    my($v, $count, $vec) = @_;
+    printf "$r is solved by [ %s ]\n", join ' ', $count, unpack "L*", $vec;
     exit;
 }
