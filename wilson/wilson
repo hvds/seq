@@ -44,18 +44,24 @@ Option C<-f> means "find only": it will search for a solution and report
 the generation number, but not record the backtrace that would allow
 printing the solution itself.
 
+Option C<-d> suppresses duplicates using a C<%seen> hash; this improves
+pruning but increases memory use by around 1/3.
+
 =cut
 
-my($opt_x, $opt_f) = (0, 0);
+my($opt_x, $opt_f, $opt_d) = (0, 0, 0);
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
     ($opt_f = 1), next if $arg eq '-f';
+    ($opt_d = 1), next if $arg eq '-d';
     ($opt_x = length($1) ? $1 : shift @ARGV), next if $arg =~ /^-x(\d*)$/;
     die "Invalid option '$arg'";
 }
-my $r = parse_args(\@ARGV) or die "Usage: $0 a b, with 0 < a < b are integers";
+my $r = parse_args(\@ARGV) or die <<USAGE;
+Usage: $0 [-d] [-f] [-x <n>] a b # with 0 < a < b integers
+USAGE
 my $lim = $r + 1/$r;
 
 my($gen, %seen) = (0);
@@ -83,10 +89,10 @@ while (1) {
             if ($v == $rone) {
                 report($v, $count, $s);
                 $solved = 1;    # look for more solutions in same gen
-                delete $seen{$v};  # .. without suppressing them
+                delete $seen{$v} if $opt_d;  # .. without suppressing them
             }
             push @$new, $opt_f ? 1 / $v : [ 1 / $v, pack("L", $count) . $s ]
-                    unless $solved || $seen{$v}++;
+                    unless $solved || ($opt_d && $seen{$v}++);
         }
     }
     last if $solved;
