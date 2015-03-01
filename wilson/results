@@ -1,0 +1,310 @@
+Results: first hard case is 9 / 11 - after 85m CPU, the first-pass perl
+program consumes 48GB RAM and reaches generation 61 with queue size 10.25M.
+
+1/2 is solved in 2 steps by [ 2 1 ]
+
+1/3 is solved in 2 steps by [ 6 2 ]
+2/3 is solved in 2 steps by [ 3 1 ]
+
+1/4 is solved in 2 steps by [ 4 2 ]; [ 12 3 ]
+3/4 is solved in 2 steps by [ 4 1 ]
+
+1/5 is solved in 2 steps by [ 20 4 ]
+2/5 is solved in 2 steps by [ 10 2 ]
+3/5 is solved in 3 steps by [ 15 4 1 ]
+4/5 is solved in 2 steps by [ 5 1 ]
+
+1/6 is solved in 2 steps by [ 3 2 ]; [ 6 3 ]; [ 12 4 ]; [ 30 5 ]
+5/6 is solved in 2 steps by [ 6 1 ]
+
+1/7 is solved in 2 steps by [ 42 6 ]
+2/7 is solved in 2 steps by [ 21 3 ]
+3/7 is solved in 2 steps by [ 14 2 ]
+4/7 is solved in 3 steps by [ 35 4 1 ]
+5/7 is solved in 5 steps by [ 28 62 1 3 1 ]; [ 77 11 2 4 1 ]
+6/7 is solved in 2 steps by [ 7 1 ]
+
+1/8 is solved in 2 steps by [ 8 4 ]; [ 24 6 ]; [ 56 7 ]
+3/8 is solved in 2 steps by [ 8 2 ]
+5/8 is solved in 3 steps by [ 8 4 1 ]
+7/8 is solved in 2 steps by [ 8 1 ]
+
+1/9 is solved in 2 steps by [ 18 6 ]; [ 72 8 ]
+2/9 is solved in 2 steps by [ 9 3 ]; [ 36 4 ]
+4/9 is solved in 2 steps by [ 18 2 ]
+5/9 is solved in 3 steps by [ 63 4 1 ]
+7/9 is solved in 21 steps by [ 18 3 201 3 3 1 39 117 1 3 1 25 24 2 13 5 3 1 1 5 1 ]
+8/9 is solved in 2 steps by [ 9 1 ]
+
+1/10 is solved in 2 steps by [ 10 5 ]; [ 15 6 ]; [ 40 8 ]; [ 90 9 ]
+3/10 is solved in 2 steps by [ 5 2 ]; [ 30 3 ]
+7/10 is solved in 5 steps by [ 270 3 2 4 1 ]
+9/10 is solved in 2 steps by [ 10 1 ]
+
+1/11 is solved in 2 steps by [ 110 10 ]
+2/11 is solved in 2 steps by [ 55 5 ]
+3/11 is solved in 3 steps by [ 319 5 1 ]; [ 198 8 2 ]; [ 77 20 3 ]
+4/11 is solved in 3 steps by [ 88 10 2 ]
+5/11 is solved in 2 steps by [ 22 2 ]
+6/11 is solved in 3 steps by [ 99 4 1 ]
+7/11 is solved in 25 steps by [ 371 11 22 143725 4 2 3 24 207 62 4 1 78 1 1 1 111 1 8 1 2 3 7 4 1 ]
+8/11 is solved in 3 steps by [ 44 5 1 ]
+9 / 11 - g > 74: 406160063 (915.17s)
+10/11 is solved in 2 steps by [ 11 1 ]
+
+1/12 is solved in 2 steps by [ 4 3 ]; [ 6 4 ]; [ 12 6 ]; [ 24 8 ]; [ 36 9 ]; [ 60 10 ]; [ 132 11 ]
+5/12 is solved in 2 steps by [ 12 2 ]
+7/12 is solved in 3 steps by [ 24 4 1 ]
+11/12 is solved in 2 steps by [ 12 1 ]
+
+1/13 is solved in 2 steps by [ 156 12 ]
+2/13 is solved in 2 steps by [ 78 6 ]
+3/13 is solved in 2 steps by [ 52 4 ]
+4/13 is solved in 2 steps by [ 39 3 ]
+5/13 is solved in 5 steps by [ 65 152 30 4 1 ]; [ 910 5 24 11 2 ]
+6/13 is solved in 2 steps by [ 26 2 ]
+7/13 is solved in 3 steps by [ 143 4 1 ]
+8/13 is solved in 8 steps by [ 78 78 128 1 1 11 4 1 ]
+9/13 is solved in 4 steps by [ 468 3 4 1 ]
+10/13 is solved in 11 steps by [ 13 26 158 12 3 2 130 1 1 5 1 ]
+11 / 13 - g > 86: 353269945 (694.33s)
+12/13 is solved in 2 steps by [ 13 1 ]
+
+1/14 is solved in 2 steps by [ 14 7 ]; [ 35 10 ]; [ 84 12 ]; [ 182 13 ]
+3/14 is solved in 2 steps by [ 28 4 ]
+5/14 is solved in 2 steps by [ 7 2 ]
+9/14 is solved in 5 steps by [ 630 3 6 4 1 ]
+11/14 is solved in 73 steps by [ 168 2 28 1 4 2275 16 4 18 2 9 3 1 234 7 1456 8 2 6 6 116 2 16 2 6 1 2 10 18 2 2 3 2 1165 11 2 1 21 1 75 84 1 7 6 7 3 56 1 24 4 15 1 162 1 1 4 11 1 2 1 7 22 136 10 7 1 6 5 1 1 1 5 1 ]
+13/14 is solved in 2 steps by [ 14 1 ]
+
+1/15 is solved in 2 steps by [ 10 6 ]; [ 30 10 ]; [ 60 12 ]; [ 210 14 ]
+2/15 is solved in 2 steps by [ 5 3 ]; [ 15 5 ]; [ 30 6 ]; [ 105 7 ]
+4/15 is solved in 2 steps by [ 15 3 ]
+7/15 is solved in 2 steps by [ 30 2 ]
+8/15 is solved in 3 steps by [ 195 4 1 ]
+11/15 is solved in 3 steps by [ 15 5 1 ]
+13 / 15 - g > 100: 324382494 (865.83s)
+14/15 is solved in 2 steps by [ 15 1 ]
+
+1/16 is solved in 2 steps by [ 16 8 ]; [ 48 12 ]; [ 112 14 ]; [ 240 15 ]
+3/16 is solved in 2 steps by [ 16 4 ]; [ 80 5 ]
+5/16 is solved in 2 steps by [ 48 3 ]
+7/16 is solved in 2 steps by [ 16 2 ]
+9/16 is solved in 3 steps by [ 48 4 1 ]
+11/16 is solved in 8 steps by [ 16 12 496 1 7 3 4 1 ]
+13 / 16 - g > 70: 469089689 (704.90s)
+15/16 is solved in 2 steps by [ 16 1 ]
+
+1/17 is solved in 2 steps by [ 272 16 ]
+2/17 is solved in 2 steps by [ 136 8 ]
+3/17 is solved in 3 steps by [ 765 12 3 ]; [ 187 48 5 ]
+4/17 is solved in 2 steps by [ 68 4 ]
+5/17 is solved in 5 steps by [ 5083 111 4 2 1 ]
+6/17 is solved in 5 steps by [ 14688 3 10 9 2 ]
+7/17 is solved in 9 steps by [ 17 459 687 7 17 3 1 2 1 ]; [ 92 4335 15 1 11 10 1 10 2 ]
+8/17 is solved in 2 steps by [ 34 2 ]
+9/17 is solved in 3 steps by [ 255 4 1 ]
+10 / 17 - g > 29: 504958735 (349.27s)
+11 / 17 - g > 34: 382411604 (267.24s)
+12 / 17 - g > 43: 650228429 (539.38s)
+13 / 17 - g > 53: 375891900 (434.50s)
+14 / 17 - g > 75: 359863923 (600.00s)
+15 / 17 - g > 113: 249245039 (702.23s)
+16/17 is solved in 2 steps by [ 17 1 ]
+
+1/18 is solved in 2 steps by [ 9 6 ]; [ 18 9 ]; [ 36 12 ]; [ 63 14 ]; [ 90 15 ]; [ 144 16 ]; [ 306 17 ]
+5/18 is solved in 2 steps by [ 18 3 ]
+7/18 is solved in 2 steps by [ 9 2 ]
+11/18 is solved in 5 steps by [ 126 3 12 4 1 ]
+13/18 is solved in 19 steps by [ 4 54 3 9 1 3 4 81 7 4 1 3 56 10 79 2 1 4 1 ]
+17/18 is solved in 2 steps by [ 18 1 ]
+
+1/19 is solved in 2 steps by [ 342 18 ]
+2/19 is solved in 2 steps by [ 171 9 ]
+3/19 is solved in 2 steps by [ 114 6 ]
+4/19 is solved in 3 steps by [ 1349 6 1 ]; [ 266 30 4 ]
+5/19 is solved in 3 steps by [ 646 8 2 ]; [ 285 18 3 ]
+6/19 is solved in 2 steps by [ 57 3 ]
+7/19 is solved in 7 steps by [ 3762 941 7 32 2 7 2 ]
+8/19 is solved in 3 steps by [ 133 15 2 ]
+9/19 is solved in 2 steps by [ 38 2 ]
+10/19 is solved in 3 steps by [ 323 4 1 ]
+11 / 19 - g > 28: 411528959 (267.56s)
+12 / 19 - g > 33: 415648397 (267.53s)
+13 / 19 - g > 39: 401694916 (308.59s)
+14 / 19 - g > 47: 384565541 (389.23)
+15/19 is solved in 3 steps by [ 95 6 1 ]
+16 / 19 - g > 84: 302632718 (585.32s)
+17 / 19 - g > 118: 227671968 (736.64s)
+18/19 is solved in 2 steps by [ 19 1 ]
+
+1/20 is solved in 2 steps by [ 5 4 ]; [ 20 10 ]; [ 30 12 ]; [ 60 15 ]; [ 80 16 ]; [ 180 18 ]; [ 380 19 ]
+3/20 is solved in 2 steps by [ 10 4 ]; [ 20 5 ]; [ 60 6 ]
+7/20 is solved in 4 steps by [ 10 20 4 1 ]; [ 20 5 8 2 ]
+9/20 is solved in 2 steps by [ 20 2 ]
+11/20 is solved in 3 steps by [ 80 4 1 ]
+13/20 is solved in 26 steps by [ 12 25 17 1 1800 3 8 11 10 1 41 4 1436 1 354 7 5 2 4 2 2 5 2 5 4 1 ]
+17 / 20 - g > 89: 344745258 (858.24s)
+19/20 is solved in 2 steps by [ 20 1 ]
+
+1/21 is solved in 2 steps by [ 28 12 ]; [ 42 14 ]; [ 126 18 ]; [ 420 20 ]
+2/21 is solved in 2 steps by [ 14 6 ]; [ 21 7 ]; [ 63 9 ]; [ 210 10 ]
+4/21 is solved in 2 steps by [ 7 3 ]; [ 105 5 ]
+5/21 is solved in 2 steps by [ 84 4 ]
+8/21 is solved in 3 steps by [ 273 11 2 ]
+10/21 is solved in 2 steps by [ 42 2 ]
+11/21 is solved in 3 steps by [ 399 4 1 ]
+13/21 is solved in 20 steps by [ 147 21 1 3 9 14 1044 2 2968 4 1 3 1 11 6 6 1 9 4 1 ]
+16 / 21 - g > 52: 421948973 (475.43s)
+17 / 21 - g > 66: 342851690 (537.62s)
+19 / 21 - g > 129: 210775602 (897.94s)
+20/21 is solved in 2 steps by [ 21 1 ]
+
+1/22 is solved in 2 steps by [ 22 11 ]; [ 99 18 ]; [ 220 20 ]; [ 462 21 ]
+3/22 is solved in 2 steps by [ 33 6 ]; [ 154 7 ]
+5/22 is solved in 2 steps by [ 44 4 ]
+7/22 is solved in 2 steps by [ 66 3 ]
+9/22 is solved in 2 steps by [ 11 2 ]
+13 / 22 - g > 29: 370137001 (313.32s)
+15/22 is solved in 6 steps by [ 44 33 4 3 4 1 ]
+17 / 22 - g > 56: 427640703 (595.56s)
+19 / 22 - g > 96: 315765358 (793.66s)
+21/22 is solved in 2 steps by [ 22 1 ]
+
+1/23 is solved in 2 steps by [ 506 22 ]
+2/23 is solved in 2 steps by [ 253 11 ]
+3/23 is solved in 3 steps by [ 1932 16 4 ]; [ 1403 22 5 ]; [ 345 88 7 ]
+4/23 is solved in 3 steps by [ 1449 12 3 ]; [ 391 44 5 ]
+5/23 is solved in 5 steps by [ 4439 199 24 5 1 ]; [ 207 476 94 13 3 ]; [ 736 1194 4 30 4 ]; [ 7084 30 16 34 4 ]; [ 4968 9 77 35 4 ]
+6/23 is solved in 3 steps by [ 966 8 2 ]
+7/23 is solved in 4 steps by [ 25691 2 3 2 ]; [ 11408 1 27 3 ]
+8/23 is solved in 8 steps by [ 460 16 69 166 16 18 9 2 ]
+9/23 is solved in 14 steps by [ 2760 5 7919 94 15 390 17 40 2 46 7 32 4 1 ]
+10/23 is solved in 5 steps by [ 368 597 2 15 2 ]; [ 3542 15 8 17 2 ]
+11/23 is solved in 2 steps by [ 46 2 ]
+12/23 is solved in 3 steps by [ 483 4 1 ]
+13 / 23 - g > 27: 469019331 (263.04s)
+14 / 23 - g > 31: 643567079 (373.23s)
+15 / 23 - g > 36: 515669304 (355.22s)
+16 / 23 - g > 41: 452333521 (384.10s)
+17 / 23 - g > 48: 411085402 (426.39s)
+18 / 23 - g > 66: 316581266 (431.04s)
+19 / 23 - g > 77: 273147150 (470.45s)
+20 / 23 - g > 101: 215978064 (629.57s)
+21 / 23 - g > 145: 163098467 (681.78s)
+22/23 is solved in 2 steps by [ 23 1 ]
+
+1/24 is solved in 2 steps by [ 8 6 ]; [ 12 8 ]; [ 24 12 ]; [ 40 15 ]; [ 48 16 ]; [ 72 18 ]; [ 120 20 ]; [ 168 21 ]; [ 264 22 ]; [ 552 23 ]
+5/24 is solved in 2 steps by [ 8 3 ]; [ 24 4 ]
+7/24 is solved in 2 steps by [ 24 3 ]
+11/24 is solved in 2 steps by [ 24 2 ]
+13/24 is solved in 3 steps by [ 120 4 1 ]
+17/24 is solved in 5 steps by [ 144 24 1 3 1 ]
+19/24 is solved in 3 steps by [ 24 6 1 ]
+23/24 is solved in 2 steps by [ 24 1 ]
+
+1/25 is solved in 2 steps by [ 100 20 ]; [ 600 24 ]
+2/25 is solved in 2 steps by [ 50 10 ]; [ 300 12 ]
+3/25 is solved in 2 steps by [ 200 8 ]
+4/25 is solved in 2 steps by [ 25 5 ]; [ 150 6 ]
+6/25 is solved in 2 steps by [ 100 4 ]
+7/25 is solved in 5 steps by [ 25 100 109 8 2 ]
+8/25 is solved in 2 steps by [ 75 3 ]
+9/25 is solved in 8 steps by [ 12775 4 40 1469 1 15 4 1 ]
+11/25 is solved in 12 steps by [ 725 1155 1 28483 1 921 28 1 6 5 18 2 ]
+12/25 is solved in 2 steps by [ 50 2 ]
+13/25 is solved in 3 steps by [ 575 4 1 ]
+14 / 25 - g > 26: 315885621 (199.52s)
+16 / 25 - g > 34: 553995312 (392.67s)
+17 / 25 - g > 39: 563420961 (451.30s)
+18 / 25 - g > 45: 369444090 (363.41s)
+19 / 25 - g > 52: 397801492 (717.51s)
+21 / 25 - g > 80: 255665930 (505.79s)
+22 / 25 - g > 111: 231418122 (668.77s)
+23 / 25 - g > 158: 164369687 (818.79s)
+24/25 is solved in 2 steps by [ 25 1 ]
+
+1/26 is solved in 2 steps by [ 26 13 ]; [ 143 22 ]; [ 312 24 ]; [ 650 25 ]
+3/26 is solved in 2 steps by [ 104 8 ]
+5/26 is solved in 2 steps by [ 130 5 ]
+7/26 is solved in 3 steps by [ 286 8 2 ]
+9/26 is solved in 4 steps by [ 936 6 8 2 ]
+11/26 is solved in 2 steps by [ 13 2 ]
+15/26 is solved in 21 steps by [ 832 7 3 2716 46 2 30342 3 20 7 1 2 15 16 9 1 52 3 30 4 1 ]
+17 / 26 - g > 36: 447021334 (339.34s)
+19 / 26 - g > 47: 519730233 (537.64s)
+21 / 26 - g > 65: 398431659 (643.08s)
+23 / 26 - g > 111: 227070129 (712.11s)
+25/26 is solved in 2 steps by [ 26 1 ]
+
+
+1/27 is solved in 2 steps by [ 54 18 ]; [ 216 24 ]; [ 702 26 ]
+2/27 is solved in 2 steps by [ 27 9 ]; [ 108 12 ]; [ 351 13 ]
+4/27 is solved in 2 steps by [ 54 6 ]
+5/27 is solved in 3 steps by [ 189 12 3 ]; [ 27 72 5 ]
+7/27 is solved in 3 steps by [ 1350 8 2 ]
+8/27 is solved in 2 steps by [ 27 3 ]
+10/27 is solved in 10 steps by [ 945 2 4 729 1 107 11 5 3 1 ]; [ 135 9 90 732 5 4 372 3 8 2 ]
+11/27 is solved in 5 steps by [ 756 9 23 13 2 ]
+13/27 is solved in 2 steps by [ 54 2 ]
+14/27 is solved in 3 steps by [ 675 4 1 ]
+16 / 27 - g > 29: 363836938 (210.53s)
+17 / 27 - g > 33: 420956590 (264.41s)
+19 / 27 - g > 42: 440929486 (528.88s)
+20 / 27 - g > 48: 479260771 (499.17s)
+22 / 27 - g > 69: 291725624 (461.38s)
+23 / 27 - g > 92: 249448517 (599.90s)
+25 / 27 - g > 164: 152038801 (784.00s)
+26/27 is solved in 2 steps by [ 27 1 ]
+
+1/28 is solved in 2 steps by [ 21 12 ]; [ 28 14 ]; [ 70 20 ]; [ 84 21 ]; [ 168 24 ]; [ 364 26 ]; [ 756 27 ]
+3/28 is solved in 2 steps by [ 7 4 ]; [ 28 7 ]; [ 56 8 ]; [ 252 9 ]
+5/28 is solved in 2 steps by [ 14 4 ]
+9/28 is solved in 2 steps by [ 84 3 ]
+11/28 is solved in 5 steps by [ 42 1 28 4 1 ]
+13/28 is solved in 2 steps by [ 28 2 ]
+15/28 is solved in 3 steps by [ 168 4 1 ]
+17/28 is solved in 4 steps by [ 28 14 4 1 ]
+19 / 28 - g > 38: 390071446 (318.30s)
+23 / 28 - g > 83: 265514119 (478.41s)
+25 / 28 - g > 152: 180965588 (655.73s)
+27/28 is solved in 2 steps by [ 28 1 ]
+
+1/29 is solved in 2 steps by [ 812 28 ]
+2/29 is solved in 2 steps by [ 406 14 ]
+3/29 is solved in 3 steps by [ 5597 14 3 ]; [ 3915 20 5 ]; [ 2233 35 7 ]; [ 1392 56 8 ]; [ 551 140 9 ]
+4/29 is solved in 2 steps by [ 203 7 ]
+5/29 is solved in 3 steps by [ 4031 7 1 ]; [ 2349 12 3 ]; [ 667 42 5 ]
+6/29 is solved in 3 steps by [ 696 28 4 ]
+7/29 is solved in 2 steps by [ 116 4 ]
+8/29 is solved in 3 steps by [ 2204 5 1 ]; [ 522 21 3 ]
+9 / 29 - g > 14: 321413061 (130.18s)
+10/29 is solved in 9 steps by [ 2199 841 4 1033 1 8 2 6 2 ]
+11/29 is solved in 12 steps by [ 145 116 15710 2 34 22 2151 1 1691 1 4 2 ]
+12/29 is solved in 3 steps by [ 348 14 2 ]
+13/29 is solved in 4 steps by [ 580 115 4 1 ]
+14/29 is solved in 2 steps by [ 58 2 ]
+15/29 is solved in 3 steps by [ 783 4 1 ]
+16 / 29 - g > 26: 472637351 (227.57s)
+17 / 29 - g > 29: 490437225 (259.13s)
+18 / 29 - g > 31: 365210429 (244.93s)
+19 / 29 - g > 36: 481288591 (328.52s)
+20 / 29 - g > 40: 375747770 (317.21s)
+21/29 is solved in 3 steps by [ 319 5 1 ]
+22/29 - g > 52: 392253122 (461.69s) size 6277328720, best_bits 94/96
+23/29 - g > 61: 325335806 (469.73s) size 5994426878, best_bits 125/127
+24/29 is solved in 3 steps by [ 174 7 1 ]
+25/29 - g > 90: 255855796 (623.41s) size 6123605984, best_bits 200/201
+26/29 - g > 125: 175899824 (741.59s) size 5462416740, best_bits 293/294
+27/29 - g > 178: 128984968 (784.68s) size 5275047358, best_bits 445/447
+28/29 is solved in 2 steps by [ 29 1 ]
+
+1/30 is solved in 2 steps by [ 6 5 ]; [ 15 10 ]; [ 20 12 ]; [ 30 15 ]; [ 45 18 ]; [ 60 20 ]; [ 70 21 ]; [ 120 24 ]; [ 150 25 ]; [ 195 26 ]; [ 270 27 ]; [ 420 28 ]; [ 870 29 ]
+7/30 is solved in 2 steps by [ 10 3 ]; [ 60 4 ]
+11/30 is solved in 3 steps by [ 30 10 2 ]
+13/30 is solved in 2 steps by [ 15 2 ]
+17/30 is solved in 4 steps by [ 210 43 4 1 ]
+19/30 is solved in 10 steps by [ 15 260 63 4 13 15 1 6 4 1 ]
+23/30 - g > 62: 5906416975, best_bits 20/22 (9092.12s)
+29/30 is solved in 2 steps by [ 30 1 ]
+
