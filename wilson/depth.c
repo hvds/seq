@@ -55,7 +55,13 @@ void report_depth(ulong depth) {
 
 extern double timing(void);
 void report_progress(ulong depth) {
-    printf("tried %lu values (%.2fs)\n", count, timing());
+    ulong i;
+    ulong lim = (max_depth > 20) ? 20 : max_depth;
+    gmp_printf("%Qd: tried %lu values (%.2fs) ", r, count, timing());
+    for (i = 0; i < lim; ++i) {
+        frame_t *f = &stack[i];
+        printf("%lu%s", f->actual, (i < lim - 1) ? " ": "\n");
+    }
 }
 
 void report_final(void) {
@@ -75,7 +81,7 @@ bool try_depth(ulong depth) {
     ulong bits_num, bits_den;
 
     ++count;
-    if ((count & 0x3ffffff) == 0)
+    if ((count & 0xfffffff) == 0)
         report_progress(depth);
 
     mpq_inv(next->q, cur->q);

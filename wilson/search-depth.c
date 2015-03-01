@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <unistd.h>
 #include <sys/times.h>
 #include "mygmp.h"
@@ -51,6 +52,7 @@ int main(int argc, char** argv) {
     }
 
     clock_tick = sysconf(_SC_CLK_TCK);
+    setlinebuf(stdout);
     init(p, q);
     init_depth((ulong)d);
     if (!search_depth())
