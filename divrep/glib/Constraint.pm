@@ -569,9 +569,9 @@ sub next {
 # If n+kd = ky^2 for some y, we can just search for appropriate y.
 #
 sub fix_square {
-    my($self, $k, $ty2) = @_;
+    my($self, $k, $ty2, $opt_mq) = @_;
     require Constraint::Square;
-    return Constraint::Square->new($self, $k, $ty2);
+    return Constraint::Square->new($self, $k, $ty2, $opt_mq);
 }
 
 sub disallowed {

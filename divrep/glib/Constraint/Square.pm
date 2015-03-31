@@ -14,7 +14,7 @@ no warnings qw/ recursion /;
 #   tau(y^2) = ty2.
 #
 sub new {
-    my($class, $c, $k, $ty2) = @_;
+    my($class, $c, $k, $ty2, $opt_mq) = @_;
     my $self = $class->SUPER::new(
         'n' => $c->n(),
         'f' => $c->f(),
@@ -30,6 +30,8 @@ sub new {
 
     $self->{'min'} = $self->_convert($c->min() - 1) + 1;
     $self->{'max'} = $self->_convert($c->max() - 1) + 1;
+
+    $self->mod_override($_) for @$opt_mq;
 
     # Copy over all the constraints
     for my $mod (1 .. $self->check()) {
@@ -85,6 +87,24 @@ sub next {
     $self->{'kept'} += 1;
     return undef if $cur > $self->{'max'};
     return $cur * $cur - $self->{'sq_diff'};
+}
+
+sub mod_override {
+    my($self, $override) = @_;
+    my($mod, $op, $val) = m{ ^ (\d+) ([=!]) (\d+) \z }x
+            or die "Invalid square mod override '$_'";
+    if ($op eq '=') {
+        $self->square_require($mod, $val);
+    } else {
+        $self->square_suppress($mod, $val);
+    }
+}
+
+sub square_require {
+    my($self, $p, $v, $min) = @_;
+    no warnings qw/ redefine /;
+    local *suppress = sub { shift->SUPER::suppress(@_) };
+    $self->SUPER::require($p, $v, $min);
 }
 
 sub square_suppress {

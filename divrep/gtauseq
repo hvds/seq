@@ -9,8 +9,9 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_ts, $opt_m)
-        = (0, 0, 0, 100000, 0, 0, [], []);
+my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr) = (0, 0, 0, 100000, 0, 0);
+my($opt_ts, $opt_m, $opt_mq) = ([], [], []);
+
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
@@ -22,6 +23,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
     ($opt_ts = [ split /,/, $arg || shift(@ARGV) ]), next if $arg =~ s{^-ts}{};
     ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t}{};
+    push(@$opt_mq, $arg || shift(@ARGV)), next if $arg =~ s{^-mq}{};
     push(@$opt_m, $arg || shift(@ARGV)), next if $arg =~ s{^-m}{};
     die "Unknown option '$arg'\n";
 }
@@ -74,7 +76,9 @@ sub mod_override {
 }
 
 sub modfix {
-    return @$opt_m ? sprintf('mod(%s) ', join ', ', @$opt_m) : '';
+    return join ', ', grep length,
+        (@$opt_m ? sprintf('mod(%s) ', join ', ', @$opt_m) : ''),
+        (@$opt_mq ? sprintf('sqmod(%s) ', join ', ', @$opt_mq) : '');
 }
 
 sub apply {
@@ -126,7 +130,9 @@ $c->debug && warn "apply $m\n";
         my($k, $ty2) = @$fix_square;
         # we require d = y^2 - n/k, with tau(y^2) = ty2
         warn "311 Fixing square d = y^2 - n/$k, tau(y^2) = $ty2\n";
-        $c = $c->fix_square($k, $ty2);
+        $c = $c->fix_square($k, $ty2, $opt_mq);
+    } elsif (@$opt_mq) {
+        die "-mq options invalid without fixing square";
     }
 
     return $c;
