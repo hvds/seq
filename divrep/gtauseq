@@ -9,14 +9,15 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_D)
-        = (0, 0, 0, 100000, 0, 0, 0);
+my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_D, $opt_f)
+        = (0, 0, 0, 100000, 0, 0, 0, 0);
 my($opt_ts, $opt_m, $opt_mq, $opt_dm, $opt_dmq) = ([], [], [], [], []);
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
     ($opt_D = 1, next) if $arg eq '-D';
+    ($opt_f = 1, next) if $arg eq '-f';
     Constraint->debug_more(), next if $arg eq '-d';
     ($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
     ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
@@ -69,6 +70,31 @@ OUT
 OUT
 }
 exit 0;
+
+#
+# If the order of p in n is k and p^{k+1} divides the diff, we must have
+# g(n, f) = p^k g(n / p^k, f). If constraints force the diff to be so
+# divisible, g(n) = p^k g(n / p^k) for the rest of the sequence, and there's
+# no point recalculating them. (The -f flag forces the calculation.)
+#
+sub check_mult {
+    my($c) = @_;
+    my($mult, $mod_mult) = ($c->mult, $c->mod_mult);
+    my $mf = [ factor_exp($mult) ];
+    for (@$mf) {
+        my($p, $k) = @$_;   # p^k is fixed by constraints
+        next if $k < 2;
+        next unless 0 == ($n % $p);
+        my $pk = $p ** $k;
+        next if 0 == ($n % $pk);
+        next unless 0 == ($mod_mult % $pk);
+        my $nd = $n * $p / $pk;
+        printf <<OUT, $f, $nd, $n, $nd;
+201 Dependent - %s:%s f(%s) # fix %s
+OUT
+        exit 0;
+    }
+}
 
 sub mod_override {
     my($c, $override) = @_;
@@ -541,6 +567,7 @@ sub iter_factor {
         my $tester = prepare_tester($c);
         my $cur;
         $c->init();
+        check_mult($c) unless $opt_f;
         CUR: while ($cur = $c->next()) {
             report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
             for (0 .. $#$tester) {

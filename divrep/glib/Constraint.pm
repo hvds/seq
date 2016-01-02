@@ -61,7 +61,7 @@ sub new {
 }
 
 for my $method (qw/
-    cur n f tell_count t0 min max check tau min_potency
+    cur n f tell_count t0 min max check tau min_potency mult mod_mult
 /) {
     my $sub = sub { shift->{$method} };
     no strict 'refs';
