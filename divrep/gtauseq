@@ -521,7 +521,7 @@ sub iter_factor {
                 $tester->[$_]->($cur)
                     #|| (report_seq($n, $f, $cur), next CUR)
                     #|| next CUR
-                    || ($seq_seen[$_]++ || report_seq($n, $f, $cur), next CUR)
+                    || ($seq_seen[$_]++ || report_seq($n, $f, $cur, $_), next CUR)
                     #|| (++$seq_seen[$_-1], next CUR)
             }
             report_reach($n, $f, $cur, $c);
@@ -632,13 +632,18 @@ sub prepare_tester {
 }
 
 sub report_seq {
-    my($n, $f, $d) = @_;
+    my($n, $f, $d, $first) = @_;
     my $flen = length($f);
     my $vlen = length($n + $f * $d);
     for (0 .. $f) {
         my $v = $n + $d * $_;
         printf <<OUT, $flen, $_, tau($v), $vlen, $v, pf($v);
 211 Sequence % *s: % 2s = tau(% *s = %s)
+OUT
+    }
+    if (defined $first) {
+        printf <<OUT, $c->elapsed, $n, $f, $first;
+306 After %.2fs for (%s, %s) first fail for test %s
 OUT
     }
 }
