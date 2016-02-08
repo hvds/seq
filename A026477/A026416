@@ -17,7 +17,7 @@ Note that this is a simpler form of A026477, which allows the product of
 
 =cut
 
-my @seen;
+my(@seen_a, %seen_r);
 for (my $sum = 1; 1; ++$sum) {
     my $v = [ $sum ];
     while (1) {
@@ -33,7 +33,8 @@ for (my $sum = 1; 1; ++$sum) {
 sub record_good {
     my($v, $sum) = @_;
     print "good: [ ", join(', ', @$v), " ]\n";
-    push @{ $seen[$sum] }, [ @$v ];
+    push @{ $seen_a[$sum] }, [ @$v ];
+    $seen_r{join '', map chr($_), @$v} = 1;
 }
 
 sub record_bad {
@@ -59,9 +60,7 @@ sub reachable {
     my($v, $sum) = @_;
     for my $suma (1 .. int($sum / 2)) {
         my $sumb = $sum - $suma;
-        my %reachable_a = map { $_ => 1 }
-                map join('', map chr($_), @$_), @{ $seen[$suma] };
-        for my $vb (@{ $seen[$sumb] }) {
+        for my $vb (@{ $seen_a[$sumb] }) {
             next if @$vb > @$v;
             next if 0 <= first_index { $vb->[$_] > $v->[$_] } (0 .. $#$vb);
             my @idx = (0 .. $#$vb);
@@ -69,7 +68,7 @@ sub reachable {
                 my $va = [ @$v ];
                 $va->[$idx[$_]] -= $vb->[$_] for 0 .. $#$vb;
                 my $ra = join '', map chr($_), sort { $b <=> $a } grep $_, @$va;
-                if ($reachable_a{$ra}) {
+                if ($seen_r{$ra}) {
                     # we require the two components to be distinct
                     return 1 unless @$va == @$vb
                             && none { $va->[$_] != $vb->[$_] } 0 .. $#$vb;
