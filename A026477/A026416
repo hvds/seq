@@ -1,0 +1,88 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use List::MoreUtils qw{ first_index last_index none };
+
+=head1 A026416
+
+Define a(n) as: a(0) = 1, a(1) = 2, a(n > 1) is the least integer that cannot
+be represented as a product of 2 distinct prior terms.
+
+Then it is clear that all primes are in the sequence, and by symmetry that
+prime signature is sufficient to determine membership of the sequence.
+
+So determine the prime signatures in the sequence.
+
+Note that this is a simpler form of A026477, which allows the product of
+3 distinct prior terms.
+
+=cut
+
+my @seen;
+for (my $sum = 1; 1; ++$sum) {
+    my $v = [ $sum ];
+    while (1) {
+        if (reachable($v, $sum)) {
+            record_bad($v, $sum);
+        } else {
+            record_good($v, $sum);
+        }
+        last unless $v = nextv($v);
+    }
+}
+
+sub record_good {
+    my($v, $sum) = @_;
+    print "good: [ ", join(', ', @$v), " ]\n";
+    push @{ $seen[$sum] }, [ @$v ];
+}
+
+sub record_bad {
+    my($v, $sum) = @_;
+    print "bad: [ ", join(', ', @$v), " ]\n";
+}
+
+sub nextv {
+    my $v = shift;
+    # find the last non-1
+    my $i = last_index { $_ > 1 } @$v;
+    return undef if $i < 0;
+    # replace (n, 1, 1, 1, ...) with (n - 1, n - 1, n - 1, .... remainder)
+    my $max = $v->[$i] - 1;
+    my $sum = $max + @$v - $i;
+    my $lenmax = int($sum / $max);
+    my $spare = $sum - $max * $lenmax;
+    splice @$v, $i, @$v - $i, (($max) x $lenmax, $spare ? ($spare) : ());
+    return $v;
+}
+
+sub reachable {
+    my($v, $sum) = @_;
+    for my $suma (1 .. int($sum / 2)) {
+        my $sumb = $sum - $suma;
+        my %reachable_a = map { $_ => 1 }
+                map join('', map chr($_), @$_), @{ $seen[$suma] };
+        for my $vb (@{ $seen[$sumb] }) {
+            next if @$vb > @$v;
+            next if 0 <= first_index { $vb->[$_] > $v->[$_] } (0 .. $#$vb);
+            my @idx = (0 .. $#$vb);
+            while (1) {
+                my $va = [ @$v ];
+                $va->[$idx[$_]] -= $vb->[$_] for 0 .. $#$vb;
+                my $ra = join '', map chr($_), sort { $b <=> $a } grep $_, @$va;
+                if ($reachable_a{$ra}) {
+                    # we require the two components to be distinct
+                    return 1 unless @$va == @$vb
+                            && none { $va->[$_] != $vb->[$_] } 0 .. $#$vb;
+                }
+                last unless next_subtractible($v, $va, $vb);
+            }
+        }
+    }
+    return 0;
+}
+
+sub next_subtractible {
+    my($v, $va, $vb) = @_;
+    use Data::Dumper; print Dumper(\@_);
+    return undef;
+}
