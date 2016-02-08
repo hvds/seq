@@ -61,27 +61,68 @@ sub reachable {
     for my $suma (1 .. int($sum / 2)) {
         my $sumb = $sum - $suma;
         for my $vb (@{ $seen_a[$sumb] }) {
-            next if @$vb > @$v;
-            next if 0 <= first_index { $vb->[$_] > $v->[$_] } (0 .. $#$vb);
-            my @idx = (0 .. $#$vb);
-            while (1) {
-                my $va = [ @$v ];
-                $va->[$idx[$_]] -= $vb->[$_] for 0 .. $#$vb;
-                my $ra = join '', map chr($_), sort { $b <=> $a } grep $_, @$va;
-                if ($seen_r{$ra}) {
-                    # we require the two components to be distinct
-                    return 1 unless @$va == @$vb
-                            && none { $va->[$_] != $vb->[$_] } 0 .. $#$vb;
-                }
-                last unless next_subtractible($v, $va, $vb);
-            }
+            return 1 if reachable_via($v, $vb);
         }
     }
     return 0;
 }
 
-sub next_subtractible {
-    my($v, $va, $vb) = @_;
-    use Data::Dumper; print Dumper(\@_);
-    return undef;
+sub reachable_via {
+    my($v, $vb) = @_;
+
+    #
+    # if there are too many elements to subtract, skip it
+    #
+    return 0 if @$vb > @$v;
+
+    #
+    # if there's no way to subtract those elements, skip it - since both
+    # arrays are ordered largest-first, we can just match them up
+    #
+    return 0 if 0 <= first_index { $vb->[$_] > $v->[$_] } (0 .. $#$vb);
+
+    #
+    # recursively find ways to assign elements of vb to elements of v,
+    # then check if that leaves us a complement that's already in the sequence
+    #
+    my($reachable_r, %used, @assign);
+    my $rb = join '', map chr($_), @$vb;
+
+    $reachable_r = sub {
+        my($index) = @_;
+        if ($index == @$vb) {
+            # all elements are assigned, check if the complement is valid
+            my @va = @$v;
+            $va[$assign[$_]] -= $vb->[$_] for 0 .. $#$vb;
+
+            # the entries are required to be distinct, which we can only
+            # verify before canonicalization
+            return 0 if @va == @$vb && !grep { $va[$_] != $vb->[$_] } 0 .. $#va;
+
+            my $ra = join '', map chr($_), sort { $b <=> $a } grep $_, @va;
+
+            # if distinct, this is reachable if we've seen the complement
+            return $seen_r{$ra};
+        }
+        # find each possible way to assign the next element, and recurse
+        my $value = $vb->[$index];
+        my $prev = undef;
+        for my $j (0 .. $#$v) {
+            # must be subtractible
+            last if $v->[$j] < $value;
+            # must not already be assigned
+            next if $used{$j};
+            # skip if this assignment only tests a value already tested
+            next if $prev && $v->[$j] == $prev;
+
+            # it's a good assignment, let's try it
+            local $used{$j} = 1;
+            $assign[$index] = $j;
+            $prev = $v->[$j];
+            
+            return 1 if $reachable_r->($index + 1);
+        }
+        return 0;
+    };
+    return $reachable_r->(0);
 }
