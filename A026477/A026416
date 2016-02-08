@@ -21,32 +21,37 @@ my(@seen_a, %seen_r);
 for (my $sum = 1; 1; ++$sum) {
     my $v = [ $sum ];
     while (1) {
-        if (reachable($v, $sum)) {
-            record_bad($v, $sum);
-        } else {
-            record_good($v, $sum);
-        }
+        record_good($v, $sum) unless reachable($v, $sum);
         last unless $v = nextv($v);
     }
 }
 
+#
+# Report and record a signature that has been determined to be in the sequence.
+#
 sub record_good {
     my($v, $sum) = @_;
-    print "good: [ ", join(', ', @$v), " ]\n";
+    print "[ ", join(', ', @$v), " ]\n";
     push @{ $seen_a[$sum] }, [ @$v ];
-    $seen_r{join '', map chr($_), @$v} = 1;
+    $seen_r{canonical($v)} = 1;
 }
 
-sub record_bad {
-    my($v, $sum) = @_;
-    print "bad: [ ", join(', ', @$v), " ]\n";
-}
-
+#
+# Given an arrayref representing a prime signature, modify it to represent
+# the next possible one and return it; else return undef.
+#
+# We want to replace [a, b, ... m, n, 1, 1, ... 1] with a "next" value like
+# [a, b, ... m, n-1, n-1, ... n-1, r?] having the same sum.
+#
 sub nextv {
     my $v = shift;
+
     # find the last non-1
     my $i = last_index { $_ > 1 } @$v;
+
+    # if there wasn't one, the last set was [1, 1, ... 1] and now we're done
     return undef if $i < 0;
+
     # replace (n, 1, 1, 1, ...) with (n - 1, n - 1, n - 1, .... remainder)
     my $max = $v->[$i] - 1;
     my $sum = $max + @$v - $i;
@@ -56,6 +61,13 @@ sub nextv {
     return $v;
 }
 
+#
+# Return TRUE if the given signature can be reached by composing two distinct
+# signatures already found to be in the sequence, else FALSE.
+#
+# We do this by trying each signature previously found that has a sum at
+# least half as big.
+#
 sub reachable {
     my($v, $sum) = @_;
     for my $suma (1 .. int($sum / 2)) {
@@ -67,11 +79,21 @@ sub reachable {
     return 0;
 }
 
+#
+# Given a target signature v and a "via" signature vb, search for a way
+# of assigning elements of vb to those of v such that the product v - vb
+# represents a new prime signature already determined to be in the sequence.
+# Returns TRUE if one was found, else FALSE.
+#
+# This additionally checks for and disqualifies a "non-distinct" va,
+# such that va = vb and v = [ 2vb_i ] for all i. Thus, for example, [ 2 ]
+# is not reachable via [ 1 ] but [ 1, 1 ] _is_ reachable via [ 1 ].
+#
 sub reachable_via {
     my($v, $vb) = @_;
 
     #
-    # if there are too many elements to subtract, skip it
+    # if there are too many elements to assign, skip it
     #
     return 0 if @$vb > @$v;
 
@@ -86,7 +108,7 @@ sub reachable_via {
     # then check if that leaves us a complement that's already in the sequence
     #
     my($reachable_r, %used, @assign);
-    my $rb = join '', map chr($_), @$vb;
+    my $rb = canonical($vb);
 
     $reachable_r = sub {
         my($index) = @_;
@@ -99,10 +121,8 @@ sub reachable_via {
             # verify before canonicalization
             return 0 if @va == @$vb && !grep { $va[$_] != $vb->[$_] } 0 .. $#va;
 
-            my $ra = join '', map chr($_), sort { $b <=> $a } grep $_, @va;
-
             # if distinct, this is reachable if we've seen the complement
-            return $seen_r{$ra};
+            return $seen_r{canonical(\@va)};
         }
         # find each possible way to assign the next element, and recurse
         my $value = $vb->[$index];
@@ -125,4 +145,14 @@ sub reachable_via {
         return 0;
     };
     return $reachable_r->(0);
+}
+
+#
+# Return a canonicalized string representing the given signature.
+#
+# Removes zeros, sorts descending, then packs to string.
+#
+sub canonical {
+    my($v) = @_;
+    return join '', map chr($_), sort { $b <=> $a } grep $_, @$v;
 }
