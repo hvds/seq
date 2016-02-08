@@ -17,8 +17,10 @@ Note that this is a simpler form of A026477, which allows the product of
 
 =cut
 
+my $limit = shift(@ARGV) || undef;
+
 my(@seen_a, %seen_r);
-for (my $sum = 1; 1; ++$sum) {
+for (my $sum = 1; !$limit || $sum <= $limit; ++$sum) {
     my $v = [ $sum ];
     while (1) {
         record_good($v, $sum) unless reachable($v, $sum);
