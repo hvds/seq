@@ -17,14 +17,16 @@ Note that this is a simpler form of A026477, which allows the product of
 
 =cut
 
-my $limit = shift(@ARGV) || undef;
+my($limit, $width) = @ARGV;
+$limit ||= undef;
+$width ||= undef;
 
 my(@seen_a, %seen_r);
 for (my $sum = 1; !$limit || $sum <= $limit; ++$sum) {
     my $v = [ $sum ];
     while (1) {
         record_good($v, $sum) unless reachable($v, $sum);
-        last unless $v = nextv($v);
+        last unless $v = nextv($v, $width);
     }
 }
 
@@ -46,8 +48,9 @@ sub record_good {
 # [a, b, ... m, n-1, n-1, ... n-1, r?] having the same sum.
 #
 sub nextv {
-    my $v = shift;
+    my($v, $width) = @_;
 
+  retry:
     # find the last non-1
     my $i = last_index { $_ > 1 } @$v;
 
@@ -60,6 +63,10 @@ sub nextv {
     my $lenmax = int($sum / $max);
     my $spare = $sum - $max * $lenmax;
     splice @$v, $i, @$v - $i, (($max) x $lenmax, $spare ? ($spare) : ());
+
+    # simplistic width support for now
+    goto retry if @$v > $width;
+
     return $v;
 }
 
