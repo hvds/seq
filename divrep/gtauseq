@@ -88,8 +88,9 @@ sub check_mult {
         my $pk = $p ** $k;
         next if 0 == ($n % $pk);
         next unless 0 == ($mod_mult % $pk);
-        my $nd = $n * $p / $pk;
-        printf <<OUT, $f, $nd, $n, $nd;
+        do { $pk /= $p } while 0 != ($n % $pk);
+        my $nd = $n / $pk;
+        printf <<OUT, $f, $pk, $nd, $pk;
 201 Dependent - %s:%s f(%s) # fix %s
 OUT
         exit 0;
