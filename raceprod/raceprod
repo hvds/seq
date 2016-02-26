@@ -1,0 +1,165 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+no warnings qw/ recursion /;
+
+use Math::GMP;
+use Math::Prime::Util qw{ nth_prime };
+
+=head2 sequence
+
+Let S_p be the set of positive integers that have no prime factor > p.
+Let T(p, m) = \prod_{i \in S_p, i <= m}{i}
+and r(p, k) = min i: p^k | T(p. i).
+
+Then a(n) = min k: r(p_n, k) < r(i, k) for all i < p_n.
+
+We actually calculate not S_p but the related D_p defined as the subset
+of elements of S_p that are divisible by p, and define T(p, m) as
+a product over D_p to get equivalent definitions for r() and a().
+
+Thus eg r(2, 7) = 16, since 2.4.8.16 divides 2^7, but 2.4.8 does not.
+Thus eg r(3, 6) = 18, since 3.6.9.12.18 divides 3^6 (note that 15 cannot
+be used as it has a prime factor greater than 3).
+
+Taking p_0 = 2, p_1 = 3 we have a(1) = 11 since r(3, 11) = 27 < r(2, 11) = 32,
+but r(2, k) < r(3, k) for all smaller k.
+
+We then find the sequence for a() as:
+  1 11 60 79 418 240 534 292 800 3040 1121 4332 2818 1617 1872 8777 9655
+  4563 12873 7441 4254 19483 10652 24376 87947 29195 15397 13577 10295
+  10290 (>122880)
+
+=cut
+
+$| = 1;
+my $bs = "\x08 \x08";
+my $i = 0;
+while (1) {
+	my $a = a($i);
+	my $p = p($i);
+	printf "%s (%s) %s (%s)\n", $i, $p, $a,
+			join ':', map r($_, $a) || '', 0 .. $i;
+	++$i;
+}
+
+sub p { return nth_prime($_[0] + 1) }
+
+sub a {
+	my $i = shift;
+	my $s = '';
+	K: for (my $k = 1; 1; ++$k) {
+		if (!($k & 0xfff)) {
+			print $bs x length($s);
+#			$s = sprintf "%s: %s", $i, join ':', map r($_, $i), 0 .. $k;
+			$s = sprintf "r(%s, %s) = %s", $i, $k, r($i, $k);
+			print $s;
+		}
+		my $ri = r($i, $k);
+		for (my $j = 0; $j < $i; ++$j) {
+			my $rj = r($j, $k) or next;
+			next K if $rj <= $ri;
+		}
+		print $bs x length($s);
+		return $k;
+	}
+}
+
+{
+    my %r; # cache r(i, k) as $r{$i}[$k]
+
+    sub r {
+    	my($i, $k) = @_;
+    	$r{$i}[$k] || do {
+    		my $ri = $r{$i};
+    		push @$ri, 0 unless @$ri;
+    		while (@$ri <= $k) {
+    			my($next, $count) = nextD($i);
+    			push @$ri, ($next) x $count;
+    		}
+    		$r{$i}[$k];
+    	};
+    }
+
+    # D_{p_i} is cached as an arrayref of sorted integers in $dpi[i]
+    my @dpi;
+
+    # We construct D_{p_i} as p_i times the union of { 1 } and D_{p_j}
+    # for all j <= i. We elide { 1 } by initializing $dpi[i] to [ p_i ],
+    # then track the index of the next element not yet taken from each of
+    # those D_{p_j} as $index[i][j]. To find the next element of D_{p_i}
+    # we find the minimum element referred to by those indices.
+    my @index;
+
+    # Given i, return the next unseen element of D_{p_i} and the multiplicity
+    # of the greatest power of p_i dividing it.
+    sub nextD {
+    	my($i) = @_;
+    	my $p = p($i);
+    	unless ($dpi[$i]) {
+    		$dpi[$i] = [ $p ];
+    		$index[$i] = [ (0) x ($i + 1) ];
+    		return ($p, 1);
+    	}
+    	my $x = $index[$i];
+    	my $minval = $dpi[$i][ $x->[$i] ];
+    	my $minindex = $i;
+    	for (my $j = 0; $j < $i; ++$j) {
+    		my $values = $dpi[$j];
+            # if we have not yet evaluated enough terms of D_{p_j}, do so;
+            # we must do so by calling r(), else we'll miss that term when
+            # we later try to call nextD(j).
+    		while (@$values <= $x->[$j]) {
+    			r($j, scalar @{ $r{$j} });
+    		}
+    		my $value = $values->[ $x->[$j] ];
+    		($minval, $minindex) = ($value, $j) if $minval > $value;
+    	}
+    	my $next = $p * $minval;
+    	push @{ $dpi[$i] }, $next;
+    	my $power = ($minindex != $i) ? 1 : do {
+    		my $s = 1;
+    		++$s, $minval /= $p while $minval % $p == 0;
+    		$s;
+    	};
+    	++$x->[$minindex];
+    	return ($next, $power);
+    }
+}
+
+__END__
+
+Detail of results:
+
+0 (2) 1 (2)
+1 (3) 11 (32:27)
+2 (5) 60 (2048:648:640)
+3 (7) 79 (8192:1152:1125:1120)
+4 (11) 418 (536870912:248832:62500:30240:29645)
+5 (13) 240 (4194304:31104:13500:8820:10164:8788)
+6 (17) 534 (8589934592:746496:129600:54432:49896:37752:37570)
+7 (19) 292 (16777216:59049:22500:13440:14641:12636:13600:12635)
+8 (23) 800 (1099511627776:5668704:491520:151263:123904:84084:78897:67431:67298)
+9 (29) 3040 (41841412812:122880000:9031680:3929310:1712997:1246168:861840:754515:754377)
+10 (31) 1121 (140737488355328:38263752:1658880:385875:275968:170352:151725:122892:120175:130065:120156)
+11 (37) 4332 (940369969152:750000000:32928000:11343750:4239235:2828375:1820637:1520208:1472823:1233180:1233099)
+12 (41) 2818 (86400000:6945750:3193344:1419600:1051960:736440:649152:656183:568974:586080:568875)
+13 (43) 1617 (1148175:698544:379080:318750:244036:229632:243049:220038:232804:231978:220031)
+14 (47) 1872 (1022208:532350:432344:324900:299943:315172:280364:296000:292494:276834:276830)
+15 (53) 8777 (29989050:16256250:8941324:6703488:6038032:4719750:4512816:4105002:3597165:3399228:3398625)
+16 (59) 9655 (20816670:11207625:8271536:7353675:5701520:5410658:4886667:4263192:4003648:3995776:3995775)
+17 (61) 4563 (2034900:1684865:1633164:1357056:1355310:1284120:1165945:1135003:1162290:1190502:1134905)
+18 (67) 12873 (15768432:13540100:10167380:9415575:8354775:7169175:6644672:6539935:6472890:5983978:5983837)
+19 (71) 7441 (4297800:3425004:3306912:3037608:2692144:2562440:2578185:2603788:2450736:2487375:2450565)
+20 (73) 4254 (1191640:1196506:1137750:1037504:1012662:1039012:1065540:1018944:1048617:1046682:1012656)
+21 (79) 19483 (21520939:18517896:15486450:14033824:13568000:13227800:12036276:11895850:11431497:10725671:10725198)
+22 (83) 10652 (5863000:5088448:4753392:4720339:4708672:4376384:4406724:4301748:4099680:4152240:4099536)
+23 (89) 24376 (23713425:21235540:20326560:19634433:17726905:17389515:16601078:15470598:15396705:14964651:14963570)
+24 (97) 87947 (260891736:233141700:212385250:181610847:170357550:156053385:139971149:134752275:126922936:123481982:123481000)
+25 (101) 29195 (28269776:27108081:24319724:23699039:22508136:20863035:20673510:20008976:19951575:20389109:19950732)
+26 (103) 15397 (8794422:8067250:8032362:7773080:7338033:7383735:7242663:7309392:7550577:7467031:7242136)
+27 (107) 13577 (6536943:6534108:6341578:6004323:6056456:5960064:6023520:6235645:6177261:6005930:5959365)
+28 (109) 10295 (4172425:4079660:3886155:3943127:3897099:3956673:4112218:4089995:3985070:3972696:3885196)
+29 (113) 10290 (4075400:3883308:3938624:3893032:3951867:4107659:4086460:3982289:3969700:3883779:3883132)
+# failed out of memory after calculating r(30, 122880) = 180728874
+
