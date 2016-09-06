@@ -16,14 +16,14 @@ A276342(n) is the inverse sequence: A276342(n) = k implies A274647(k) = n.
 my $maxmult = 1.5;
 
 # Record and report the first occurrence of a(n) = x for all x <= $limall.
-my $limall = 100;
+my $limall = 10000;
 
 # Stop after n = $maxiter.
-my $maxiter = 1e9;
+my $maxiter = 631905525;
 
 my $v = ''; # bit vector of seen values; reaches about 1GB at n=6.4e8.
 my $maxseen = 0;
-my @lim = ('-') x ($limall + 1);
+my @lim = (-1) x ($limall + 1);
 
 my($n, $lastval) = (0, 0);
 setval(0);
@@ -43,6 +43,13 @@ N: while (++$n <= $maxiter) {
         }
     }
 }
+
+open my $f, '>', 'results' or die "results: $!";
+for (0 .. $limall) {
+    print $f "$_ $lim[$_]\n";
+}
+close $f;
+exit 0;
 
 sub testval {
     return vec($v, $_[0], 1);
