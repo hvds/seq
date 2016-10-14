@@ -1,0 +1,48 @@
+#!/opt/maths/bin/perl -w
+use strict;
+@ARGV == 1 or die "Usage: $0 <dimension=0..6>\n";
+
+my($dim) = @ARGV;
+my @fullmask = (1);
+for (1 .. 6) {
+    my $prev = $fullmask[$_ - 1];
+    $fullmask[$_] = $prev | ($prev << (1 << ($_ - 1)));
+}
+
+my $count = count_d($dim, $fullmask[$dim]);
+printf "200 a(2, %s) = %s (%.2f)\n", $dim, $count, scalar times();
+exit 0;
+
+=head2 count_d ( d, mask )
+
+Calculates and returns the number of ways the specified shape can be
+partitioned into polyominoes of size at most 2. The shape is some or all
+of a I<d>-dimensional hypercube of side 2; I<mask> is a vector of C<2 ** d>
+bits specifying the unit I<d>-cubes that are included in the shape.
+
+The approach is recursive: we pick a dimension, split the shape in 2 over
+that dimension giving two new C<d-1>-dimensional shapes, and then try
+assigning size 2 polyominoes that straddle the break in each way possible.
+
+Calculation uses perl's inbuilt types without regard for overflow or loss
+of precision; for n=6 you'll need perl built with 64-bit integers.
+
+=cut
+
+sub count_d {
+    my($d, $mask) = @_;
+    return 1 if $d == 0;
+    my $hd = $d - 1;        # dimension of half shape
+    my $hp = 1 << $hd;      # number of unit I<hd>-cubes in half shape
+    my $halfmask = $fullmask[$hd];  # mask of all bits in half shape
+    my $left = $mask & $halfmask;   # mask representing one of the half shapes
+    my $right = $mask >> $hp;
+    my $shared = $left & $right;    # mask of cube-pairs straddling the break
+    my $x = 0;
+    my $sum = 0;
+    do {
+        $sum += count_d($hd, $left ^ $x) * count_d($hd, $right ^ $x);
+        $x = ($x - $shared) & $shared;  # cycle over the bits of $shared
+    } while $x != 0;
+    return $sum;
+}
