@@ -9,8 +9,8 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_D, $opt_f)
-        = (0, 0, 0, 100000, 0, 0, 0, 0);
+my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_D, $opt_f, $opt_b)
+        = (0, 0, 0, 100000, 0, 0, 0, 0, 0);
 my($opt_ts, $opt_m, $opt_mq, $opt_dm, $opt_dmq) = ([], [], [], [], []);
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
@@ -18,6 +18,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     last if $arg eq '--';
     ($opt_D = 1, next) if $arg eq '-D';
     ($opt_f = 1, next) if $arg eq '-f';
+    ($opt_b = 1, next) if $arg eq '-b';
     Constraint->debug_more(), next if $arg eq '-d';
     ($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
     ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
@@ -136,7 +137,15 @@ sub apply {
     my $c = shift;
     my $tn = $c->tau;
 
-    # if options specify overriding modular constraints, apply those first
+    # If we require the diff to be coprime with the elements, deal with that
+    # first.
+    if ($opt_b) {
+        for my $p (map $_->[0], factor_exp($c->n)) {
+            $c->suppress($p, 0);
+        }
+    }
+
+    # If options specify overriding modular constraints, apply those next.
     mod_override($c, $_) for @$opt_m;
 
     for my $m (2 .. $c->check) {
