@@ -1,4 +1,4 @@
-package Constraint::Square;
+package Constraint::Power;
 use strict;
 our @ISA = qw/ Constraint /;
 
@@ -7,14 +7,13 @@ use warnings;
 no warnings qw/ recursion /;
 
 #
-# Constraint::Square->new($c, $k, $ty2)
+# Constraint::Power->new($c, $k, $x, $z, $opt_mpow)
 # - specialization of Constraint, to find values matching the constraints
 #   specified for the Constraint object $c with the additional requirement
-#   that the value is of the form y^2 - $c->n() / $k for some y, with
-#   tau(y^2) = ty2.
+#   that n + kd = xy^z, so for a given y we have d = (xy^z - n) / k.
 #
 sub new {
-    my($class, $c, $k, $ty2, $opt_mq) = @_;
+    my($class, $c, $k, $x, $z, $opt_mpow) = @_;
     my $self = $class->SUPER::new(
         'n' => $c->n(),
         'f' => $c->f(),
@@ -25,22 +24,22 @@ sub new {
         'check' => $c->check(),
         'tau' => $c->tau(),
     );
-    my $diff = $self->{'sq_diff'} = $self->n() / $k;    # must divide
-    $self->{'sq_tau'} = $ty2;
 
-    $self->{'min'} = $self->_convert($c->min() - 1) + 1;
-    $self->{'max'} = $self->_convert($c->max() - 1) + 1;
+    ($z & 1) == 0 or die "Constraint::Power->new: \$z must be even (not $z)";
+    @$self{qw{ pow_k pow_x pow_z }} = ($k, $x, $z);
+    $self->{'min'} = $self->_dtoceily($c->min());
+    $self->{'max'} = $self->_dtoceily($c->max());
 
-    $self->mod_override($_) for @$opt_mq;
+    $self->mod_override($_) for @$opt_mpow;
 
     # Copy over all the constraints
     for my $mod (1 .. $self->check()) {
         my $vec = $c->c($mod)->[2];
         for my $v (0 .. ($mod - 1) / 2) {
-            my $subv = ($v * $v - $diff) % $mod;
+            my $subv = $self->_ytod($v) % $mod;
             if (vec($vec, $subv, 1)) {
-                $self->square_suppress($mod, $v);
-                $self->square_suppress($mod, $mod - $v) if $v;
+                $self->power_suppress($mod, $v);
+                $self->power_suppress($mod, $mod - $v) if $v;
             }
         }
     }
@@ -55,14 +54,37 @@ warn sprintf "Throwing away %s pending values triggering in range [%s, %s]\n", 0
     return $self;
 }
 
-sub _convert {
+#
+# Calculate floor(y) given d: floor(y) = floor(((n + kd) / x) ^ (1/z))
+#
+sub _dtoy {
     my($self, $val) = @_;
-    return +($val + $self->{'sq_diff'})->bsqrt;
+    my $base = $self->{n} + $self->{pow_k} * $val;
+    return +($base / $self->{pow_x})->broot($self->{pow_z});
+}
+
+sub _dtoceily {
+    my($self, $val) = @_;
+    return 1 + $self->_dtoy($val - 1);
+}
+
+#
+# Calculate d given y: d = (xy^z - n) / k
+# We expect k should always divide the expression exactly, or raise an error.
+#
+sub _ytod {
+    my($self, $val) = @_;
+    my $base = $self->{pow_x} * $val ** $self->{pow_z} - $self->{n};
+    my($div, $rem) = $base->bdiv($self->{pow_k});
+    die sprintf "_ytod(k = %s, x = %s, z = %s => %s) not divisible by k",
+            @$self{qw{ pow_k pow_x pow_z }}, $val
+        if $rem != 0;
+    return $div;
 }
 
 sub cur {
     my $self = shift;
-    $self->{'cur'} * $self->{'cur'} - $self->{'sq_diff'};
+    return $self->_ytod($self->{cur});
 }
 
 sub next {
@@ -86,28 +108,28 @@ sub next {
     $self->{'skipped'} += $u;
     $self->{'kept'} += 1;
     return undef if $cur > $self->{'max'};
-    return $cur * $cur - $self->{'sq_diff'};
+    return $self->_ytod($cur);
 }
 
 sub mod_override {
     my($self, $override) = @_;
     my($mod, $op, $val) = ($override =~ m{ ^ (\d+) ([=!]) (\d+) \z }x)
-            or die "Invalid square mod override '$override'";
+            or die "Invalid power mod override '$override'";
     if ($op eq '=') {
-        $self->square_require($mod, $val);
+        $self->power_require($mod, $val);
     } else {
-        $self->square_suppress($mod, $val);
+        $self->power_suppress($mod, $val);
     }
 }
 
-sub square_require {
+sub power_require {
     my($self, $p, $v, $min) = @_;
     no warnings qw/ redefine /;
     local *suppress = sub { shift->SUPER::suppress(@_) };
     $self->SUPER::require($p, $v, $min);
 }
 
-sub square_suppress {
+sub power_suppress {
     my($self, $p, $v, $min, $depend) = @_;
     no warnings qw/ redefine /;
     local *suppress = sub { shift->SUPER::suppress(@_) };
@@ -116,12 +138,12 @@ sub square_suppress {
 
 sub suppress {
     my($self, $p, $v, $min, $depend) = @_;
-    my $diff = $self->{'sq_diff'};
+    # we require pow_z even
     for my $w (0 .. ($p - 1) / 2) {
-        my $subw = ($w * $w - $diff) % $p;
+        my $subw = $self->_ytod($w) % $p;
         next if $subw != $v;
-        $self->square_suppress($p, $w, $min, $depend);
-        $self->square_suppress($p, $p - $w, $min, $depend) if $w;
+        $self->power_suppress($p, $w, $min, $depend);
+        $self->power_suppress($p, $p - $w, $min, $depend) if $w;
     }
 }
 

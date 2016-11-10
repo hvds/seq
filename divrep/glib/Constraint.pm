@@ -566,12 +566,12 @@ sub next {
 }
 
 #
-# If n+kd = ky^2 for some y, we can just search for appropriate y.
+# If n+kd = xy^z for fixed x and z, we can just search for appropriate y.
 #
-sub fix_square {
-    my($self, $k, $ty2, $opt_mq) = @_;
-    require Constraint::Square;
-    return Constraint::Square->new($self, $k, $ty2, $opt_mq);
+sub fix_power {
+    my($self, $k, $x, $z, $opt_mq) = @_;
+    require Constraint::Power;
+    return Constraint::Power->new($self, $k, $x, $z, $opt_mq);
 }
 
 sub disallowed {

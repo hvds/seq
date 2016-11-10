@@ -185,16 +185,16 @@ $c->debug && warn "apply $m\n";
     # TODO: Check if pending constraints would trigger this optimisation,
     # and schedule it if so.
     #
-    my $fix_square = fix_square($c, $n, $tn);
-    if ($fix_square) {
-        my($k, $ty2) = @$fix_square;
-        # we require d = y^2 - n/k, with tau(y^2) = ty2
-        warn "311 Fixing square d = y^2 - n/$k, tau(y^2) = $ty2\n";
+    my $fix_power = fix_power($c, $n, $tn);
+    if ($fix_power) {
+        my($k, $x, $z) = @$fix_power;
+        # we require d = (xy^z - n)/k
+        warn "311 Fixing power d = (${x}y^$z - n)/$k\n";
         mod_dump($c, $opt_dm, 'pre-fix');
-        $c = $c->fix_square($k, $ty2, $opt_mq);
+        $c = $c->fix_power($k, $x, $z, $opt_mq);
         $opt_dm = $opt_dmq;
     } elsif (@$opt_mq) {
-        die "-mq options invalid without fixing square";
+        die "-mq options invalid without fixing power";
     }
 
     return $c;
@@ -221,15 +221,14 @@ sub series {
 }
 
 #
-# To fix d to be related to a square, we need to find x such that:
-# 1) f > x
-# 2) x.rad(x) | n
-# 3) gcd(x, d) = 1 by prior constraints
-# 4) tau(n) = (2y + 1)tau(x) for some y
-# Then we know n+xd = xy^2 for some y (and we know tau(y)).
-#
-# There are situations where we could fix a higher power, but we can't yet
-# take advantage of that.
+# To fix d to be related to a square or higher power, we need to find k
+# such that:
+# 1) f > k
+# 2) k.rad(k) | n
+# 3) gcd(k, d) = 1 by prior constraints
+# 4) tau(n) = w tau(k) for some odd w
+# Then we know n+kd = ky^z for some y, with z even; best (highest) z is
+# found by taking the gcd of { p_i - 1 } for all prime p_i dividing w.
 #
 # FIXME: there are other situations where this optimization could apply:
 # we can fix factors less directly related to f. Eg for n=198, k=12,
@@ -240,31 +239,38 @@ sub series {
 # gcd(n+fd, p^2) = p; we'll also need to adjust the runtime calculations
 # since we are not simply dividing by f.
 #
-# FIXME: the 'x.rad(x) | n' constraint can also be too strict: for n=84, f>6
+# FIXME: the 'k.rad(k) | n' constraint can also be too strict: for n=84, f>6
 # we can mod_override to split the cases d=1 or d=2 (mod 3); this is already
-# faster, but for d=2 we can fix_square(6).
+# faster, but for d=2 we could also fix_square(6).
 #
-sub fix_square {
+sub fix_power {
     my($c, $n, $tn) = @_;
     my $f = $c->f();
     my $debug = $c->debug;
-    for my $x (divisors($n)) {
-        last if $x >= $f;    # divisors are returned in ascending order
-        my $fx = [ factor_exp($x) ];
-        my $rx = rad_factor($fx);
-        $debug && warn("Would try fix_square($x), but 0(mod p|$rx) are not all disallowed.\n"),
-        next if grep !$c->disallowed($_, 0), map $_->[0], @$fx;
-        my $xrx = $x * $rx;
-        $debug && warn("Would try fix_square($x), but $xrx does not divide $n.\n"),
-        next if gcd($xrx, $n) < $xrx;
-        my $tx = tau_factor($fx);
-        my($tdiv, $trem) = $tn->bdiv($tx);
-        $debug && warn("Would try fix_square($x), but tau($x) does not divide $tn.\n"),
-        next if $trem;
-        $debug && warn("Would try fix_square($x), but $tn/tau($x) is even.\n"),
-        next if !($tdiv & 1);
-        $debug && warn("Will fix_square($x).\n"),
-        return [$x, $tdiv];
+    for my $k (divisors($n)) {
+        last if $k >= $f;    # divisors are returned in ascending order
+        my $fk = [ factor_exp($k) ];
+        my $rk = rad_factor($fk);
+        $debug && warn("Would try fix_power($k), but 0(mod p|$rk) are not all disallowed.\n"),
+        next if grep !$c->disallowed($_, 0), map $_->[0], @$fk;
+        my $krk = $k * $rk;
+        $debug && warn("Would try fix_power($k), but $krk does not divide $n.\n"),
+        next if gcd($krk, $n) < $krk;
+        my $tk = tau_factor($fk);
+        my($w, $rem) = $tn->bdiv($tk);
+        $debug && warn("Would try fix_power($k), but tau($k) does not divide $tn.\n"),
+        next if $rem;
+        $debug && warn("Would try fix_power($k), but $tn/tau($k) is even.\n"),
+        next if !($w & 1);
+
+        # we have at least a square to fix; now find the highest fixable power
+        # by taking the primes p_i in the factorization of $w, and taking
+        # GCD of { p_i - 1 }.
+        my $z = $w - 1;
+        $z = gcd($z, $_ - 1) for map $_->[0], factor_exp($w);
+
+        $debug && warn("Will fix_power($k, $k, $z).\n"),
+        return [$k, $k, $z];
     }
     return undef;
 }
