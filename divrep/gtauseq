@@ -178,17 +178,25 @@ $c->debug && warn "apply $m\n";
     }
 
     #
-    # If we know n+kd fixes all but a square for some k, that's a hugely
-    # powerful optimisation. Applicability depends on other constraints,
-    # so we check for this last.
+    # Now go through each k working out what factors are fixed; we can use
+    # the info to decide the most efficient tester for each k, and may also
+    # find opportunities for additional constraint optimizations.
     #
-    # TODO: Check if pending constraints would trigger this optimisation,
-    # and schedule it if so.
-    #
-    my $fix_power = fix_power($c, $n, $tn);
-    if ($fix_power) {
-        my($k, $x, $z) = @$fix_power;
-        # we require d = (xy^z - n)/k
+    $c->find_active;    # update mult, mod_mult
+    my $fixpow;
+    for my $k (1 .. $f - 1) {
+        my($force, $tester) = find_fixed($c, $n, $tn, $k);
+        next unless $force;
+        if ($fixpow) {
+            printf "317 Ignoring secondary fix_power(%s)\n", join ', ', @$force;
+        } else {
+            $fixpow = $force;
+        }
+        # TODO: generate and use $tester
+    }
+
+    if ($fixpow) {
+        my($k, $x, $z) = @$fixpow;
         warn "311 Fixing power d = (${x}y^$z - n)/$k\n";
         mod_dump($c, $opt_dm, 'pre-fix');
         $c = $c->fix_power($k, $x, $z, $opt_mq);
@@ -221,58 +229,62 @@ sub series {
 }
 
 #
-# To fix d to be related to a square or higher power, we need to find k
-# such that:
-# 1) f > k
-# 2) k.rad(k) | n
-# 3) gcd(k, d) = 1 by prior constraints
-# 4) tau(n) = w tau(k) for some odd w
-# Then we know n+kd = ky^z for some y, with z even; best (highest) z is
-# found by taking the gcd of { p_i - 1 } for all prime p_i dividing w.
+# Given known constraints, determine all prime powers known to divide
+# n+kd, and take advantage of that in two ways:
+# - if the known factors leave the unknown factors required to be a
+#   perfect square or higher power, we can apply the fix_power optimization
+# - (TODO) generate a targeted tester that divides by the known factors,
+#   and then uses either a fast is_prime or specific tau check
+# Returns (fix_power, tester) where I<fix_power> is an arrayref of
+# [ k, x, z ] suitable to pass as arguments to the fix_power method,
+# and I<tester> is a subref or undef.
 #
-# FIXME: there are other situations where this optimization could apply:
-# we can fix factors less directly related to f. Eg for n=198, k=12,
-# the constraints fix d==3245(mod 4320); that means at f=10 we have
-# n+fd = 2^3 . p^2. But it will be harder to find this in the general
-# case: we may be mod-fixed mod p, but need to inspect the specific
-# constraints mod p^2 (for example) to show that we can guarantee
-# gcd(n+fd, p^2) = p; we'll also need to adjust the runtime calculations
-# since we are not simply dividing by f.
-#
-# FIXME: the 'k.rad(k) | n' constraint can also be too strict: for n=84, f>6
-# we can mod_override to split the cases d=1 or d=2 (mod 3); this is already
-# faster, but for d=2 we could also fix_square(6).
-#
-sub fix_power {
-    my($c, $n, $tn) = @_;
-    my $f = $c->f();
-    my $debug = $c->debug;
-    for my $k (divisors($n)) {
-        last if $k >= $f;    # divisors are returned in ascending order
-        my $fk = [ factor_exp($k) ];
-        my $rk = rad_factor($fk);
-        $debug && warn("Would try fix_power($k), but 0(mod p|$rk) are not all disallowed.\n"),
-        next if grep !$c->disallowed($_, 0), map $_->[0], @$fk;
-        my $krk = $k * $rk;
-        $debug && warn("Would try fix_power($k), but $krk does not divide $n.\n"),
-        next if gcd($krk, $n) < $krk;
-        my $tk = tau_factor($fk);
-        my($w, $rem) = $tn->bdiv($tk);
-        $debug && warn("Would try fix_power($k), but tau($k) does not divide $tn.\n"),
-        next if $rem;
-        $debug && warn("Would try fix_power($k), but $tn/tau($k) is even.\n"),
-        next if !($w & 1);
+sub find_fixed {
+    my($c, $n, $tn, $k) = @_;
+    my $kmult = $c->mult * $k;
+    my $kmod = ($n + $c->mod_mult * $k) % $kmult;
+    my $float = gcd($kmult, $kmod);
+    return (undef, undef) if $float == 1;   # nothing to fix
 
-        # we have at least a square to fix; now find the highest fixable power
-        # by taking the primes p_i in the factorization of $w, and taking
-        # GCD of { p_i - 1 }.
-        my $z = $w - 1;
-        $z = gcd($z, $_ - 1) for map $_->[0], factor_exp($w);
+    my $spare = $kmult / $float;
+    my $fixp = gcd($spare, $float);
 
-        $debug && warn("Will fix_power($k, $k, $z).\n"),
-        return [$k, $k, $z];
+    # primes in $fixp will show up at a fixed power (at the level of $float)
+    # and so contribute a fixed multiple to tau(n+kd); primes in $float
+    # but not in $fixp will show up at the floating power or greater.
+    my($fixed_tau, $fixed_mult) = ($zone, $zone);
+    my $ffloat = [ grep {
+        (($fixp % $_->[0]) == 0) ? do {
+            # take the fixed power, splice out of the list of remaining
+            # floating powers
+            $fixed_tau *= $_->[1] + 1;
+            $fixed_mult *= $_->[0] ** $_->[1];
+            0;
+        } : do {
+            # floating power: keep it in the list
+            1;
+        }
+    } factor_exp($float) ];
+
+    my($tneed, $sanity_check) = $tn->bdiv($fixed_tau);
+    unless ($sanity_check == 0) {
+        print "502 Error: fixed $fixed_tau not available in tau $tn\n";
+        exit 1;
     }
-    return undef;
+    # now handle the rest of $float
+    if ($tneed & 1) {
+        # we can fix a square, and maybe more - highest fixable power is
+        # gcd of { p_i - 1 } over primes p_i dividing $tneed
+        my $z = $tneed - 1;
+        $z = gcd($z, $_->[0] - 1) for factor_exp($tneed);
+        return ([ $k, $fixed_mult, $z ], undef);
+    }
+    printf("601 TODO generate tester k=%s for tau=%s%s\n",
+        $k, $tneed, @$ffloat ? sprintf(" and floating [%s]",
+            join ', ', map $_->[1], @$ffloat
+        ) : "",
+    );
+    return (undef, undef);
 }
 
 #
