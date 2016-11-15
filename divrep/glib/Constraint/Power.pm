@@ -2,7 +2,7 @@ package Constraint::Power;
 use strict;
 our @ISA = qw/ Constraint /;
 
-use ModFunc qw/ quadvec mod_combine /;
+use ModFunc qw/ quadvec mod_combine gcd /;
 use warnings;
 no warnings qw/ recursion /;
 
@@ -33,11 +33,12 @@ sub new {
     $self->mod_override($_) for @$opt_mpow;
 
     # Copy over all the constraints
+    my %v;
     for my $mod (1 .. $self->check()) {
-        my $vec = $c->c($mod)->[2];
         for my $v (0 .. ($mod - 1) / 2) {
-            my $subv = $self->_ytod($v) % $mod;
-            if (vec($vec, $subv, 1)) {
+            my($subv, $submod) = $self->_mod_ytod($v, $mod);
+            my $vec = $submod ? ($v{$submod} //= $c->c($submod)->[2]) : undef;
+            if (!$submod || vec($vec, $subv, 1)) {
                 $self->power_suppress($mod, $v);
                 $self->power_suppress($mod, $mod - $v) if $v;
             }
@@ -80,6 +81,35 @@ sub _ytod {
             @$self{qw{ pow_k pow_x pow_z }}, $val
         if $rem != 0;
     return $div;
+}
+
+#
+# Given y == y_m (mod m) and d = (xy^z - n) / k, return (d_s, s) as the
+# value and modulus of the corresponding constraint on d, d == d_s (mod s).
+# If no valid d is possible, returns s == 0.
+#
+sub _mod_ytod {
+    my($self, $val, $mod) = @_;
+    my($n, $k, $x, $z) = @$self{qw{ n pow_k pow_x pow_z }};
+    my $base = $x * $val ** $z - $n;
+    my $g = gcd($k, $x);
+    my $gbase = $base / $g;
+    my $gk = $k / $g;
+    my $g2 = gcd($gk, $mod);
+    if ($gk == 1) {
+        return ($gbase % $mod, $mod);
+    } elsif ($g2 == 1) {
+        my $inv = $gk->bmodinv($mod);
+        return (($gbase * $inv) % $mod, $mod);
+    } elsif (($gbase % $g2) == 0) {
+        my $gmod = $mod / $g2;
+        my $g2base = $gbase / $g2;
+        my $g2k = $gk / $g2;
+        my $inv = $g2k->bmodinv($gmod);
+        return (($g2base * $inv) % $gmod, $gmod);
+    } else {
+        return (1, 0);
+    }
 }
 
 sub cur {
