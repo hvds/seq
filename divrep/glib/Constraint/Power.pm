@@ -30,6 +30,7 @@ sub new {
     $self->{'min'} = $self->_dtoceily($c->min());
     $self->{'max'} = $self->_dtoceily($c->max());
 
+    $_ = $self->convert_mod_override($_) for grep ref($_), @$opt_mpow;
     $self->mod_override($_) for @$opt_mpow;
 
     # Copy over all the constraints
@@ -139,6 +140,34 @@ sub next {
     $self->{'kept'} += 1;
     return undef if $cur > $self->{'max'};
     return $self->_ytod($cur);
+}
+
+sub convert_mod_override {
+    my($self, $array) = @_;
+    my($override, $which) = @$array;
+    ++$which;
+    my($mod, $op, $val) = ($override =~ m{ ^ (\d+) (=) (\d+) \z }x)
+            or die "Invalid power mod override '$override'";
+    my($found, $coval) = (0, undef);
+    VAL: for (0 .. $mod - 1) {
+        my($subval, $submod) = $self->_mod_ytod($_, $mod);
+        next VAL unless $submod;
+        if ($mod != $submod) {
+            my $cosubval = ($val % $submod);
+            next VAL unless $cosubval == $subval;
+            warn sprintf <<WARN, $subval, $submod, $cosubval, $mod;
+318 Ambiguous mod fix: y==%s (mod %s) yields d==%s (mod %s)
+WARN
+            $subval = $val; # treat as valid
+        }
+        next VAL unless $subval == $val;
+        $coval = $_;
+        last VAL if ++$found == $which;
+    }
+    die sprintf <<DIE, $found, $which, $val, $mod unless $found == $which;
+519 Found only %s of %s values matching %s (mod %s)
+DIE
+    return "$mod=$coval";
 }
 
 sub mod_override {

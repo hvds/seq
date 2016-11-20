@@ -11,6 +11,7 @@ sub MBI { return Math::GMP->new(@_) }
 
 my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_D, $opt_f, $opt_b)
         = (0, 0, 0, 100000, 0, 0, 0, 0, 0);
+my($opt_mm);
 my($opt_ts, $opt_m, $opt_mq, $opt_dm, $opt_dmq) = ([], [], [], [], []);
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
@@ -27,6 +28,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
     ($opt_ts = [ split /,/, $arg || shift(@ARGV) ]), next if $arg =~ s{^-ts}{};
     ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t}{};
+    ($opt_mm = $arg || shift(@ARGV)), next if $arg =~ s{^-mm}{};
     push(@$opt_mq, $arg || shift(@ARGV)), next if $arg =~ s{^-mq}{};
     push(@$opt_m, $arg || shift(@ARGV)), next if $arg =~ s{^-m}{};
     push(@$opt_dmq, $arg || shift(@ARGV)), next if $arg =~ s{^-dmq}{};
@@ -133,6 +135,22 @@ OUT
     }
 }
 
+sub unpack_mm {
+    my($mm) = @_;
+    # Expect "mod1=val1,mod2=val2,...modn=valn/b1b2...bn"
+    die "Could not parse '-mm$mm'\n" unless $mm =~ m{
+        ^ (?: \d+ = \d+ ,)* \d+ = \d+ / [01]+ $
+    }x;
+    my($modlist, $bits) = split '/', $mm;
+    my @modlist = split /,/, $modlist;
+    die "Wrong number of bits specified in '-mm$mm'\n"
+            unless @modlist == length $bits;
+    push @$opt_m, @modlist;
+    push @$opt_mq, map [
+        $modlist[$_], substr($bits, $_, 1),
+    ], 0 .. $#modlist;
+}
+
 sub apply {
     my $c = shift;
     my $tn = $c->tau;
@@ -144,6 +162,9 @@ sub apply {
             $c->suppress($p, 0);
         }
     }
+
+    # Unpack $opt_mm into @$opt_m and @$opt_mq
+    unpack_mm($opt_mm) if defined $opt_mm;
 
     # If options specify overriding modular constraints, apply those next.
     mod_override($c, $_) for @$opt_m;
@@ -202,7 +223,7 @@ $c->debug && warn "apply $m\n";
         $c = $c->fix_power($k, $x, $z, $opt_mq);
         $opt_dm = $opt_dmq;
     } elsif (@$opt_mq) {
-        die "-mq options invalid without fixing power";
+        die "-mq or -mm options invalid without fixing power";
     }
 
     return $c;
