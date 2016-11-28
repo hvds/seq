@@ -50,6 +50,7 @@ program consumes 48GB RAM and reaches generation 61 with queue size 10.25M.
 7/11 is solved in 25 steps by [ 371 11 22 143725 4 2 3 24 207 62 4 1 78 1 1 1 111 1 8 1 2 3 7 4 1 ]
 8/11 is solved in 3 steps by [ 44 5 1 ]
 9 / 11 - g > 74: 406160063 (915.17s)
+# g > 100: completed 22/80 at level 20 (255382.09s)
 10/11 is solved in 2 steps by [ 11 1 ]
 
 1/12 is solved in 2 steps by [ 4 3 ]; [ 6 4 ]; [ 12 6 ]; [ 24 8 ]; [ 36 9 ]; [ 60 10 ]; [ 132 11 ]
@@ -156,6 +157,7 @@ program consumes 48GB RAM and reaches generation 61 with queue size 10.25M.
 11/21 is solved in 3 steps by [ 399 4 1 ]
 13/21 is solved in 20 steps by [ 147 21 1 3 9 14 1044 2 2968 4 1 3 1 11 6 6 1 9 4 1 ]
 16 / 21 - g > 52: 421948973 (475.43s)
+# g > 70: finished 1415/2128 at 331468.85s
 17 / 21 - g > 66: 342851690 (537.62s)
 19 / 21 - g > 129: 210775602 (897.94s)
 20/21 is solved in 2 steps by [ 21 1 ]
@@ -278,7 +280,8 @@ program consumes 48GB RAM and reaches generation 61 with queue size 10.25M.
 6/29 is solved in 3 steps by [ 696 28 4 ]
 7/29 is solved in 2 steps by [ 116 4 ]
 8/29 is solved in 3 steps by [ 2204 5 1 ]; [ 522 21 3 ]
-9 / 29 - g > 14: 321413061 (130.18s)
+9/29 is solved in 15 steps by [ 464 444 29 20419 4 8 1267 29 9 7 110 10 5 45 3 ]
+; [ 58 58 87 65 163787 54 1 10 9 10 16205 1 4 46 3 ]
 10/29 is solved in 9 steps by [ 2199 841 4 1033 1 8 2 6 2 ]
 11/29 is solved in 12 steps by [ 145 116 15710 2 34 22 2151 1 1691 1 4 2 ]
 12/29 is solved in 3 steps by [ 348 14 2 ]
@@ -308,3 +311,240 @@ program consumes 48GB RAM and reaches generation 61 with queue size 10.25M.
 23/30 - g > 62: 5906416975, best_bits 20/22 (9092.12s)
 29/30 is solved in 2 steps by [ 30 1 ]
 
+1/31 is solved in 2 steps by [ 930 30 ]
+2/31 is solved in 2 steps by [ 465 15 ]
+3/31 is solved in 2 steps by [ 310 10 ]
+4/31 is solved in 3 steps by [ 3596 16 4 ]; [ 713 80 7 ]
+5/31 is solved in 2 steps by [ 186 6 ]
+6/31 is solved in 2 steps by [ 155 5 ]
+7/31 is solved in 9 steps by [ 7 27869 23 5 244 84 18 7 2 ]
+8/31 is solved in 3 steps by [ 1798 8 2 ]
+9/31 is solved in 4 steps by [ 6510 7 25 3 ]
+10/31 is solved in 2 steps by [ 93 3 ]
+11/31 - g > 19: 27984742154, best_bits 9/9 (23175.81s)
+12/31 is solved in 4 steps by [ 124 31 4 1 ]
+13/31 - g > 18: 289498088 (164.29s) size 2612491312, best_bits 15/16
+14/31 - g > 20: 553997772 (286.72s) size 5897139400, best_bits 14/16
+15/31 is solved in 2 steps by [ 62 2 ]
+16/31 is solved in 3 steps by [ 899 4 1 ]
+17/31 - g > 20: 4644281, best_bits 22/26 (4.96s)
+18/31 - g > 20: 1000672, best_bits 29/33 (1.05s)
+19/31 - g > 20: 307838, best_bits 31/32 (0.46s)
+20/31 - g > 30: 35150454, best_bits 49/55 (27.22s)
+21/31 - g > 30: 3984231, best_bits 57/63 (3.32s)
+22/31 - g > 30: 792208, best_bits 51/56 (0.84s)
+23/31 - g > 40: 15076971, best_bits 73/74 (17.53s)
+24/31 - g > 40: 1265716, best_bits 84/88 (2.05s)
+25/31 - g > 50: 1904485, best_bits 110/111 (2.92s)
+26/31 - g > 60: 3004827, best_bits 132/133 (5.85s)
+27/31 - g > 80: 400007, best_bits 212/213 (1.34s)
+28/31 - g > 80: 181499, best_bits 200/202 (0.97s)
+29/31 - g > 130: 527210, best_bits 348/353 (2.95s)
+30/31 is solved in 2 steps by [ 31 1 ]
+
+1/32 is solved in 2 steps by [ 32 16 ]; [ 96 24 ]; [ 224 28 ]; [ 480 30 ]; [ 992 31 ]
+3/32 is solved in 2 steps by [ 32 8 ]; [ 160 10 ]
+5/32 is solved in 2 steps by [ 96 6 ]
+7/32 is solved in 2 steps by [ 32 4 ]
+9/32 is solved in 3 steps by [ 96 8 2 ]
+11/32 is solved in 8 steps by [ 32 24 992 2 14 6 8 2 ]
+13/32 is solved in 8 steps by [ 20768 16 1 13 16 5 12 2 ]
+15/32 is solved in 2 steps by [ 32 2 ]
+17/32 is solved in 3 steps by [ 224 4 1 ]
+19/32 - g > 25: 19691419, best_bits 9/12 (22.81s)
+21/32 - g > 30: 15182715, best_bits 26/26 (12.55s)
+23/32 - g > 40: 41632736, best_bits 39/41 (39.95s)
+25/32 - g > 50: 10095450, best_bits 71/70 (16.29s)
+27/32 - g > 60: 1525384, best_bits 109/110 (4.67s)
+29/32 - g > 100: 144945, best_bits 217/217 (0.78s)
+31/32 is solved in 2 steps by [ 32 1 ]
+
+1/33 is solved in 2 steps by [ 66 22 ]; [ 88 24 ]; [ 330 30 ]; [ 1056 32 ]
+2/33 is solved in 2 steps by [ 33 11 ]; [ 44 12 ]; [ 165 15 ]; [ 528 16 ]
+4/33 is solved in 2 steps by [ 22 6 ]; [ 264 8 ]
+5/33 is solved in 2 steps by [ 66 6 ]
+7/33 is solved in 4 steps by [ 66 11 11 3 ]; [ 462 23 12 3 ]; [ 4455 1 9 4 ]
+8/33 is solved in 2 steps by [ 11 3 ]; [ 132 4 ]
+10/33 is solved in 2 steps by [ 33 3 ]
+13/33 is solved in 10 steps by [ 7788 1 2448 4 140 9 9 6 11 2 ]
+14/33 is solved in 10 steps by [ 110 345 41 105 21 6 9 1 12 2 ]
+16/33 is solved in 2 steps by [ 66 2 ]
+17/33 is solved in 3 steps by [ 1023 4 1 ]
+19/33 - g > 20: 1118035, best_bits 18/18 (1.26s)
+20/33 - g > 20: 417769, best_bits 10/11 (0.65s)
+23/33 - g > 30: 2128507, best_bits 23/36 (2.19s)
+25/33 - g > 40: 1702503, best_bits 65/66 (1.95s)
+26/33 - g > 40: 284630, best_bits 70/74 (0.67s)
+28/33 - g > 70: 396842, best_bits 164/165 (0.81s)
+29/33 - g > 90: 1054580, best_bits 194/193 (2.83s)
+31/33 - g > 120: 184170, best_bits 245/252 (1.02s)
+32/33 is solved in 2 steps by [ 33 1 ]
+
+1/34 is solved in 2 steps by [ 34 17 ]; [ 255 30 ]; [ 544 32 ]; [ 1122 33 ]
+3/34 is solved in 2 steps by [ 85 10 ]; [ 374 11 ]
+5/34 is solved in 2 steps by [ 51 6 ]
+7/34 is solved in 5 steps by [ 408 8158 1 4 4 ]
+9/34 is solved in 3 steps by [ 510 8 2 ]
+11/34 is solved in 2 steps by [ 102 3 ]
+13/34 is solved in 7 steps by [ 442 40 27 24 59 11 2 ]
+15/34 is solved in 2 steps by [ 17 2 ]
+19/34 - g > 20: 3343790, best_bits 17/16 (3.53s)
+21/34 - g > 20: 312865, best_bits 15/20 (0.39s)
+23/34 - g > 30: 4534500, best_bits 37/39 (4.06s)
+25/34 - g > 40: 16922919, best_bits 60/62 (18.89s)
+27/34 - g > 40: 355143, best_bits 64/65 (0.58s)
+29/34 - g > 50: 140607, best_bits 92/96 (0.38s)
+31/34 - g > 100: 226443, best_bits 227/229 (1.12s)
+33/34 is solved in 2 steps by [ 34 1 ]
+
+1/35 is solved in 2 steps by [ 14 10 ]; [ 140 28 ]; [ 210 30 ]; [ 1190 34 ]
+2/35 is solved in 2 steps by [ 7 5 ]; [ 70 14 ]; [ 105 15 ]; [ 595 17 ]
+3/35 is solved in 2 steps by [ 70 10 ]
+4/35 is solved in 2 steps by [ 35 7 ]
+6/35 is solved in 2 steps by [ 35 5 ]
+8/35 is solved in 3 steps by [ 5 49 4 ]; [ 14 50 4 ]; [ 455 51 4 ]
+9/35 is solved in 3 steps by [ 2310 8 2 ]; [ 1085 17 3 ]
+11/35 is solved in 5 steps by [ 175 515 6 54 3 ]
+12/35 is solved in 8 steps by [ 630 135 107 199 21 19 4 1 ]; [ 350 2520 3 25 6 29 9 2 ]
+13/35 is solved in 12 steps by [ 840 7035 7 9 49 33 57 7 1 22 4 1 ]
+16/35 is solved in 3 steps by [ 7 25 2 ]
+17/35 is solved in 2 steps by [ 70 2 ]
+18/35 is solved in 3 steps by [ 1155 4 1 ]
+19/35 - g > 20: 5862394, best_bits 9/10 (6.18s)
+22/35 - g > 20: 138966, best_bits 21/28 (0.21s)
+23/35 - g > 30: 15218984, best_bits 29/33 (13.27s)
+24/35 - g > 30: 2889625, best_bits 38/37 (2.45s)
+26/35 - g > 30: 193934, best_bits 40/42 (0.27s)
+27/35 - g > 40: 1976932, best_bits 52/55 (2.47s)
+29/35 is solved in 3 steps by [ 35 7 1 ]
+31/35 - g > 80: 543720, best_bits 175/179 (2.62s)
+32/35 - g > 80: 62510, best_bits 188/189 (0.37s)
+33/35 - g > 140: 209044, best_bits 348/350 (1.32s)
+34/35 is solved in 2 steps by [ 35 1 ]
+
+1/36 is solved in 2 steps by [ 12 9 ]; [ 18 12 ]; [ 36 18 ]; [ 45 20 ]; [ 72 24 ]; [ 108 27 ]; [ 126 28 ]; [ 180 30 ]; [ 288 32 ]; [ 396 33 ]; [ 612 34 ]; [ 1260 35 ]
+5/36 is solved in 2 steps by [ 9 4 ]; [ 36 6 ]; [ 252 7 ]
+7/36 is solved in 2 steps by [ 18 4 ]; [ 180 5 ]
+11/36 is solved in 2 steps by [ 36 3 ]
+13/36 is solved in 5 steps by [ 720 4 6 9 2 ]
+17/36 is solved in 2 steps by [ 36 2 ]
+19/36 is solved in 3 steps by [ 288 4 1 ]
+
+1/37 is solved in 2 steps by [ 1332 36 ]
+2/37 is solved in 2 steps by [ 666 18 ]
+3/37 is solved in 2 steps by [ 444 12 ]
+4/37 is solved in 2 steps by [ 333 9 ]
+5/37 is solved in 5 steps by [ 814 14055 48 9 2 ]; [ 158249 9 383 10 2 ]; [ 2183 308 517 16 4 ]; [ 70633 52 66 22 5 ]; [ 3552 1032 67 22 5 ]; [ 814 365 479 39 6 ]; [ 11766 312 11 132 7 ]; [ 84323 8 54 136 7 ];
+6/37 is solved in 2 steps by [ 222 6 ]
+7/37 is solved in 5 steps by [ 2146 160 1 74 5 ]
+8/37 is solved in 5 steps by [ 2 2738 1 13 4 ]; [ 13172 20 94 34 4 ]; [ 851 308 95 34 4 ]
+9/37 is solved in 2 steps by [ 148 4 ]
+10/37 is solved in 6 steps by [ 37 37 8168 13 7 2 ]
+11/37 is solved in 8 steps by [ 9953 14 19 37 10 37 8 2 ]
+12/37 is solved in 2 steps by [ 111 3 ]
+13/37 - g > 15: 146615412, best_bits 12/11 (107.97s)
+14/37 - g > 15: 47237638, best_bits 11/10 (41.17s)
+15/37 - g > 15: 17317262, best_bits 13/16 (14.39s)
+16/37 is solved in 5 steps by [ 6586 10 47 17 2 ]
+17/37 - g > 15: 2060243, best_bits 19/18 (2.12s)
+18/37 is solved in 2 steps by [ 74 2 ]
+19/37 is solved in 3 steps by [ 1295 4 1 ]
+20/37 - g > 20: 6863700, best_bits 26/28 (5.18s)
+21/37 - g > 20: 1951855, best_bits 30/39 (1.45s)
+22/37 - g > 20: 627716, best_bits 37/39 (0.51s)
+23/37 - g > 25: 6352728, best_bits 48/48 (4.82s)
+24/37 - g > 25: 1727592, best_bits 42/44 (1.75s)
+25/37 - g > 30: 4616898, best_bits 61/63 (3.67s)
+26/37 - g > 30: 1261692, best_bits 67/71 (1.97s)
+27/37 - g > 35: 3710630, best_bits 76/78 (3.55s)
+28/37 - g > 35: 588403, best_bits 84/87 (1.13s)
+29/37 - g > 40: 364183, best_bits 93/93 (0.82s)
+30/37 - g > 45: 238418, best_bits 112/114 (0.62s)
+31/37 - g > 55: 1217264, best_bits 138/139 (3.25s)
+32/37 - g > 70: 2339019, best_bits 184/187 (7.27s)
+33/37 - g > 100: 1291645, best_bits 295/299 (3.99s)
+34/37 - g > 110: 458580, best_bits 324/325 (2.66s)
+35/37 - g > 130: 89937, best_bits 392/395 (1.06s)
+36/37 is solved in 2 steps by [ 37 1 ]
+
+1/38 is solved in 2 steps by [ 38 19 ]; [ 323 34 ]; [ 684 36 ]; [ 1406 37 ]
+3/38 is solved in 2 steps by [ 228 12 ]
+5/38 is solved in 3 steps by [ 1292 16 4 ]; [ 570 36 6 ]; [ 38 95 7 ]; [ 209 96 7 ]
+7/38 is solved in 4 steps by [ 304 18 19 4 ]; [ 38 38 68 5 ]
+9/38 is solved in 2 steps by [ 76 4 ]
+11/38 is solved in 7 steps by [ 1178 33 2793 1 35 26 3 ]
+13/38 is solved in 6 steps by [ 2052 6 1151 2 5 2 ]
+15/38 is solved in 3 steps by [ 190 12 2 ]
+17/38 is solved in 2 steps by [ 19 2 ]
+21/38 is solved in 5 steps by [ 342 55 73 4 1 ]
+23/38 - g > 25: 12293899, best_bits 22/23 (11.90s)
+25/38 - g > 25: 897264, best_bits 27/39 (1.55s)
+27/38 - g > 30: 922665, best_bits 35/40 (1.55s)
+29/38 - g > 35: 523854, best_bits 56/57 (0.93s)
+31/38 - g > 50: 2851419, best_bits 95/96 (5.01s)
+33/38 - g > 60: 185524, best_bits 122/129 (0.58s)
+35/38 - g > 100: 253716, best_bits 231/238 (1.97s)
+37/38 is solved in 2 steps by [ 38 1 ]
+
+1/39 is solved in 2 steps by [ 78 26 ]; [ 130 30 ]; [ 468 36 ]; [ 1482 38 ]
+2/39 is solved in 2 steps by [ 39 13 ]; [ 65 15 ]; [ 234 18 ]; [ 741 19 ]
+4/39 is solved in 2 steps by [ 117 9 ]
+5/39 is solved in 2 steps by [ 26 6 ]
+7/39 is solved in 3 steps by [ 429 12 3 ]; [ 91 54 5 ]
+8/39 is solved in 3 steps by [ 143 27 4 ]
+10/39 is solved in 2 steps by [ 13 3 ]
+11/39 is solved in 3 steps by [ 273 23 3 ]
+14/39 is solved in 10 steps by [ 130 102 165 78 15 26 24 2 1 1 ]
+16/39 is solved in 18 steps by [ 3 845 90 585 99 1 2133 6 52 1 57 5 51 7 1 7 13 2 ]
+17/39 is solved in 10 steps by [ 53976 52 3 6 15 6 69 1 13 2 ]
+19/39 is solved in 2 steps by [ 78 2 ]
+20/39 is solved in 3 steps by [ 1443 4 1 ]
+22/39 - g > 20: 2531224, best_bits 19/22 (3.55s)
+23/39 - g > 20: 723509, best_bits 18/21 (0.79s)
+25/39 - g > 25: 2334559, best_bits 30/31 (2.01s)
+27/39 is solved in 7 steps by [ 468 3 4 469 3 4 1 ]
+28/39 - g > 30: 512657, best_bits 46/48 (0.49s)
+29/39 - g > 35: 976231, best_bits 56/58 (1.04s)
+31/39 - g > 40: 183221, best_bits 72/77 (0.25s)
+32/39 - g > 50: 426308, best_bits 105/107 (0.70s)
+34/39 - g > 70: 375490, best_bits 158/160 (0.91s)
+35/39 - g > 90: 559124, best_bits 222/225 (1.80s)
+37/39 - g > 160: 189338, best_bits 414/415 (1.40s)
+38/39 is solved in 2 steps by [ 39 1 ]
+
+1/40 is solved in 2 steps by [ 10 8 ]
+1/40 is solved in 2 steps by [ 24 15 ]
+1/40 is solved in 2 steps by [ 40 20 ]
+1/40 is solved in 2 steps by [ 60 24 ]
+1/40 is solved in 2 steps by [ 120 30 ]
+1/40 is solved in 2 steps by [ 160 32 ]
+1/40 is solved in 2 steps by [ 280 35 ]
+1/40 is solved in 2 steps by [ 360 36 ]
+1/40 is solved in 2 steps by [ 760 38 ]
+1/40 is solved in 2 steps by [ 1560 39 ]
+3/40 is solved in 2 steps by [ 8 5 ]
+3/40 is solved in 2 steps by [ 20 8 ]
+3/40 is solved in 2 steps by [ 40 10 ]
+3/40 is solved in 2 steps by [ 120 12 ]
+3/40 is solved in 2 steps by [ 520 13 ]
+7/40 is solved in 2 steps by [ 40 5 ]
+9/40 is solved in 2 steps by [ 40 4 ]
+11/40 is solved in 3 steps by [ 840 5 1 ]
+11/40 is solved in 3 steps by [ 160 8 2 ]
+13/40 is solved in 2 steps by [ 120 3 ]
+17/40 is solved in 4 steps by [ 40 60 4 1 ]
+17/40 is solved in 4 steps by [ 80 8 15 2 ]
+19/40 is solved in 2 steps by [ 40 2 ]
+21/40 is solved in 3 steps by [ 360 4 1 ]
+23/40 - g > 20: 1131784, best_bits 11/12 (1.74s)
+27/40 - g > 30: 5951646, best_bits 7/9 (5.50s)
+29/40 is solved in 3 steps by [ 120 5 1 ]
+31/40 - g > 40: 1211491, best_bits 51/56 (1.83s)
+33/40 - g > 50: 120707, best_bits 97/98 (0.36s)
+37/40 - g > 110: 220067, best_bits 239/241 (1.10s)
+39/40 is solved in 2 steps by [ 40 1 ]
+
+9/11:
+  1 1 2 2 3 3 2 2 4 3 6 10 14 18 24 29 37 47 61 80
+16/21:
+  1 1 3 4 6 9 15 22 30 46 69 104 146 224 334 495 716 1031 1478 2128
