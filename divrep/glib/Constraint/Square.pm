@@ -91,8 +91,8 @@ sub next {
 
 sub mod_override {
     my($self, $override) = @_;
-    my($mod, $op, $val) = m{ ^ (\d+) ([=!]) (\d+) \z }x
-            or die "Invalid square mod override '$_'";
+    my($mod, $op, $val) = ($override =~ m{ ^ (\d+) ([=!]) (\d+) \z }x)
+            or die "Invalid square mod override '$override'";
     if ($op eq '=') {
         $self->square_require($mod, $val);
     } else {
