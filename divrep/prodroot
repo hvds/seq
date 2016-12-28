@@ -23,7 +23,7 @@ while (defined(my $line = <$fh>)) {
 		print $line;
 	} elsif ($state == 1) {
 		$line =~ /^\d+:/ or last;
-		$line =~ s{^(\d+:)(\d+)}{$1 . (Math::GMP->new($2) * $mul)}e;
+		$line =~ s{^(\d+:)((?:<=)?)(\d+)}{$1 . $2 . (Math::GMP->new($3) * $mul)}e;
 		print $line;
 	}
 }
