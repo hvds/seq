@@ -209,6 +209,7 @@ $c->debug && warn "apply $m\n";
         my($force, $tester) = find_fixed($c, $n, $tn, $k);
         next unless $force;
         if ($fixpow) {
+            # FIXME: can we construct and solve a Pell equation here?
             printf "317 Ignoring secondary fix_power(%s)\n", join ', ', @$force;
         } else {
             $fixpow = $force;
@@ -260,12 +261,18 @@ sub series {
 # [ k, x, z ] suitable to pass as arguments to the fix_power method,
 # and I<tester> is a subref or undef.
 #
+# FIXME: n=p^2q, k=p, d != 0 (mod p) fails to find fixed p^1; this stops
+# us finding fixpow(5, 5, 2) for n=575, f=6, -m5!0.
+#   my $gkn = gcd($k, $n);
+#   my $knfix = gcd($gkn, $n / $gkn); # now what?
+# I _think_ this is relevant only when p^k is fixed in n+kd for some k >= 1,
+# while p^{k+1} is disallowed and divides n.
+#
 sub find_fixed {
     my($c, $n, $tn, $k) = @_;
     my $kmult = $c->mult * $k;
     my $kmod = ($n + $c->mod_mult * $k) % $kmult;
     my $float = gcd($kmult, $kmod);
-    return (undef, undef) if $float == 1;   # nothing to fix
 
     my $spare = $kmult / $float;
     my $fixp = gcd($spare, $float);
