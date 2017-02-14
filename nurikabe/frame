@@ -1,0 +1,78 @@
+#!/opt/maths/bin/perl -w
+use strict;
+
+#
+# Step 1: count the number of ways to select some entries of an a x b matrix
+# such that a) they are orthogonally connected and b) they touch each of the
+# four edges.
+#
+my($a, $b) = @ARGV;
+my $ab = $a * $b;
+
+my($none, $all) = ('', '');
+vec($all, $_, 1) = 1 for 0 .. $ab - 1;
+
+my @edge = map {
+    my $v = '';
+    vec($v, $_, 1) = 1 for @$_;
+    $v
+} [ 0 .. $a - 1 ], [ $ab - $a .. $ab - 1 ],
+        [ map $_ * $a, 0 .. $b - 1 ], [ map $_ * $a - 1, 1 .. $b ];
+
+my @neighbour;
+for my $i (0 .. $a - 1) {
+    for my $j (0 .. $b - 1) {
+        my $ij = $j * $a + $i;
+        my $v = '';
+        vec($v, $ij - 1, 1) = 1 if $i > 0;
+        vec($v, $ij + 1, 1) = 1 if $i < $a - 1;
+        vec($v, $ij - $a, 1) = 1 if $j > 0;
+        vec($v, $ij + $a, 1) = 1 if $j < $b - 1;
+        $neighbour[$ij] = $v;
+    }
+}
+#dump_neighbours();
+
+my($count, $set, $unset, $surface) = (0, '', '');
+for (0 .. $a - 1) {
+    $count += count($_, $set, $unset, $surface);
+    vec($unset, $_, 1) = 1;
+}
+printf "f(%s, %s) = %s (%.2f)\n", $a, $b, $count, scalar times();
+exit 0;
+
+sub dump_neighbours {
+    my @x = map unpack("b$ab", $_), @neighbour;
+    use Data::Dumper;
+    print Dumper(\@x);
+}
+
+sub count {
+    my($try, $set, $unset, $surface) = @_;
+    my $count = 0;
+    vec($set, $try, 1) = 1;
+    $surface |= $neighbour[$try];
+
+    for my $next (0 .. $ab - 1) {
+        next unless vec($surface, $next, 1);
+        next if vec($set, $next, 1);
+        next if vec($unset, $next, 1);
+        $count += count($next, $set, $unset, $surface);
+        vec($unset, $next, 1) = 1;
+    }
+    ++$count if all_edges($set);
+    return $count;
+}
+
+sub all_edges {
+    my($v) = @_;
+    for (@edge) {
+        my $w = $_ & $v;
+        return 0 if $w !~ /[^\x{0}]/;
+    }
+#printf "<%s>\n", unpack "b$ab", $v;
+    return 1;
+}
+
+__END__
+
