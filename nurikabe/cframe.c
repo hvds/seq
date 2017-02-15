@@ -28,8 +28,9 @@ typedef struct state_s {
 state_t state[MAX_AB];
 
 #define v1 ((vec_t)1)
-#define voff(x, y) ((y) * MAX_A + (x))
-#define vbit(x, y) (v1 << voff(x, y))
+#define voff(x, y) ((y) * a + (x))
+#define vbitx(x) (v1 << (x))
+#define vbit(x, y) vbitx(voff(x, y))
 
 inline vec_t *neighbour(int i, int j) {
     return &nb[voff(i, j)];
@@ -126,13 +127,13 @@ inline int bit_count(vec_t v) {
     return i;
 }
 
-void recurse(int index, int i, int j) {
-    int x, y;
+void recurse(int index, int i) {
+    int x;
     state_t *s = &state[index];
 
     *s = state[index - 1];
-    s->set |= vbit(i, j);
-    s->surface |= *neighbour(i, j);
+    s->set |= vbitx(i);
+    s->surface |= nb[i];
     s->mask = s->surface & ~(s->set | s->unset);
 
     /* Choice of starting position guarantees we touch edge[0] */
@@ -151,15 +152,13 @@ void recurse(int index, int i, int j) {
         record_solution(1, index);
     }
 
-    for (x = 0; x < a; ++x) {
-        for (y = 0; y < b; ++y) {
-            if (s->mask & vbit(x, y)) {
-                recurse(index + 1, x, y);
-                s->unset |= vbit(x, y);
-                s->mask &= ~vbit(x, y);
-                if (!s->mask)
-                    return;
-            }
+    for (x = 0; x < a * b; ++x) {
+        if (s->mask & vbitx(x)) {
+            recurse(index + 1, x);
+            s->unset |= vbitx(x);
+            s->mask &= ~vbitx(x);
+            if (!s->mask)
+                return;
         }
     }
 }
@@ -178,7 +177,7 @@ int main(int argc, char** argv) {
     init(a, b);
 
     for (i = 0; i < a; ++i) {
-        recurse(1, i, 0);
+        recurse(1, voff(i, 0));
         s->unset |= vbit(i, 0);
     }
     clear_line();
