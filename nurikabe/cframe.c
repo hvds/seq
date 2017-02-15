@@ -7,17 +7,25 @@ int clk_tck;
 int gtime;
 
 int a, b;
-unsigned long long count;
+typedef unsigned long long count_t;
+count_t count;
 
 #define MAX_A 8
 #define MAX_B 8
+#define MAX_AB (MAX_A * MAX_B)
 typedef unsigned long long vec_t;
 
 vec_t edge[4];
-vec_t nb[MAX_A * MAX_B];
+vec_t nb[MAX_AB];
 vec_t fullvec;
 
-vec_t set, unset, surface;
+typedef struct state_s {
+    vec_t set;
+    vec_t unset;
+    vec_t surface;
+    vec_t mask;
+} state_t;
+state_t state[MAX_AB];
 
 #define v1 ((vec_t)1)
 #define voff(x, y) ((y) * MAX_A + (x))
@@ -51,7 +59,7 @@ void keep_line(void) {
     line_count = 0;
     printf("\n");
 }
-void report(void) {
+void report(int index) {
     int output = 0, i, j;
     clear_line();
     output += printf("  (%.2fs) %llu -", difftime(gtime, curtime()), count);
@@ -59,8 +67,8 @@ void report(void) {
         output += printf(" ");
         for (j = 0; j < b; ++j) {
             output += printf("%c",
-                (set & vbit(i, j)) ? '1'
-                : (unset * vbit(i, j)) ? '0' : '.');
+                (state[index].set & vbit(i, j)) ? '1'
+                : (state[index].unset * vbit(i, j)) ? '0' : '.');
         }
     }
     fflush(stdout);
@@ -97,71 +105,68 @@ void init(int a, int b) {
     }
 }
 
-void record_solution(unsigned long long found) {
+void record_solution(count_t found, int index) {
     count += found;
 
 #ifdef DEBUG
-    report();
+    report(index);
     keep_line();
 #else
     if ((count & 0x3ffffff) < found)
-        report();
+        report(index);
 #endif
 }
 
-void recurse(int i, int j) {
-    vec_t old_surface, old_unset, mask;
+inline int bit_count(vec_t v) {
+    int i = 0;
+    while (v) {
+        v &= v - 1;
+        ++i;
+    }
+    return i;
+}
+
+void recurse(int index, int i, int j) {
     int x, y;
+    state_t *s = &state[index];
 
-    old_unset = unset;
-    old_surface = surface;
-
-    set |= vbit(i, j);
-    surface |= *neighbour(i, j);
-    mask = surface & ~(set | unset);
+    *s = state[index - 1];
+    s->set |= vbit(i, j);
+    s->surface |= *neighbour(i, j);
+    s->mask = s->surface & ~(s->set | s->unset);
 
     /* Choice of starting position guarantees we touch edge[0] */
-    if ((set & edge[1]) && (set & edge[2]) && (set & edge[3])) {
+    if ((s->set & edge[1]) && (s->set & edge[2]) && (s->set & edge[3])) {
         /* all edges seen, it's a solution */
 
-        if ((surface | set | unset) == fullvec) {
+        if ((s->surface | s->set | s->unset) == fullvec) {
             /* all remaining permutations will be solutions: count the
              * bits in the mask representing the remaining surface, and
              * report 2 to that power.
              */
-            vec_t var = mask;
-            int bits = 0;
-            while (var) {
-                var &= var - 1;
-                ++bits;
-            }
-            record_solution(1 << bits);
-            goto done;
+            record_solution(1 << bit_count(s->mask), index);
+            return;
         }
 
-        record_solution(1);
+        record_solution(1, index);
     }
 
     for (x = 0; x < a; ++x) {
         for (y = 0; y < b; ++y) {
-            if (mask & vbit(x, y)) {
-                recurse(x, y);
-                unset |= vbit(x, y);
-                mask &= ~vbit(x, y);
-                if (!mask)
-                    goto done;
+            if (s->mask & vbit(x, y)) {
+                recurse(index + 1, x, y);
+                s->unset |= vbit(x, y);
+                s->mask &= ~vbit(x, y);
+                if (!s->mask)
+                    return;
             }
         }
     }
-
-  done:
-    surface = old_surface;
-    unset = old_unset;
-    set &= ~vbit(i, j);
 }
 
 int main(int argc, char** argv) {
     int i;
+    state_t *s = &state[0];
 
     if (argc != 3) {
         fprintf(stderr, "usage: %s <a> <b>\n", argv[0]);
@@ -173,11 +178,12 @@ int main(int argc, char** argv) {
     init(a, b);
 
     for (i = 0; i < a; ++i) {
-        recurse(i, 0);
-        unset |= vbit(i, 0);
+        recurse(1, i, 0);
+        s->unset |= vbit(i, 0);
     }
     clear_line();
-    printf("(%.2fs) f(%d, %d) = %lld\n", difftime(gtime, curtime()), a, b, count);
+    printf("(%.2fs) f(%d, %d) = %llu\n",
+            difftime(gtime, curtime()), a, b, count);
     return 0;
 }
 
