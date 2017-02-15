@@ -7,6 +7,7 @@ int clk_tck;
 int gtime;
 
 int a, b;
+
 typedef unsigned long long count_t;
 count_t count;
 
@@ -24,6 +25,7 @@ typedef struct state_s {
     vec_t unset;
     vec_t surface;
     vec_t mask;
+    int off;
 } state_t;
 state_t state[MAX_AB];
 
@@ -60,23 +62,24 @@ void keep_line(void) {
     line_count = 0;
     printf("\n");
 }
-void report(int index) {
+void report(state_t *s) {
     int output = 0, i, j;
+
     clear_line();
     output += printf("  (%.2fs) %llu -", difftime(gtime, curtime()), count);
     for (i = 0; i < a; ++i) {
         output += printf(" ");
         for (j = 0; j < b; ++j) {
             output += printf("%c",
-                (state[index].set & vbit(i, j)) ? '1'
-                : (state[index].unset * vbit(i, j)) ? '0' : '.');
+                (s->set & vbit(i, j)) ? '1'
+                : (s->unset * vbit(i, j)) ? '0' : '.');
         }
     }
     fflush(stdout);
     unclear_line(output);
 }
 
-void init(int a, int b) {
+void init(void) {
     int i, j;
 
     clk_tck = sysconf(_SC_CLK_TCK);
@@ -106,15 +109,15 @@ void init(int a, int b) {
     }
 }
 
-void record_solution(count_t found, int index) {
+void record_solution(count_t found, state_t *s) {
     count += found;
 
 #ifdef DEBUG
-    report(index);
+    report(s);
     keep_line();
 #else
     if ((count & 0x3ffffff) < found)
-        report(index);
+        report(s);
 #endif
 }
 
@@ -127,39 +130,69 @@ inline int bit_count(vec_t v) {
     return i;
 }
 
-void recurse(int index, int i) {
-    int x;
-    state_t *s = &state[index];
+void calc(void) {
+    int si;
 
-    *s = state[index - 1];
-    s->set |= vbitx(i);
-    s->surface |= nb[i];
-    s->mask = s->surface & ~(s->set | s->unset);
+    state[0].set = (vec_t)0;
+    state[0].unset = (vec_t)0;
+    state[0].surface = (vec_t)0;
+    state[0].mask = edge[0];
+    state[0].off = -1;
+    si = 0;
 
-    /* Choice of starting position guarantees we touch edge[0] */
-    if ((s->set & edge[1]) && (s->set & edge[2]) && (s->set & edge[3])) {
-        /* all edges seen, it's a solution */
+    while (si >= 0) {
+        state_t *scur = &state[si], *snext;
+        int off = scur->off;
+        vec_t mask = scur->mask;
 
-        if ((s->surface | s->set | s->unset) == fullvec) {
-            /* all remaining permutations will be solutions: count the
-             * bits in the mask representing the remaining surface, and
-             * report 2 to that power.
-             */
-            record_solution(1 << bit_count(s->mask), index);
-            return;
+        if (!mask) {
+            /* nothing left to try, so derecurse */
+            --si;
+            continue;
         }
 
-        record_solution(1, index);
-    }
-
-    for (x = 0; x < a * b; ++x) {
-        if (s->mask & vbitx(x)) {
-            recurse(index + 1, x);
-            s->unset |= vbitx(x);
-            s->mask &= ~vbitx(x);
-            if (!s->mask)
-                return;
+        /* is this the first attempt at this level? */
+        if (off >= 0) {
+            /* no - make sure we don't try again what we've just tried */
+            scur->unset |= vbitx(off);
         }
+
+        /* find the next thing to try at this level */
+        while ((mask & vbitx(++off)) == 0)
+            ;
+
+        /* found something to try, so update this level and set up the next */
+        ++si;
+        snext = &state[si];
+        *snext = *scur;
+
+        scur->off = off;
+        scur->mask &= ~vbitx(off); 
+        scur->unset |= vbitx(off);
+
+        snext->set |= vbitx(off);
+        snext->surface |= nb[off];
+        snext->mask = snext->surface & ~(snext->set | snext->unset);
+        snext->off = -1;
+
+        if ((snext->set & edge[1])
+            && (snext->set & edge[2])
+            && (snext->set & edge[3])
+        ) {
+            /* all edges seen, it's a solution */
+
+            if ((snext->surface | snext->set | snext->unset) == fullvec) {
+                /* all remaining permutations will be solutions: count the
+                 * bits in the mask representing the remaining surface, and
+                 * report 2 to that power.
+                 */
+                record_solution(1 << bit_count(snext->mask), snext);
+                --si;
+                continue;
+            }
+            record_solution(1, snext);
+        }
+        /* now recurse with "next" as the new "cur" */
     }
 }
 
@@ -174,12 +207,9 @@ int main(int argc, char** argv) {
     a = atoi(argv[1]);
     b = atoi(argv[2]);
 
-    init(a, b);
+    init();
+    calc();
 
-    for (i = 0; i < a; ++i) {
-        recurse(1, voff(i, 0));
-        s->unset |= vbit(i, 0);
-    }
     clear_line();
     printf("(%.2fs) f(%d, %d) = %llu\n",
             difftime(gtime, curtime()), a, b, count);
