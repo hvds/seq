@@ -67,9 +67,9 @@ void report(state_t *s) {
 
     clear_line();
     output += printf("  (%.2fs) %llu -", difftime(gtime, curtime()), count);
-    for (i = 0; i < a; ++i) {
+    for (j = 0; j < b; ++j) {
         output += printf(" ");
-        for (j = 0; j < b; ++j) {
+        for (i = 0; i < a; ++i) {
             output += printf("%c",
                 (s->set & vbit(i, j)) ? '1'
                 : (s->unset * vbit(i, j)) ? '0' : '.');
@@ -164,16 +164,15 @@ void calc(void) {
         /* found something to try, so update this level and set up the next */
         ++si;
         snext = &state[si];
-        *snext = *scur;
+        snext->set = scur->set | vbitx(off);
+        snext->unset = scur->unset;
+        snext->surface = scur->surface | nb[off];
+        snext->mask = snext->surface & ~(snext->set | snext->unset);
+        snext->off = -1;
 
         scur->off = off;
         scur->mask &= ~vbitx(off); 
-        scur->unset |= vbitx(off);
-
-        snext->set |= vbitx(off);
-        snext->surface |= nb[off];
-        snext->mask = snext->surface & ~(snext->set | snext->unset);
-        snext->off = -1;
+        scur->unset |= vbitx(off);  /* must be _after_ snext->unset init */
 
         if ((snext->set & edge[1])
             && (snext->set & edge[2])
