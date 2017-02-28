@@ -1,0 +1,253 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use Math::GMP;
+
+my($opt_block, $opt_connect) = (0, 0);
+$| = 1;
+
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    $opt_block = 1, next if $arg eq '-b';
+    $opt_connect = 1, next if $arg eq '-c';
+    die "Unknown option $arg\n";
+}
+my $iter_args = iter_args(@ARGV);
+
+my $zero = Math::GMP->new(0);
+my $zone = Math::GMP->new(1);
+while (1) {
+    my($width, $length) = $iter_args->() or last;
+    my $count = $opt_connect
+        ? count($width, $length, $opt_block)
+        : count_all($width, $length, $opt_block);
+    printf "%s(%s, %s) = %s (%.2f)\n",
+            $opt_block ? 'b' : 'a', $width, $length, $count, (times())[0];
+}
+exit 0;
+
+# support n, m..n, 0/undef for 1..\inf or -1 for antidiagonals
+sub iter_args {
+    my($width, $length) = @_;
+    my($iter_width, $iter_length) = (!$width, !$length);
+    my $range_width = $width && $width =~ /\.\./;
+    my $range_length = $length && $length =~ /\.\./;
+    if (($width // '') =~ /^\s*-/) {
+        # antidiagonals
+        my($w, $l) = (0, 2);
+        return sub {
+            ($w, $l) = ($w + 1, $l - 1);
+            ($w, $l) = (1, $w) if $l == 0;
+            return +($w, $l);
+        };
+    } elsif ($iter_width) {
+        if ($iter_length) {
+            my($w, $l) = (1, 0);
+            return sub {
+                ++$l;
+                ($w, $l) = ($w + 1, 1) if $l > $w;
+                return +($w, $l);
+            };
+        } elsif ($range_length) {
+            my($l0, $ln) = split /\.\./, $length;
+            my($w, $l) = (1, $l0 - 1);
+            return sub {
+                ++$l;
+                ($w, $l) = ($w + 1, $l0) if $l > $ln;
+                return +($w, $l);
+            };
+        } else {
+            my($w, $l) = (0, $length);
+            return sub {
+                return +(++$w, $l);
+            };
+        }
+    } elsif ($range_width) {
+        my($w0, $wn) = split /\.\./, $width;
+        if ($iter_length) {
+            my($w, $l) = ($w0, 0);
+            return sub {
+                ++$l;
+                ($w, $l) = ($w + 1, 1) if $l > $w;
+                return if $w > $wn;
+                return +($w, $l);
+            };
+        } elsif ($range_length) {
+            my($l0, $ln) = split /\.\./, $length;
+            my($w, $l) = ($w0, $l0 - 1);
+            return sub {
+                ++$l;
+                ($w, $l) = ($w + 1, $l0) if $l > $ln;
+                return if $w > $wn;
+                return +($w, $l);
+            };
+        } else {
+            my $w = $w0 - 1;
+            return sub {
+                ++$w;
+                return if $w > $wn;
+                return +($w, $length);
+            };
+        }
+    } else {
+        if ($iter_length) {
+            my $l = 0;
+            return sub {
+                return +($width, ++$l);
+            };
+        } elsif ($range_length) {
+            my($l0, $ln) = split /\.\./, $length;
+            my $l = $l0 - 1;
+            return sub {
+                ++$l;
+                return if $l > $ln;
+                return +($width, $l);
+            };
+        } else {
+            my $seen = 0;
+            return sub {
+                return if $seen++;
+                return +($width, $length);
+            };
+        }
+    }
+}
+
+my @baseline;
+my @last_set;
+my @counted;
+sub count {
+    my($width, $length, $block) = @_;
+    if ($width > $length) {
+        return count($length, $width, $block);
+    }
+    return $counted[$width][$length] //= do {
+        my $base = $baseline[$width] ||= baseline($width);
+        my $last_set = $last_set[$width] ||= {
+            len => 1,
+            set => { map +(join('-', @$_) => $zone), @$base },
+        };
+        while ($last_set->{len} < $length) {
+            $last_set->{set} = apply($base, $last_set->{set}, $block);
+            ++$last_set->{len};
+        }
+        count_shapes($last_set->{set});
+    };
+}
+
+sub count_all {
+    my($width, $length, $block) = @_;
+    my $sum = $zero;    # count the zero-item up front
+    for my $i (1 .. $width) {
+        for my $j (1 .. $length) {
+            $sum += count($i, $j, $block)
+                    * ($width + 1 - $i) * ($length + 1 - $j);
+        }
+    }
+    return $sum;
+}
+
+sub apply {
+    my($rows, $old, $block) = @_;
+    my $new = {};
+    for my $old_row (keys %$old) {
+        my $old_count = $old->{$old_row};
+        my($old_shape, $old_edge) = split /-/, $old_row;
+        my @old_names = sort keys %{{ map +($_ => 1), $old_shape =~ /\w/g }};
+      NEW_ROW:
+        for (@$rows) {
+            my($new_row, $new_edge) = @$_;
+            if ($block) {
+                while ($new_row =~ /[a-z](?=[a-z])/g) {
+                    next NEW_ROW if substr($old_shape, $-[0], 2) =~ /^[a-z]{2}/;
+                }
+            }
+            for my $old_name (@old_names) {
+                my @map;
+                while ($old_shape =~ /$old_name/g) {
+                    my $new_point = substr $new_row, $-[0], 1;
+                    push @map, $new_point if $new_point ne ' ';
+                }
+                # skip if this old name becomes isolated under this new row
+                next NEW_ROW unless @map;
+                next if @map == 1;
+                my $primary = shift @map;
+                my $rest = join '', @map;
+                $new_row =~ s{[$rest]}{$primary}g;
+            }
+            $new_edge = ($new_edge + 0) | $old_edge;
+            # renormalize
+            my $next = 'a';
+            my %map;
+            $new_row =~ s{(\w)}{$map{$1} //= $next++}ge;
+
+            ($new->{join '-', $new_row, $new_edge} ||= $zero) += $old_count;
+        }
+    }
+    return $new;
+}
+                    
+sub count_shapes {
+    my($data) = @_;
+    my $count = $zero;
+    for (keys %$data) {
+        next unless /3$/;
+        next if /b/;
+        $count += $data->{$_};
+    }
+    return $count;
+}
+
+sub baseline {
+    my($width) = @_;
+    my @x = ('');
+    for (1 .. $width) {
+        @x = map +("0$_", "1$_"), @x;
+    }
+    shift @x;   # empty row is always invalid
+    for (@x) {
+        my $name = 'a';
+        s{
+            ( ^ | 0+ )
+            ( 1+ | $ )
+        }{
+            ' ' x length($1)
+            . $name++ x length($2)
+        }xge;
+    }
+    return [ map {
+        my $left = (substr($_, 0, 1) eq ' ') ? 0 : 1;
+        my $right = (substr($_, -1, 1) eq ' ') ? 0 : 2;
+        [ $_, $left + $right ]
+    } @x ];
+}
+
+__END__
+% ./frame2 -c 8 1..8
+a(8, 1) = 1 (0.01)
+a(8, 2) = 1391 (0.01)
+a(8, 3) = 474479 (0.01)
+a(8, 4) = 94844591 (0.04)
+a(8, 5) = 15545310117 (0.22)
+a(8, 6) = 2354165803759 (1.15)
+a(8, 7) = 344462825618801 (6.19)
+a(8, 8) = 49605487608825311 (33.51)
+% ./frame2 8 1..8
+a(8, 1) = 36 (0.00)
+a(8, 2) = 4040 (0.00)
+a(8, 3) = 741556 (0.01)
+a(8, 4) = 118127408 (0.04)
+a(8, 5) = 17470103108 (0.21)
+a(8, 6) = 2515885704810 (1.15)
+a(8, 7) = 358898037402660 (6.24)
+a(8, 8) = 51016818604894742 (34.12)
+% ./frame2 -b 8 1..8
+b(8, 1) = 36 (0.01)
+b(8, 2) = 1506 (0.01)
+b(8, 3) = 112686 (0.01)
+b(8, 4) = 8264179 (0.04)
+b(8, 5) = 581894958 (0.20)
+b(8, 6) = 39782925362 (1.01)
+b(8, 7) = 2695663159723 (5.27)
+b(8, 8) = 181801067635289 (27.70)
+% 
