@@ -1,0 +1,20 @@
+#!/usr/bin/perl -w
+use strict;
+my $limit = shift(@ARGV) || 100;
+
+# Each entry in @skipped is a list of 2 values: the lucky number itself, and
+# the count of lucky numbers skipped since the last deletion.
+my @skipped;
+my $n = 1;
+
+CANDIDATE: while ($n < $limit) {
+	$n += 2;
+	for my $skip (@skipped) {
+		++$skip->[1];
+		next if $skip->[0] > $skip->[1];
+		$skip->[1] = 0;
+		next CANDIDATE;
+	}
+	push @skipped, [ $n, @skipped + 2 ];
+	print $n, "\n";
+}

@@ -1,0 +1,100 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use Math::Pari qw/ PARI gcd /;
+my $zone = PARI(1);
+$| = 1;
+
+my $lucky = '';
+vec($lucky, 1, 1) = 1;
+my $lcount = $zone;
+my $mod = $zone * 2;
+my $nextsieve = 3;
+
+my @possible = (0, 1);
+my @power = ();
+my $prevpower = $zone;
+
+for (my $index = 1; 1; ++$index) {
+	$prevpower *= 2;
+	push @power, $prevpower;
+#	print "try power 2^$index = $power\n";
+
+	while (1) {
+		my $old = @possible;
+		@possible = grep {
+			my $cur = $_;
+			my $ok = 1;
+			for (@power) {
+				my $modval = ($cur - $_) % $mod;
+				$modval += $mod if $modval < 0;
+				$ok = 0, last if !vec($lucky, $modval, 1);
+			}
+			$ok
+		} @possible;
+		my $new = @possible;
+		print "Up to 2^$index, $new values mod $mod are possible\n";
+		print "[ @possible ]\n";
+
+		last if $prevpower <= $mod;
+		my $sieve = $nextsieve;
+		my $g = gcd($lcount, $sieve);
+		extend_possible($sieve / $g);
+		extend_lucky($sieve / $g);
+		sieve_lucky($sieve);
+		$nextsieve = nextnew($nextsieve);
+		print "After sieving $sieve, lucky pattern has $lcount values mod $mod\n";
+	}
+}
+exit 0;
+
+sub extend_possible {
+	my $mul = shift;
+	my $count = @possible;
+	@possible = map {
+		my $add = $_ * $mod;
+		map $_ + $add, @possible
+	} 0 .. ($mul - 1);
+}
+
+sub extend_lucky {
+	my $mul = shift;
+	my $cur = 0;
+	for (2 .. $mul) {
+		for (1 .. $mod) {
+			vec($lucky, $cur + $mod, 1) = vec($lucky, $cur, 1);
+			++$cur;
+		}
+	}
+	$lcount *= $mul;
+	$mod *= $mul;
+}
+
+sub sieve_lucky {
+	my $sieve = shift;
+	my $next = $sieve;
+	for (0 .. $mod - 1) {
+		next if !vec($lucky, $_, 1);
+		next if --$next;
+		$next = $sieve;
+		vec($lucky, $_, 1) = 0;
+		--$lcount;
+	}
+}
+
+sub nextnew {
+	my $cur = shift;
+	while (++$cur) {
+		return $cur if vec($lucky, ($cur % $mod), 1);
+	}
+}
+
+__END__
+
+What numbers k yield lucky numbers for each positive k-2^i, i>=1?
+
+Lucky numbers are what is kept after the following sieve process:
+- write down the numbers from 1..\inf
+- mark 1 as "keep"
+- repeat:
+  - mark the least unmarked number as "keep", call it j
+  - mark every j'th undiscarded number as "discard"
