@@ -137,7 +137,7 @@ sub count {
 
 sub count_all {
     my($width, $length, $block) = @_;
-    my $sum = $zero;    # count the zero-item up front
+    my $sum = $zone;    # count the zero-item up front
     for my $i (1 .. $width) {
         for my $j (1 .. $length) {
             $sum += count($i, $j, $block)
