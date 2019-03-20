@@ -36,10 +36,10 @@ static_assert(RANGE_BITS <= sizeof(INT) * 8,
         "RANGE_BITS too large for INT type");
 
 /* Values seen are captured in a boolean bitvector notionally running from
-   min_INT to max_INT (excluding zero), actually stored in NCHUNKS chunks
+   RANGE_MIN+1 to RANGE_MAX-1, actually stored in NCHUNKS chunks
    of CHUNK_SIZE bytes. We keep at most LOCAL_CHUNKS of those chunks in
    memory via an LRU cache, spilling the rest to disk into the file map_path
-   declared below.
+   declared above.
 */
 #define CHUNK_BITS 30
 #define CHUNK_SIZE (1 << CHUNK_BITS)
