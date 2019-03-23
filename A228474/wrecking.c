@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
@@ -21,8 +22,9 @@
 
 /* We'll spill the bitvector to this file, make sure it is on a filesystem
    with plenty of room (probably a few TB).
+   Default path is '/tmp/wrecking_map-<n>-<k>'.
 */
-const char* map_path = "/tmp/wrecking_map";
+char* map_path;
 
 /* Type used for the running value; must be signed */
 typedef long long INT;
@@ -72,9 +74,11 @@ mapped_chunk_info mapped[LOCAL_CHUNKS];
 
 /* Called at start of run */
 void init_chunks(void) {
-    /* Note: you'd need to memfill all_chunks[] and mapped[] with zeros
-       to reuse them within the same process. */
+    memset((void*)all_chunks, 0, sizeof(all_chunks));
+    memset((void*)mapped, 0, sizeof(mapped));
     map_fd = open(map_path, O_RDWR | O_CREAT | O_TRUNC, 0666);
+    generation = 0;
+    max_mapped = -1;
     return;
 }
 
@@ -82,14 +86,11 @@ void init_chunks(void) {
 void clear_chunks(void) {
     int i;
 
-    /* Run has completed, so no point writing stuff to disk now. */
-#if 0
     for (i = 0; i < LOCAL_CHUNKS; ++i) {
         if (mapped[i].chunk) {
             munmap((void*)mapped[i].chunk, CHUNK_SIZE);
         }
     }
-#endif
     close(map_fd);
     return;
 }
@@ -190,7 +191,7 @@ void mark(INT which) {
     return;
 }
 
-void A228474(int n0) {
+INT A228474(int n0) {
     INT d = 0;
     INT n = (INT)n0;
     INT next;
@@ -225,21 +226,41 @@ void A228474(int n0) {
         }
         n = next;
     }
-    printf("a(%d) = %lld\n", n0, d);
-    return;
+    return d;
 }
 
 int main(int argc, char** argv) {
-    int n;
+    int n, k = 1;
+    char path[1+3+1+12+1+11+1+11+1];    /* /tmp/wrecking_map-nnn-kkk\0 */
+    INT result;
 
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <n>\n", argv[0]);
+    if (argc < 2 || argc > 4) {
+        fprintf(stderr, "Usage: %s <n> [ <k> [ <path> ] ]\n", argv[0]);
         return 1;
     }
-    n = atoi(argv[1]);
 
-    init_chunks();
-    A228474(n);
-    clear_chunks();
+    n = atoi(argv[1]);
+    if (argc > 2) {
+        k = atoi(argv[2]);
+    }
+    if (argc > 3) {
+        map_path = argv[3];
+    } else {
+        snprintf(path, sizeof(path), "/tmp/wrecking_map-%u-%u", n, k);
+        map_path = path;
+    }
+
+    while (k) {
+        init_chunks();
+        result = A228474(n);
+        printf("a(%d) = %lld\n", n, result);
+        clear_chunks();
+        ++n;
+        --k;
+    }
+
+    if (unlink(map_path)) {
+        fprintf(stderr, "Warning, could not remove map file '%s'\n", map_path);
+    }
     return 0;
 }
