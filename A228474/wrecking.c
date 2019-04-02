@@ -133,7 +133,7 @@ char* map_chunk(int index) {
     if (index > max_mapped) {
         off_t size = ((off_t)index + 1) << CHUNK_BITS;
         if (ftruncate(map_fd, size) != 0) {
-            fprintf(stderr, "Could not extend file to size %lld", (INT)size);
+            fprintf(stderr, "Could not extend file to size %lld\n", (INT)size);
             exit(1);
         }
         max_mapped = index;
@@ -191,14 +191,19 @@ void mark(INT which) {
     return;
 }
 
-INT A228474(int n0) {
+INT A228474(int n0, INT limit) {
     INT d = 0;
     INT n = (INT)n0;
     INT next;
 
     while (n) {
         mark(n);
+
         ++d;
+        if (limit && d > limit) {
+            return (INT)-1;
+        }
+
         /* report progress from time to time */
         if ((d & 0x07ffffff) == 0)
             fprintf(stderr, "d=%lld, max_mapped=%d\n", d, max_mapped);
@@ -232,28 +237,51 @@ INT A228474(int n0) {
 int main(int argc, char** argv) {
     int n, k = 1;
     char path[1+3+1+12+1+11+1+11+1];    /* /tmp/wrecking_map-nnn-kkk\0 */
-    INT result;
+    INT result, limit = 0;
+    int arg = 1;
 
-    if (argc < 2 || argc > 4) {
-        fprintf(stderr, "Usage: %s <n> [ <k> [ <path> ] ]\n", argv[0]);
+    while (arg < argc && argv[arg][0] == '-') {
+        if (strcmp("--", argv[arg]) == 0) {
+            ++arg;
+            break;
+        } else if (strcmp("-L", argv[arg]) == 0) {
+            limit = atoll(argv[++arg]);
+            ++arg;
+        } else if (strcmp("-F", argv[arg]) == 0) {
+            map_path = argv[++arg];
+            ++arg;
+        } else {
+            fprintf(stderr, "Unknown option '%s'\n", argv[arg]);
+            return 1;
+        }
+    }
+
+    if (argc - arg < 1 || argc - arg > 2) {
+        fprintf(stderr,
+            "Usage: %s [ -L <limit> ] [ -F <filepath> ] <n> [ <k> ]\n",
+            argv[0]
+        );
         return 1;
     }
 
-    n = atoi(argv[1]);
-    if (argc > 2) {
-        k = atoi(argv[2]);
+    n = atoi(argv[arg++]);
+    if (arg < argc) {
+        k = atoi(argv[arg]);
     }
-    if (argc > 3) {
-        map_path = argv[3];
-    } else {
+
+    if (map_path == (char*)NULL) {
         snprintf(path, sizeof(path), "/tmp/wrecking_map-%u-%u", n, k);
         map_path = path;
     }
 
     while (k) {
         init_chunks();
-        result = A228474(n);
-        printf("a(%d) = %lld\n", n, result);
+        result = A228474(n, limit);
+        if (result >= 0) {
+            printf("a(%d) = %lld\n", n, result);
+        } else {
+            printf("a(%d) > %lld\n", n, limit);
+        }
         clear_chunks();
         ++n;
         --k;
