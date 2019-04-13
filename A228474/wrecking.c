@@ -29,8 +29,10 @@ char* map_path;
 /* Type used for the running value; must be signed */
 typedef long long INT;
 
-/* RANGE_BITS can probably go up to around 61 without reengineering, at the
-   cost of more NCHUNKS. */
+/* RANGE_BITS can go up to 60 without reengineering; beyond that, we probably
+   want to ditch all_chunks[], move lru_gen into mapped[] and just scan the
+   mapped list each time.
+*/
 #define RANGE_BITS 48
 #define RANGE_MAX ((INT)1 << (RANGE_BITS - 1))
 #define RANGE_MIN (-RANGE_MAX)
@@ -48,6 +50,8 @@ static_assert(RANGE_BITS <= sizeof(INT) * 8,
 #define BITS_PER_CHUNK (1 << (CHUNK_BITS + 3)
 #define NCHUNKS (1 << (RANGE_BITS - CHUNK_BITS))
 #define LOCAL_CHUNKS 16
+static_assert(RANGE_BITS - CHUNK_BITS <= 30,
+        "RANGE_BITS too large, or CHUNK_BITS too small: NCHUNKS will overflow");
 static_assert(CHUNK_BITS < sizeof(int) * 8,
         "CHUNK_BITS too large to use 'int' to index chunks");
 static_assert(RANGE_BITS - CHUNK_BITS < sizeof(int) * 8,
@@ -63,7 +67,7 @@ typedef struct {
     INT lru_gen;
     char* chunk;
 } all_chunk_info;
-all_chunk_info all_chunks[NCHUNKS];
+all_chunk_info *all_chunks;
 
 typedef struct {
     int which_mapped;
@@ -74,7 +78,16 @@ mapped_chunk_info mapped[LOCAL_CHUNKS];
 
 /* Called at start of run */
 void init_chunks(void) {
-    memset((void*)all_chunks, 0, sizeof(all_chunks));
+    if (all_chunks == NULL) {
+        all_chunks = (all_chunk_info *)calloc(NCHUNKS, sizeof(all_chunk_info));
+        if (all_chunks == NULL) {
+            fprintf(stderr,
+                "Not enough memory, need room for %d chunks of %lu bytes\n",
+                NCHUNKS, sizeof(all_chunk_info)
+            );
+            exit(1);
+        }
+    }
     memset((void*)mapped, 0, sizeof(mapped));
     map_fd = open(map_path, O_RDWR | O_CREAT | O_TRUNC, 0666);
     generation = 0;
@@ -92,6 +105,7 @@ void clear_chunks(void) {
         }
     }
     close(map_fd);
+    memset((void*)all_chunks, 0, NCHUNKS * sizeof(all_chunk_info));
     return;
 }
 
@@ -289,6 +303,9 @@ int main(int argc, char** argv) {
 
     if (unlink(map_path)) {
         fprintf(stderr, "Warning, could not remove map file '%s'\n", map_path);
+    }
+    if (all_chunks != NULL) {
+        free(all_chunks);
     }
     return 0;
 }
