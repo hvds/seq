@@ -42,14 +42,14 @@ static_assert(RANGE_BITS <= sizeof(INT) * 8,
    memory via an LRU cache, spilling the rest to disk into the file map_path
    declared above.
 */
-#define CHUNK_BITS 30
-#define CHUNK_SIZE (1 << CHUNK_BITS)
-#define BITS_PER_CHUNK (1 << (CHUNK_BITS + 3)
-#define NCHUNKS (1 << (RANGE_BITS - CHUNK_BITS))
+#define CHUNK_BYTES 30
+#define CHUNK_SIZE (1 << CHUNK_BYTES)
+#define BITS_PER_CHUNK (1 << (CHUNK_BYTES + 3)
+#define NCHUNKS (1 << (RANGE_BITS - CHUNK_BYTES))
 #define LOCAL_CHUNKS 16
 
-static_assert(CHUNK_BITS < sizeof(int) * 8,
-        "CHUNK_BITS too large to use 'int' to index chunks");
+static_assert(CHUNK_BYTES < sizeof(int) * 8,
+        "CHUNK_BYTES too large to use 'int' to index chunks");
 
 
 /* Each access increments generation, and sets lru_gen to it. */
@@ -126,7 +126,7 @@ int map_chunk(int index) {
 
     /* extend the file if needed */
     if (index > max_mapped) {
-        off_t size = ((off_t)index + 1) << CHUNK_BITS;
+        off_t size = ((off_t)index + 1) << CHUNK_BYTES;
         if (ftruncate(map_fd, size) != 0) {
             fprintf(stderr, "Could not extend file to size %lld\n", (INT)size);
             exit(1);
@@ -137,7 +137,7 @@ int map_chunk(int index) {
     /* now map the chunk */
     chunk = (char*)mmap(
         NULL, CHUNK_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-        map_fd, (off_t)index << CHUNK_BITS
+        map_fd, (off_t)index << CHUNK_BYTES
     );
     if (chunk == MAP_FAILED) {
         fprintf(stderr, "Could not map chunk %d\n", index);
@@ -152,7 +152,7 @@ int map_chunk(int index) {
 /* Return a pointer to the chunk containing the specified value */
 char* chunk_for(INT which) {
     /* chunks alternate +ve and -ve */
-    int pair_index = llabs(which) >> (CHUNK_BITS + 3);
+    int pair_index = llabs(which) >> (CHUNK_BYTES + 3);
     int index = (pair_index << 1) + ((which < 0) ? 1 : 0);
     int cache_index = map_chunk(index);
 
@@ -162,7 +162,7 @@ char* chunk_for(INT which) {
 
 /* Return the offset within a chunk for the specified value */
 int offset_for(INT which) {
-    return (llabs(which) >> 3) & ((1 << CHUNK_BITS) - 1);
+    return (llabs(which) >> 3) & ((1 << CHUNK_BYTES) - 1);
 }
 
 /* Return the bit value within the offset for the specified value */
