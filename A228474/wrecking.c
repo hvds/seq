@@ -29,10 +29,7 @@ char* map_path;
 /* Type used for the running value; must be signed */
 typedef long long INT;
 
-/* RANGE_BITS can go up to 60 without reengineering; beyond that, we probably
-   want to ditch all_chunks[], move lru_gen into mapped[] and just scan the
-   mapped list each time.
-*/
+/* RANGE_BITS can go up to at least 60 without reengineering */
 #define RANGE_BITS 48
 #define RANGE_MAX ((INT)1 << (RANGE_BITS - 1))
 #define RANGE_MIN (-RANGE_MAX)
@@ -50,12 +47,9 @@ static_assert(RANGE_BITS <= sizeof(INT) * 8,
 #define BITS_PER_CHUNK (1 << (CHUNK_BITS + 3)
 #define NCHUNKS (1 << (RANGE_BITS - CHUNK_BITS))
 #define LOCAL_CHUNKS 16
-static_assert(RANGE_BITS - CHUNK_BITS <= 30,
-        "RANGE_BITS too large, or CHUNK_BITS too small: NCHUNKS will overflow");
+
 static_assert(CHUNK_BITS < sizeof(int) * 8,
         "CHUNK_BITS too large to use 'int' to index chunks");
-static_assert(RANGE_BITS - CHUNK_BITS < sizeof(int) * 8,
-        "RANGE_BITS - CHUNK_BITS too large to index all_chunks[NCHUNKS]");
 
 
 /* Each access increments generation, and sets lru_gen to it. */
@@ -65,11 +59,6 @@ int map_fd;
 
 typedef struct {
     INT lru_gen;
-    char* chunk;
-} all_chunk_info;
-all_chunk_info *all_chunks;
-
-typedef struct {
     int which_mapped;
     char* chunk;
 } mapped_chunk_info;
@@ -78,16 +67,6 @@ mapped_chunk_info mapped[LOCAL_CHUNKS];
 
 /* Called at start of run */
 void init_chunks(void) {
-    if (all_chunks == NULL) {
-        all_chunks = (all_chunk_info *)calloc(NCHUNKS, sizeof(all_chunk_info));
-        if (all_chunks == NULL) {
-            fprintf(stderr,
-                "Not enough memory, need room for %d chunks of %lu bytes\n",
-                NCHUNKS, sizeof(all_chunk_info)
-            );
-            exit(1);
-        }
-    }
     memset((void*)mapped, 0, sizeof(mapped));
     map_fd = open(map_path, O_RDWR | O_CREAT | O_TRUNC, 0666);
     generation = 0;
@@ -105,23 +84,25 @@ void clear_chunks(void) {
         }
     }
     close(map_fd);
-    memset((void*)all_chunks, 0, NCHUNKS * sizeof(all_chunk_info));
     return;
 }
 
-/* Load the specified chunk, return a pointer to it */
-char* map_chunk(int index) {
+/* Find or load the specified chunk, return the local index */
+int map_chunk(int index) {
     INT minru = -1, thisru;
     int i, cache_index;
     char* chunk;
 
     /* choose a local chunk to use */
     for (i = 0; i < LOCAL_CHUNKS; ++i) {
+        if (mapped[i].chunk && mapped[i].which_mapped == index) {
+            return i;
+        }
         if (!mapped[i].chunk) {
             cache_index = i;
             break;
         }
-        thisru = all_chunks[ mapped[i].which_mapped ].lru_gen;
+        thisru = mapped[i].lru_gen;
         if (minru == -1 || thisru < minru) {
             cache_index = i;
             minru = thisru;
@@ -131,7 +112,7 @@ char* map_chunk(int index) {
     /* clean up any previous use of the local chunk */
     if (mapped[cache_index].chunk) {
         munmap((void*)mapped[cache_index].chunk, CHUNK_SIZE);
-        all_chunks[ mapped[cache_index].which_mapped ].chunk = NULL;
+        mapped[cache_index].chunk = (char*)NULL;
     }
 
 #ifdef DEBUG
@@ -165,8 +146,7 @@ char* map_chunk(int index) {
 
     mapped[cache_index].which_mapped = index;
     mapped[cache_index].chunk = chunk;
-    all_chunks[index].chunk = chunk;
-    return chunk;
+    return cache_index;
 }
 
 /* Return a pointer to the chunk containing the specified value */
@@ -174,12 +154,10 @@ char* chunk_for(INT which) {
     /* chunks alternate +ve and -ve */
     int pair_index = llabs(which) >> (CHUNK_BITS + 3);
     int index = (pair_index << 1) + ((which < 0) ? 1 : 0);
-    char* chunk = all_chunks[index].chunk;
+    int cache_index = map_chunk(index);
 
-    if (!chunk)
-        chunk = map_chunk(index);
-    all_chunks[index].lru_gen = ++generation;
-    return chunk;
+    mapped[cache_index].lru_gen = ++generation;
+    return mapped[cache_index].chunk;
 }
 
 /* Return the offset within a chunk for the specified value */
@@ -303,9 +281,6 @@ int main(int argc, char** argv) {
 
     if (unlink(map_path)) {
         fprintf(stderr, "Warning, could not remove map file '%s'\n", map_path);
-    }
-    if (all_chunks != NULL) {
-        free(all_chunks);
     }
     return 0;
 }
