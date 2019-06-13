@@ -1,0 +1,165 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use lib ('../lib', 'lib');
+use Seq::Db;
+use H::Heap;
+use Math::GMP;
+use POSIX qw{ :sys_wait_h };
+
+my($opt_recreate, $debug, $report) = (0, 0, 0);
+my($maxproc, $maxrun, $drain) = (10, 100, 0);
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift(@ARGV);
+    last if $arg eq '--';
+    $opt_recreate = 1, next if $arg eq '-r';
+    $report = 1, next if $arg eq '-p';
+    $debug = 1, next if $arg eq '-d';
+    die "Unknown option '$arg'";
+}
+$maxproc = shift(@ARGV) if @ARGV && !$report;
+$maxrun = shift(@ARGV) if @ARGV && !$report;
+
+local @ENV{qw{ DBI_TRACE DBIC_TRACE }} = (1, 1) if $debug;
+my $db = Seq::Db->new({
+    db => 'tauseq',
+    user => 'hv',
+    passwd => 'hv',
+    recreate => $opt_recreate,
+});
+
+use Data::Dumper;
+local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
+
+if ($report) {
+    report($db, @ARGV);
+    exit 0;
+}
+my $prio = H::Heap->new(q{ $b->priority <=> $a->priority });
+$prio->insert(Seq::Starter->new(2, $maxproc));
+my(%pid, @runnable);
+
+while (1) {
+    unless (!$drain && @runnable) {
+        my $obj = $prio->fetch;
+        $prio->insert($_) for $obj->prep($db);
+        push @runnable, $obj->runnable;
+    }
+
+    while (!$drain && @runnable && keys(%pid) < $maxproc) {
+        my $r = shift @runnable;
+        $pid{ $r->run } = $r;
+        $drain = 1, print("Draining\n") if --$maxrun <= 0;
+    }
+
+    if (@runnable && ($drain || keys(%pid) == $maxproc)) {
+        waitFor($db, \%pid, 1);
+    }
+    last if $drain && !keys %pid;
+}
+exit 0;
+
+sub waitFor {
+    my($db, $pids, $block) = @_;
+    my @t0 = times;
+    my $pid = waitpid(-1, $block ? 0 : WNOHANG);
+    return 0 if $pid < 0;    
+
+    my $obj = delete $pids->{$pid};
+    my @t1 = times;
+    my $time = $t1[2] + $t1[3] - $t0[2] - $t0[3];
+    $prio->insert($_) for $obj->finalize($db, $time);
+    return 1;
+}
+
+sub report {
+    my($db, $n, $k) = @_;
+    if (!$n) {
+        for my $g ($db->resultset('TauG')->search(
+            undef, { order_by => 'n' }
+        )->all) {
+            if ($g->complete) {
+                printf "g(%s) = %s\n", $g->n, $g->maxg;
+            } elsif ($g->depend) {
+                printf "g(%s) = g(%s)\n", $g->n, $g->depend_n;
+            } else {
+                printf "g(%s) in [%s .. %s], checked to %s\n",
+                        $g->n, $g->ming, $g->maxg, $g->checked;
+            }
+        }
+        return;
+    }
+    if (!$k) {
+        my $g = $db->resultset('TauG')->find({ n => $n });
+        if ($g->complete) {
+            printf "g(%s) = %s\n", $g->n, $g->maxg;
+        } elsif ($g->depend) {
+            printf "g(%s) = g(%s)\n", $g->n, $g->depend_n;
+        } else {
+            printf "g(%s) in [%s .. %s], checked to %s\n",
+                    $g->n, $g->ming, $g->maxg, $g->checked;
+        }
+        my $max = $g->maxg;
+        for my $f (@{ $g->fall($db) }) {
+            if ($f->complete && !$f->depend) {
+                if ($f->f) {
+                    printf "f(%s, %s) = %s\n", $f->n, $f->k, $f->f;
+                } elsif ($f->k <= $max) {
+                    printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked;
+                } # else ignore, it was proven impossible
+            } elsif ($f->complete && $f->depend) {
+                if ($f->f) {
+                    printf "f(%s, %s) = %s = %s f(%s, %s)\n",
+                            $f->n, $f->k, $f->f, $f->depend_m, $f->depend_n, $f->k;
+                } else {
+                    printf "f(%s, %s) = %s f(%s, %s)\n",
+                            $f->n, $f->k, $f->depend_m, $f->depend_n, $f->k;
+                }
+            } else {
+                printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked
+                        unless $g->depend;
+            }
+        }
+        return;
+    }
+    my $g = $db->resultset('TauG')->find({ n => $n });
+    my $f = $db->resultset('TauF')->find({ n => $n, k => $k });
+    for my $r ($f->runs->all) {
+        printf "[%s] %s\n",
+            join(' ', @{ $r->command }),
+            $r->complete ? sprintf('complete %.3f + %.3f',
+                    $r->preptime, $r->runtime)
+            : $r->running ? 'running'
+            : 'waiting';
+    }
+}
+
+package Seq::Starter {
+    sub new {
+        my($class, $start, $count) = @_;
+        return bless {
+            start => $start,
+            count => $count,
+        }, $class;
+    }
+    sub priority {
+        my($self) = @_;
+        return $self->{priority} //= Seq::TauG->priority($self->{start});
+    }
+    sub prep {
+        my($self, $db) = @_;
+        my $start = $self->{start};
+        my $count = $self->{count};
+        my $end = $start + $count - 1;
+        my $max = Seq::TauG->max_known($db);
+        if ($end > $max) {
+            Seq::TauG->genTo($db, $end);
+        }
+        return (
+            Seq::Starter->new($end + 1, 1),
+            Seq::TauG->range($db, $start, $end),
+        );
+    }
+    sub runnable { () }
+};
+
