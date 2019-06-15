@@ -189,6 +189,24 @@ sub find_active {
 }
 
 #
+# Average number of values tested against modular constraints before
+# a value gets through to the full testers regime.
+#
+sub frequency {
+    my($self) = @_;
+    return $self->{freq} //= do {
+        $self->find_active unless $self->{sc};
+        my $f = 1;
+        for (@{ $self->{sc} }) {
+            my $m = numify($_->[0]);
+            my $d = numify($_->[3]);
+            $f *= $m / ($m - $d);
+        }
+        $f;
+    };
+}
+
+#
 # Optimise the list of active constraints: where practical, combine multiple
 # moduli into a single test; then sort the remaining list in order of potency.
 #
@@ -197,6 +215,9 @@ sub find_active {
 #
 sub pack_sc {
     my $self = shift;
+    # Cache this before packing, since we don't maintain the unique values
+    # count in the packed list.
+    $self->frequency;
     my @aux = map +{
         'sc' => $_,
         'n' => $_->[0],

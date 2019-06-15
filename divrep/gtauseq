@@ -624,6 +624,9 @@ sub iter_factor {
         my $cur;
         $c->init();
         check_mult($c) unless $opt_f;
+        printf <<OUT, $c->frequency(), $c->elapsed();
+309 Prep finished, frequency %.2f (%.3fs)
+OUT
         CUR: while ($cur = $c->next()) {
             report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
             for (0 .. $#$tester) {
@@ -742,11 +745,22 @@ sub prepare_tester {
 
 sub report_seq {
     my($n, $f, $d, $first) = @_;
-    my $flen = length($f);
-    my $vlen = length($n + $f * $d);
-    for (0 .. $f) {
-        my $v = $n + $d * $_;
-        printf <<OUT, $flen, $_, tau($v), $vlen, $v, pf($v);
+
+    my $good = 1;
+    my $tau = tau($n);
+    my @result;
+    for (my $i = 0; ($i <= $f) || $good; ++$i) {
+        my $v = $n + $d * $i;
+        my $result = [ $i, tau($v), $v, pf($v) ];
+        $good = 0 unless $result->[1] == $tau;
+        push @result, $result;
+    }
+
+    my $flen = length($#result);
+    my $vlen = length($result[-1][2]);
+    for (0 .. $#result) {
+        my $r = $result[$_];
+        printf <<OUT, $flen, $r->[0], $r->[1], $vlen, $r->[2], $r->[3];
 211 Sequence % *s: % 2s = tau(% *s = %s)
 OUT
     }
