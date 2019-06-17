@@ -169,8 +169,10 @@ sub find_active {
             if (unpack('%32b*', $c->[2]) >= $d - 1) {
                 my $v = (grep !vec($c->[2], $_, 1), 0 .. $d - 1)[0];
                 unless (defined $v) {
-                    print "402 Error: all values (mod $d) disallowed\n";
-                    die;
+                    printf <<OUT, $d, $self->elapsed;
+402 Error: all values (mod %s) disallowed (%.3fs)
+OUT
+                    exit 1;
                 }
                 ($debug > 2)
                         && warn "fix $v(mod $d) in $mod_mult(mod $mult)\n";

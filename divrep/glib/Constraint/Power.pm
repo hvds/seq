@@ -51,7 +51,10 @@ sub new {
 #   $self->{'pend'} = [ map [
 #       $self->_convert_trigger($_->[0]), @$_[1..$#$_]
 #   ], @{ $c->{'pend'} } ];
-warn sprintf "Throwing away %s pending values triggering in range [%s, %s]\n", 0+@$_, $_->[0][0], $_->[$#$_][0] for grep @$_, $c->{'pend'};
+    printf(
+        "304 Throwing away %s pending values triggering in range [%s, %s]\n",
+        0 + @$_, $_->[0][0], $_->[$#$_][0],
+    ) for grep @$_, $c->{'pend'};
 
     return $self;
 }
@@ -155,7 +158,7 @@ sub convert_mod_override {
         if ($mod != $submod) {
             my $cosubval = ($val % $submod);
             next VAL unless $cosubval == $subval;
-            warn sprintf <<WARN, $subval, $submod, $cosubval, $mod;
+            printf <<WARN, $subval, $submod, $cosubval, $mod;
 318 Ambiguous mod fix: y==%s (mod %s) yields d==%s (mod %s)
 WARN
             $subval = $val; # treat as valid

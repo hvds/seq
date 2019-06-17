@@ -219,7 +219,7 @@ $c->debug && warn "apply $m\n";
 
     if ($fixpow) {
         my($k, $x, $z) = @$fixpow;
-        warn "311 Fixing power d = (${x}y^$z - n)/$k\n";
+        print "311 Fixing power d = (${x}y^$z - n)/$k\n";
         mod_dump($c, $opt_dm, 'pre-fix');
         $c = $c->fix_power($k, $x, $z, $opt_mq);
         $opt_dm = $opt_dmq;
