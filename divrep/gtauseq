@@ -154,6 +154,7 @@ sub unpack_mm {
 sub apply {
     my $c = shift;
     my $tn = $c->tau;
+    my $n = $c->n;
 
     # If we require the diff to be coprime with the elements, deal with that
     # first.
@@ -172,7 +173,7 @@ sub apply {
     for my $m (2 .. $c->check) {
 $c->debug && warn "apply $m\n";
         my $fm = [ factor_exp($m) ];
-        next if $opt_cp && $fm->[-1][0] > $opt_cp;
+        next if $opt_cp && cp_skip($opt_cp, $n, $fm);
 
         #
         # If n is prime, the only thing we can usefully do is avoid primes
@@ -529,6 +530,20 @@ sub sum {
     return $n;
 }
 
+#
+# Return TRUE if the check c (factorizing to fm) should be skipped for n
+# according to the cp option, ie if the largest factor of c not dividing
+# n is greater than cp.
+#
+sub cp_skip {
+    my($cp, $n, $fm) = @_;
+    # assume the greatest factor
+    my $i = $#$fm;
+    # skip past those that divide n
+    --$i while $i >= 0 && ($n % $fm->[$i][0]) == 0;
+    return 1 if $i >= 0 && $fm->[$i][0] > $cp;
+    return 0;
+}
 #
 # Given n, d, returns true if d divides n to give an odd number.
 #
