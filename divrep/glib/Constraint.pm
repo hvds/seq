@@ -741,7 +741,10 @@ sub factor_exp {
 
 sub numify {
     my($n) = @_;
-    return ref($n) ? $n->intify : $n;
+    my $v = ref($n) ? $n->intify : $n;
+    return $v if $v;
+    # Math::GMP intifies to 0 if out of range of IV/UV
+    return "$n" + 0;
 }
 
 1;
