@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use List::Util qw{ max };
 use Math::GMP;
+use Math::Prime::Util qw{ is_prime };
 
 my $zero = Math::GMP->new('0');
 
@@ -46,7 +47,7 @@ $taug->define($TABLE, 'taug', [
     'uint ming',
     'uint maxg',
     'maybe uint depend_n',
-    'flags(complete depend) status',
+    'flags(complete depend prime) status',
     'bigint checked',
 ]);
 $taug->has_many(f => 'Seq::TauF', 'n');
@@ -54,8 +55,17 @@ $taug->has_many(f => 'Seq::TauF', 'n');
 sub priority {
     my($class, $n) = @_;
     CORE::state $log2 = log(2);
-    $n = $class->n if ref($class);
-    return -log($n) / $log2;
+    my $p;
+    if (ref($class)) {
+        $n = $class->n;
+        $p = $class->prime;
+    } else {
+        $p = is_prime($n);
+    }
+    $p = 0 if $n <= 23;
+    return -log($n) / $log2
+            - 10 * int(log($n) / log(10))
+            - ($p ? 10 : 0);
 }
 
 sub max_known {
@@ -85,15 +95,17 @@ sub genTo {
 sub generate {
     my($class, $db, $count) = @_;
     my $max = $class->max_known($db);
-    return $db->resultset($TABLE)->populate([
-        map +{
-            n => $_,
+    my $table = $db->resultset($TABLE);
+    for my $n ($max + 1 .. $max + $count) {
+        my $self = $table->new({
+            n => $n,
             ming => 1,
-            maxg => $_,
-            status => 0,
+            maxg => $n,
+            status => (is_prime($n) ? [ 'prime' ] : 0),
             checked => $zero,
-        }, $max + 1 .. $max + $count
-    ]);
+        });
+        $self->insert;
+    }
 }
 
 sub good {
