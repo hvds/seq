@@ -7,12 +7,14 @@ use H::Heap;
 use Math::GMP;
 use POSIX qw{ :sys_wait_h };
 
-my($opt_recreate, $debug, $report) = (0, 0, 0);
+my($opt_recreate, $debug, $report, $opt_strategy) = (0, 0, 0);
 my($maxproc, $maxrun, $drain) = (10, 100, 0);
+$SIG{'HUP'} = sub { $drain = 1 };
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift(@ARGV);
     last if $arg eq '--';
     $opt_recreate = 1, next if $arg eq '-r';
+    $opt_strategy = 1, next if $arg eq '-s';
     $report = 1, next if $arg eq '-p';
     $debug = 1, next if $arg eq '-d';
     die "Unknown option '$arg'";
@@ -35,6 +37,8 @@ if ($report) {
     report($db, @ARGV);
     exit 0;
 }
+
+Seq::Run->restrategise($db) if $opt_strategy;
 my $prio = H::Heap->new(q{ $b->priority <=> $a->priority });
 $prio->insert(Seq::Starter->new(2, $maxproc));
 my(%pid, @runnable);

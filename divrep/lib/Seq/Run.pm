@@ -54,6 +54,16 @@ sub gen {
     return $self;
 }
 
+sub restrategise {
+    my($class, $db) = @_;
+    for my $self ($db->resultset($TABLE)->search_bitfield(
+        { complete => 0 },
+    )->all) {
+        unlink $self->logpath if $self->running;
+        $self->delete;
+    }
+}
+
 sub lastForN {
     my($self, $db, $n) = @_;
     return $db->resultset($TABLE)->find({
