@@ -38,6 +38,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
 
 $| = 1;
 my($n, $f) = map MBI($_), @ARGV;
+$0 = "gt($n $f)";
 $_ = ston($_) for ($opt_n, $opt_x);
 
 my $zone = MBI(1);
