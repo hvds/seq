@@ -19,7 +19,7 @@ __PACKAGE__->define($TABLE, 'run', [
     'key id runid',
     'uint n',
     'uint k',
-    'flags(complete running optimizing) status',
+    'flags(complete running optimizing fix_power) status',
     'bigint optn',
     'bigint optx',
     'uint optc',
@@ -141,7 +141,7 @@ sub finalize {
     my $ren = qr{\d+(?:e\d+)?};
     my $rend = sub { $_[0] =~ s{e(\d+)$}{0 x length($1)}er };
 
-    my($good, $bad, $ugly, $depend_m, $depend_n);
+    my($good, $bad, $ugly, $depend_m, $depend_n, $fix_power);
     for (@{ $line{309} // [] }) {
         /\((\d+\.\d*)s\)$/ && $self->preptime($1);
     }
@@ -198,6 +198,9 @@ sub finalize {
             ++$best if $best == $s && $tau == $t;
         }
     }
+    for (@{ $line{311} // [] }) {
+        $fix_power = 1;
+    }
     if ($good && $best < $self->k) {
         return $self->failed("Inconsistent results: success with best $best");
     }
@@ -205,6 +208,7 @@ sub finalize {
         return $self->failed("No valid result in $log");
     }
 
+    $self->fix_power(1) if $fix_power;
     $self->complete(1);
     $self->update;
 
