@@ -133,8 +133,8 @@ sub report {
             join(' ', @{ $r->command }),
             $r->complete ? sprintf('complete %.3f + %.3f',
                     $r->preptime, $r->runtime)
-            : $r->running ? 'running'
-            : 'waiting';
+            : sprintf('%s, prio %.2f',
+                    $r->running ? 'running' : 'waiting', $r->priority);
     }
 }
 
