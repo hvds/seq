@@ -3,14 +3,14 @@ use strict;
 use warnings;
 
 use Math::GMP;
-use List::Util qw{ first min };
+use List::Util qw{ first min max };
 
 my $zero = Math::GMP->new('0');
 # Assume we don't need to do anything clever to check values to this limit.
 my $SIMPLE = Math::GMP->new(1 << 20);
 # Assume we don't need to do much clever if expected runtime is this fast.
-my $FAST = 60;
-my $SLOW = 3600;
+my $FAST = 10;
+my $SLOW = 600;
 
 =head1 NAME
 
@@ -41,6 +41,7 @@ $tauf->define($TABLE, 'tauf', [
     'maybe bigint f',
     'maybe bigint depend_m',
     'maybe uint depend_n',
+    'maybe uint minc',
     'flags(complete external estimated depend) status',
     'float priority',
 ]);
@@ -141,24 +142,35 @@ sub _strategy {
                 optn => $g->checked || 1,
                 optx => $SIMPLE,
                 optc => 100,
-                priority => 0,
+                priority => $g->priority,
             },
         );
     }
     my $r = $self->lastRun($db);
     my $x = $g->checked * 2;
-if (grep !defined($_), ($r->preptime, $r->runtime, $x, $r->optx, $r->optn)) { print $g->Dump, $self->Dump, $r->Dump }
-    my $expect = (
-        $r->preptime
-        + $r->runtime * $x->intify / ($r->optx + 1 - $r->optn)->intify
-    ) || 1;
-    if ($expect < $SLOW) {
+    my $_n = sub { "$_[0]" + 0 };
+    my $prep = $r->preptime;
+    my $run = $r->runtime * $_n->($x) / $_n->($r->optx + 1 - $r->optn);
+    my $expect = ($prep + $run) || 1;
+    my $optc;
+    if ($expect < $FAST) {
+        $optc = max(100, $r->optc / 2);
+    } else {
+        $optc = 100 + $x->sizeinbase_gmp(2) * 50;
+        $optc /= 4 if $r->fix_power;
+    }
+    $optc = ($optc + $r->optc) / 2 if (
+        ($optc > $r->optc && $prep > $run)
+        || ($optc < $r->optc && $prep < $run / 10)
+    );
+    $optc = max($optc, $self->minc // 0);
+    if (1 || $expect < $FAST) {
         return Seq::Run->gen(
             $self, $db, {
                 optn => $g->checked + 1,
                 optx => $x,
-                optc => 1000,
-                priority => min(0, -log($expect / 30) / log(2)),
+                optc => $optc,
+                priority => $g->priority + min(0, -log($expect) / log(2)),
             },
         );
     }
