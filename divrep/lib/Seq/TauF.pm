@@ -1,6 +1,7 @@
 package Seq::TauF;
 use strict;
 use warnings;
+use feature qw{state};
 
 use Math::GMP;
 use List::Util qw{ first min max };
@@ -147,34 +148,54 @@ sub _strategy {
         );
     }
     my $r = $self->lastRun($db);
-    my $x = $g->checked * 2;
+    my $optn = $g->checked + 1;
+    my $optx = $g->checked * 2;
     my $_n = sub { "$_[0]" + 0 };
     my $prep = $r->preptime;
-    my $run = $r->runtime * $_n->($x) / $_n->($r->optx + 1 - $r->optn);
+    my $run = $r->runtime * $_n->($optx + 1 - $optn)
+            / $_n->($r->optx + 1 - $r->optn);
     my $expect = ($prep + $run) || 1;
+
+    # decide what -c value to supply
     my $optc;
     if ($expect < $FAST) {
         $optc = max(100, $r->optc / 2);
     } else {
-        $optc = 100 + $x->sizeinbase_gmp(2) * 50;
+        $optc = 100 + $optx->sizeinbase_gmp(2) * 50;
         $optc /= 4 if $r->fix_power;
     }
+    my $eprep = $prep * $optc / $r->optc;
     $optc = ($optc + $r->optc) / 2 if (
         ($optc > $r->optc && $prep > $run)
         || ($optc < $r->optc && $prep < $run / 10)
     );
     $optc = max($optc, $self->minc // 0);
-    if (1 || $expect < $FAST) {
+    $eprep = $prep * $optc / $r->optc;
+    $expect = ($eprep + $run) || 1;
+
+    if ($expect < $SLOW) {
         return Seq::Run->gen(
             $self, $db, {
-                optn => $g->checked + 1,
-                optx => $x,
+                optn => $optn,
+                optx => $optx,
                 optc => $optc,
                 priority => $g->priority + min(0, -log($expect) / log(2)),
             },
         );
     }
-    die "TODO: more strategies";
+
+    # If it's slow we could try sharding, but for now just reduce the range
+    my $factor = (1 + $SLOW / $expect) / 2;
+    $optx = _muld($optx, $factor);
+    $expect *= $factor;
+    return Seq::Run->gen(
+        $self, $db, {
+            optn => $optn,
+            optx => $optx,
+            optc => $optc,
+            priority => $g->priority + min(0, -log($expect) / log(2)),
+        },
+    );
 }
 
 sub lastRun {
@@ -226,6 +247,19 @@ sub allFor {
         { n => $taug->n },
         { order_by => 'k' },
     )->all ];
+}
+
+# Multiply bigint first arg by NV second arg, returning bigint.
+# When muld is not available, we risk loss of accuracy and overflow.
+sub _muld {
+    state $have_muld = Math::GMP->can('muld') ? 1 : 0;
+    if ($have_muld) {
+        return $_[0]->muld($_[1]);
+    } else {
+        return Math::GMP->new(
+            int("$_[0]" * $_[1])
+        );
+    }
 }
 
 1;
