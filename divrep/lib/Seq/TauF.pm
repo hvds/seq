@@ -210,7 +210,10 @@ sub nextFor {
             k => $next,
             f => $zero,
         });
-if ($self->k > $self->n) { print $self->Dump, $taug->Dump; use Carp; Carp::confess("bad") }
+        # Hack: hardcode this until we can determine automatically for fix_power
+        if ($self->n == 72) {
+            $self->minc(200);
+        }
         $self->priority($taug->priority);
         $self->insert;
     }
