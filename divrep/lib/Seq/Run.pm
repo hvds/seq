@@ -2,6 +2,8 @@ package Seq::Run;
 use strict;
 use warnings;
 
+use List::Util qw{ max };
+
 my $PROG = './gtauseq';
 my $LOGS = './logs';
 
@@ -142,7 +144,7 @@ sub finalize {
     my $ren = qr{\d+(?:e\d+)?};
     my $rend = sub { $_[0] =~ s{e(\d+)$}{0 x $1}er };
 
-    my($good, $bad, $ugly, $depend_m, $depend_n, $fix_power);
+    my($good, $bad, $ugly, $depend_m, $depend_n, $fix_power, $last_fail);
     for (@{ $line{309} // [] }) {
         /\((\d+\.\d*)s\)$/ && $self->preptime($1);
     }
@@ -157,6 +159,15 @@ sub finalize {
                 or return $self->failed("(n, k) mismatch in '$_'");
         $self->runtime($t - $self->preptime);
         $good = $rend->($d);
+    }
+    for (( $line{301} // [] )->[-1] // ()) {
+        my($n, $k, $d) = m{
+            ^ 301 \s+ After \s+ [\d\.]+s \s+ for \s+ \( (\d+) ,\s+ (\d+) \)
+            \s+ reach \s+ d=(\d+) \s+
+        }x or return $self->failed("Can't parse 301 result: '$_'");
+        $n == $self->n && $k == $self->k
+                or return $self->failed("(n, k) mismatch in '$_'");
+        $last_fail = $d;
     }
     for (@{ $line{500} // [] }) {
         my($n, $k, $d, $t) = m{
@@ -214,7 +225,10 @@ sub finalize {
     $self->update;
 
     return $self->f->good($db, $self, $good, $best) if $good;
-    return $self->f->bad($db, $self, $bad) if $bad;
+    if ($bad) {
+        my $badm = max(map Math::GMP->new($_), $bad, grep defined, $last_fail);
+        return $self->f->bad($db, $self, $badm);
+    }
     return $self->f->ugly($db, $self) if $ugly;
     return $self->f->depends($db, $depend_m, $depend_n) if $depend_n;
     die "panic";
