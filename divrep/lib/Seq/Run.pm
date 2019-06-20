@@ -139,7 +139,7 @@ sub finalize {
     }
 
     my $ren = qr{\d+(?:e\d+)?};
-    my $rend = sub { $_[0] =~ s{e(\d+)$}{0 x length($1)}er };
+    my $rend = sub { $_[0] =~ s{e(\d+)$}{0 x $1}er };
 
     my($good, $bad, $ugly, $depend_m, $depend_n, $fix_power);
     for (@{ $line{309} // [] }) {
