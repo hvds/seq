@@ -44,22 +44,25 @@ $prio->insert(Seq::Starter->new(2, $maxproc));
 my(%pid, @runnable);
 
 while (1) {
-    unless (!$drain && @runnable) {
+    if ($drain) {
+        print "Draining\n";
+        waitFor($db, \%pid, 1) while keys %pid;
+        last;
+    }
+
+    if (@runnable) {
+        if (keys(%pid) >= $maxproc) {
+            waitFor($db, \%pid, 1);
+        } else {
+            my $r = shift @runnable;
+            $pid{ $r->run } = $r;
+            $drain = 1, next if --$maxrun <= 0;
+        }
+    } else {
         my $obj = $prio->fetch;
         $prio->insert($_) for $obj->prep($db);
         push @runnable, $obj->runnable;
     }
-
-    while (!$drain && @runnable && keys(%pid) < $maxproc) {
-        my $r = shift @runnable;
-        $pid{ $r->run } = $r;
-        $drain = 1, print("Draining\n") if --$maxrun <= 0;
-    }
-
-    if (@runnable && ($drain || keys(%pid) == $maxproc)) {
-        waitFor($db, \%pid, 1);
-    }
-    last if $drain && !keys %pid;
 }
 exit 0;
 
