@@ -119,6 +119,7 @@ sub run {
 
 sub failed {
     my($self, $warning) = @_;
+    warn $warning;
     $self->running(0);
     $self->update;
     return ();
