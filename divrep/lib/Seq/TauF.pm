@@ -187,7 +187,8 @@ sub _strategy {
     # If it's slow we could try sharding, but for now just reduce the range
     my $factor = (1 + $SLOW / $expect) / 2;
     $optx = _muld($optx, $factor);
-    $expect *= $factor;
+    # don't increase priority just because we're reducing the range
+    # $expect *= $factor;
     return Seq::Run->gen(
         $self, $db, {
             optn => $optn,
