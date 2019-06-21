@@ -1,0 +1,74 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use lib 'lib';
+use List::Util qw{ sum };
+
+my $PROG = './gtauseq';
+my $LOGS = './logs';
+
+@ARGV == 4 or die "500 Usage: $0 n k d maxc";
+
+=head1 bisect-fp: find minimum check for fix_power
+
+Given inputs I<n>, I<k>, I<d> and I<maxc>, attempts to find the
+minimum C<-c> value needed to detect a I<fix_power> opportunity
+for C<< f(n, k) >= d >> by bisection.
+
+It is assumed a previous run with C<< -c I<maxc> >> did detect
+the I<fix_power>, thus giving an upper bound for the bisection.
+
+This is expected to be used by the harness to ensure that as we
+refine I<optc> we don't accidentally lose this powerful optimization.
+
+=cut
+
+my($n, $k, $d, $maxc) = @ARGV;
+
+my($bad, $good) = (0, $maxc);
+while ($bad + 1 < $good) {
+    my $mid = ($good + $bad) >> 1;
+    if (good($mid)) {
+        $good = $mid;
+    } else {
+        $bad = $mid;
+    }
+}
+my $time = sum(times());
+printf "200 f(%s, %s) needs -c %s to find fix_power (%.2fs)\n",
+        $n, $k, $good, $time;
+exit 0;
+
+sub good {
+    my($c) = @_;
+    my $log = sprintf "%s/bfp%s.%s-%s", $LOGS, $n, $c, $$;
+    my $pid = fork();
+    my @args = (
+        "bfp($n, $k)",
+        '-n', $d, '-x', $d, '-c', $c, '-D',
+        $n, $k,
+    );
+    unless ($pid) {
+        open STDOUT, '>', $log
+                or die "503 Can't open $log for writing: $!";
+        exec($PROG @args) or die "505 Could not exec $PROG";
+    }
+
+    waitpid($pid, 0);
+    open my $f, '<', $log
+            or die "504 Can't open $log for reading: $!";
+    my %line;
+    while (<$f>) {
+        chomp;
+        my($rc) = /^(\d{3}) /
+                or die "502 Can't parse log line '$_'";
+        push @{ $line{$rc} }, $_;
+    }
+    my $good = $line{311} ? 1 : 0;
+    if ($line{309}) {
+        # Prep finished, frequency 36.91 (184.980s)
+        return $good;
+    }
+    # Not an expected result.
+    die "501 Error parsing logs from '$log'\n";
+}
