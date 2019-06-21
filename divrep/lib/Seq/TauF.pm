@@ -151,8 +151,11 @@ sub _strategy {
     my $optx = $g->checked * 2;
     my $_n = sub { "$_[0]" + 0 };
     my $prep = $r->preptime;
+
+    # Note, must use $g->checked for the range, since the last run need
+    # not have reached $r->optx.
     my $run = $r->runtime * $_n->($optx + 1 - $optn)
-            / $_n->($r->optx + 1 - $r->optn);
+            / $_n->($g->checked + 1 - $r->optn);
     my $expect = ($prep + $run) || 1;
 
     # decide what -c value to supply
