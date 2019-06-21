@@ -95,6 +95,13 @@ sub bad {
     return $self->g->bad($db, $bad);
 }
 
+sub set_minc {
+    my($self, $db, $minc) = @_;
+    $self->minc($minc);
+    $self->update;
+    return ($self);
+}
+
 sub depends {
     my($self, $db, $depend_m, $depend_n) = @_;
     $self->depend(1);
@@ -136,6 +143,7 @@ sub update_depends {
 sub _strategy {
     my($self, $db) = @_;
     my $g = $self->g;
+
     if ($g->checked < $SIMPLE) {
         return Seq::Run->gen(
             $self, $db, {
@@ -146,7 +154,16 @@ sub _strategy {
             },
         );
     }
+
+    # This must exist if we're not SIMPLE
     my $r = $self->lastRun($db);
+
+    # If we've seen a fix_power once, make sure we set a min value for -c
+    # so we don't lose it again.
+    if ($r->fix_power && ! $self->minc) {
+        return Seq::Run::BisectFP->new($g, $self, $r->optc);
+    }
+
     my $optn = $g->checked + 1;
     my $optx = $g->checked * 2;
     my $_n = sub { "$_[0]" + 0 };
@@ -238,16 +255,14 @@ sub nextFor {
     my $coll = $class->allFor($taug, $db);
     my $self = first { !$_->complete } @$coll;
     if (!$self) {
-        my $next = @$coll ? $coll->[-1]->k + 1 : 2;
+        my $last = $coll->[-1];
+        my $nextk = $last ? $last->k + 1 : 2;
         $self = $db->resultset($TABLE)->new({
             n => $taug->n,
-            k => $next,
+            k => $nextk,
             f => $zero,
         });
-        # Hack: hardcode this until we can determine automatically for fix_power
-        if ($self->n == 72) {
-            $self->minc(200);
-        }
+        $self->minc($last->minc) if $last;
         $self->priority($taug->priority);
         $self->insert;
     }

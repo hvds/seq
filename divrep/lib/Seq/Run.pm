@@ -3,6 +3,7 @@ use strict;
 use warnings;
 
 use Seq::Run::BisectG;
+use Seq::Run::BisectFP;
 use List::Util qw{ max };
 
 my $PROG = './gtauseq';
