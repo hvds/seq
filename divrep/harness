@@ -46,7 +46,7 @@ my(%pid, @runnable);
 
 while (1) {
     if ($drain) {
-        print "Draining\n";
+        printf "Draining %s processes\n", 0 + keys %pid;
         waitFor($db, \%pid, 1) while keys %pid;
         last;
     }
