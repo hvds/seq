@@ -102,36 +102,35 @@ sub depends {
     $self->depend_n($depend_n);
     $self->complete(1);
     $self->update;
-    my $max_known = $self->k - 1;
+    return $self->g->depends($db, $self->k - 1, $depend_n);
+}
+
+sub update_depends {
+    my($class, $db, $g) = @_;
     my $table = $db->resultset($TABLE);
-    my $dep = $table->search(
+    my $self = ($g->f->all)[-1];
+    my $depending = $table->search(
         {
-            n => $depend_n,
-            k => { '>', $max_known },
+            n => $self->depend_n,
+            k => { '>=', $self->k },
         },
         { order_by => 'k' },
     )->search_bitfield({ complete => 1 });
-    for my $d ($dep->all) {
-        last unless $d->f;
-        if ($d->k == $self->k) {
-            $self->f($d->f * $depend_m);
-            $max_known = $self->k;
-        } else {
-            my $extra = $table->new({
-                n => $self->n,
-                k => $d->k,
-                f => $d->f * $depend_m,
-                depend_m => $depend_m,
-                depend_n => $depend_n,
-                priority => 0,
-            });
-            $extra->complete(1);
-            $extra->depend(1);
-            $extra->insert;
-            $max_known = $d->k;
-        }
+    for my $d ($depending->all) {
+        my $this = ($d->k == $self->k) ? $self : $table->new({
+            n => $self->n,
+            k => $d->k,
+        });
+        $this->f($d->f * $self->depend_m);
+        $this->depend_m($self->depend_m);
+        $this->depend_n($self->depend_n);
+        $this->priority(0);
+        $this->depend(1);
+        $this->complete(1);
+        ($this == $self) ? $this->update : $this->insert;
+        $g->good($db, $this->k, $this->f);
     }
-    return $self->g->depends($db, $max_known, $depend_n);
+    return;
 }
 
 sub _strategy {

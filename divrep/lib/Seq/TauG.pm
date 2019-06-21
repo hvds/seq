@@ -134,7 +134,19 @@ sub depends {
     $self->depend_n($depend_n);
     my $d = $db->resultset($TABLE)->find({ n => $depend_n });
     $self->maxg($d->maxg);
+    Seq::TauF->update_depends($db, $self);
     return $self->final($db);
+}
+
+sub update_depends {
+    my($self, $db) = @_;
+    my $dep = $db->resultset($TABLE)->find({ n => $self->depend_n });
+    Seq::TauF->update_depends($db, $self);
+    if ($dep->complete) {
+        $self->complete(1);
+        $self->update;
+    }
+    return;
 }
 
 sub final {
