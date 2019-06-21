@@ -60,7 +60,6 @@ printf <<OUT, $c->elapsed(), 'rootseq', $n, $f, ntos($opt_n), ntos($opt_x), modf
 300 Init %.2f: trying %s() for (%s, %s) in [%s, %s], %schecks up to mod %s
 OUT
 mod_dump($c, $opt_dm) if @$opt_dm;
-exit 0 if $opt_D;
 
 my $d = rootseq($c);
 if ($d) {
@@ -643,6 +642,8 @@ sub iter_factor {
         printf <<OUT, $c->frequency(), $c->elapsed();
 309 Prep finished, frequency %.2f (%.3fs)
 OUT
+        exit 0 if $opt_D;
+
         CUR: while ($cur = $c->next()) {
             report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
             for (0 .. $#$tester) {
