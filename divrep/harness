@@ -85,6 +85,9 @@ sub report {
         for my $g ($db->resultset('TauG')->search(
             undef, { order_by => 'n' }
         )->all) {
+            if ($g->depend && !$g->complete) {
+                $g->update_depends($db);
+            }
             if ($g->complete) {
                 printf "g(%s) = %s\n", $g->n, $g->maxg;
             } elsif ($g->depend) {
