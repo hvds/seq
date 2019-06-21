@@ -183,19 +183,29 @@ sub _strategy {
         );
     }
 
+    my $bisect = $self->maybe_bisectg($expect);
+
     # If it's slow we could try sharding, but for now just reduce the range
     my $factor = (1 + $SLOW / $expect) / 2;
     $optx = _muld($optx, $factor);
     # don't increase priority just because we're reducing the range
     # $expect *= $factor;
-    return Seq::Run->gen(
+    return (Seq::Run->gen(
         $self, $db, {
             optn => $optn,
             optx => $optx,
             optc => $optc,
             priority => $g->priority + min(0, -log($expect) / log(2)),
         },
-    );
+    ), ($bisect // ()));
+}
+
+sub maybe_bisectg {
+    my($self, $expect) = @_;
+    my $depth = 1000 * (1 + int(log($expect / $SLOW) / log(10)));
+    my $g = $self->g;
+    return undef if $depth <= ($g->bisected // 0);
+    return Seq::Run::BisectG->new($g, $self, $depth);
 }
 
 sub lastRun {

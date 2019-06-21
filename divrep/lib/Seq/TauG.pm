@@ -46,9 +46,11 @@ $taug->define($TABLE, 'taug', [
     'key uint n',
     'uint ming',
     'uint maxg',
-    'maybe uint depend_n',
-    'flags(complete depend prime) status',
     'bigint checked',
+    'maybe uint depend_n',
+    'maybe uint bisected',
+    'maybe float bisect_time',
+    'flags(complete depend prime) status',
 ]);
 $taug->has_many(f => 'Seq::TauF', 'n');
 
@@ -124,6 +126,20 @@ sub bad {
 sub ugly {
     my($self, $db, $maxg) = @_;
     $self->maxg($maxg - 1);
+    return $self->final($db);
+}
+
+sub bisect {
+    my($self, $db, $maxg, $bisected, $btime) = @_;
+    return () if ($self->bisected // 0) >= $bisected;
+    my $old_maxg = $self->maxg;
+    $self->maxg($maxg);
+    if ($maxg < $old_maxg) {
+        printf "g(%s) <= %s  [bisect %s]\n",
+                $self->n, $maxg, $bisected;
+    }
+    $self->bisected($bisected);
+    $self->bisect_time($btime);
     return $self->final($db);
 }
 
