@@ -109,6 +109,12 @@ sub run {
     my($self, $db) = @_;
     my $cmd = $self->command;
     my $log = $self->logpath;
+    if ($self->running || -e $log) {
+        use Carp;
+        warn Carp::longmess(sprintf"already running: %s for %s %s\n",
+                $self->runid, $self->n, $self->k);
+        return undef;
+    }
     if (my $pid = fork()) {
         $self->running(1);
         $self->update;

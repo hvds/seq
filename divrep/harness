@@ -56,8 +56,11 @@ while (1) {
             waitFor($db, \%pid, 1);
         } else {
             my $r = shift @runnable;
-            $pid{ $r->run } = $r;
-            $drain = 1, next if --$maxrun <= 0;
+            my $pid = $r->run;
+            if ($pid) {
+                $pid{$pid} = $r;
+                $drain = 1, next if --$maxrun <= 0;
+            }
         }
     } else {
         my $obj = $prio->fetch;
