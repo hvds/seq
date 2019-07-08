@@ -136,7 +136,7 @@ sub next {
     };
     my $sc = $self->{'sc'};
     my($t, $u) = (0, 0);
-    $cur = Constraint::cnext($cur, $mult, $sc, $rebuild);
+    $cur = Constraint::cnext($cur, $mult, $sc, $rebuild, $self->max);
     $self->{'cur'} = $cur;
     $self->{'tests'} += $t;
     $self->{'skipped'} += $u;

@@ -478,21 +478,6 @@ SV* _calc_result() {
     return result;
 }
 
-void _rebase_sc() {
-    SV* newbase;
-    int i;
-    SAVETMPS;
-    newbase = _calc_result();
-    SvREFCNT_dec(scl->base);
-    scl->base = newbase;
-    scl->iter = 0;
-    for (i = 0; i < scl->len; ++i) {
-        scmod* scm = &scl->sc[i];
-        scm->basemod = sv_2uv(amagic_call(newbase, scm->svmod, modulo_amg, 0));
-    }
-    FREETMPS;
-}
-
 
 
 #define MAX_TMPS 1000
@@ -512,12 +497,16 @@ U32 lkept() { return count_kept & (0xffffffff); }
  * mult: GMP BigInt, the step to increment cur by
  * sc: arrayref of [mod, ?, vec, ...] arrayrefs
  *
- * Repeatedly increase cur by mult until a value is find such that
+ * Repeatedly increase cur by mult until a value is found such that
  * vec(sc[i].vec, (cur % sc[i].mod), 1) == 0 for all i.
  *
  * Returns the first qualifying value of cur.
+ *
+ * Note: optimizations here assume we'll get to do many tests before
+ * having to recalculate at (roughly) floor(MAXUINT / mult); if mult is
+ * high enough (plausible for high prime runs) that may become invalid.
  */
-SV* cnext(SV* cur, SV* mult, AV* sc, I32 rebuild) {
+SV* cnext(SV* cur, SV* mult, AV* sc, I32 rebuild, SV* max) {
     int found;
     I32 i;
     UV off;
@@ -548,7 +537,28 @@ SV* cnext(SV* cur, SV* mult, AV* sc, I32 rebuild) {
                 return result;
             }
         }
-        _rebase_sc();
+        /* rebase sc */
+        {
+            SV *newbase, *cmp;
+            int i;
+            SAVETMPS;
+            newbase = _calc_result();
+            SvREFCNT_dec(scl->base);
+            scl->base = newbase;
+            scl->iter = 0;
+            for (i = 0; i < scl->len; ++i) {
+                scmod* scm = &scl->sc[i];
+                scm->basemod = sv_2uv(
+                        amagic_call(newbase, scm->svmod, modulo_amg, 0));
+            }
+            /* if $cur > $max, return $cur so we can abort */
+            cmp = amagic_call(newbase, max, gt_amg, 0);
+            if (SvTRUE_nomg(cmp)) {
+                FREETMPS;
+                return newbase;
+            }
+            FREETMPS;
+        }
     }
     /* NOTREACHED */
 }
@@ -579,7 +589,7 @@ sub next {
     };
     my $sc = $self->{'sc'};
     my($t, $u) = (0, 0);
-    $cur = Constraint::cnext($cur, $mult, $sc, $rebuild);
+    $cur = Constraint::cnext($cur, $mult, $sc, $rebuild, $self->max);
     $self->{'cur'} = $cur;
     $self->{'tests'} += $t;
     $self->{'skipped'} += $u;
