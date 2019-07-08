@@ -7,7 +7,7 @@ use H::Heap;
 use Math::GMP;
 use POSIX qw{ :sys_wait_h };
 
-my($opt_recreate, $debug, $report, $opt_strategy, $opt_composite) = (0, 0, 0);
+my($opt_recreate, $debug, $opt_strategy) = (0, 0, 0);
 my($maxproc, $maxrun, $drain) = (10, 100, 0);
 $SIG{'HUP'} = sub { $drain = 1 };
 while (@ARGV && $ARGV[0] =~ /^-/) {
@@ -15,13 +15,11 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     last if $arg eq '--';
     $opt_recreate = 1, next if $arg eq '-r';
     $opt_strategy = 1, next if $arg eq '-s';
-    $opt_composite = 1, next if $arg eq '-c';
-    $report = 1, next if $arg eq '-p';
     $debug = 1, next if $arg eq '-d';
     die "Unknown option '$arg'";
 }
-$maxproc = shift(@ARGV) if @ARGV && !$report;
-$maxrun = shift(@ARGV) if @ARGV && !$report;
+$maxproc = shift(@ARGV) if @ARGV;
+$maxrun = shift(@ARGV) if @ARGV;
 
 local @ENV{qw{ DBI_TRACE DBIC_TRACE }} = (1, 1) if $debug;
 my $db = Seq::Db->new({
@@ -33,11 +31,6 @@ my $db = Seq::Db->new({
 
 use Data::Dumper;
 local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
-
-if ($report) {
-    report($db, @ARGV);
-    exit 0;
-}
 
 Seq::Run->restrategise($db) if $opt_strategy;
 my $prio = H::Heap->new(q{ $b->priority <=> $a->priority });
@@ -81,74 +74,6 @@ sub waitFor {
     my $time = $t1[2] + $t1[3] - $t0[2] - $t0[3];
     $prio->insert($_) for $obj->finalize($db, $time);
     return 1;
-}
-
-sub report {
-    my($db, $n, $k) = @_;
-    if (!$n) {
-        for my $g ($db->resultset('TauG')->search(
-            undef, { order_by => 'n' }
-        )->all) {
-            if ($g->depend && !$g->complete) {
-                $g->update_depends($db);
-            }
-            next if $opt_composite && (
-                $g->prime || $g->complete || $g->depend
-            );
-            if ($g->complete) {
-                printf "g(%s) = %s\n", $g->n, $g->maxg;
-            } elsif ($g->depend) {
-                printf "g(%s) = g(%s)\n", $g->n, $g->depend_n;
-            } else {
-                printf "g(%s) in [%s .. %s], checked to %s\n",
-                        $g->n, $g->ming, $g->maxg, $g->checked;
-            }
-        }
-        return;
-    }
-    if (!$k) {
-        my $g = $db->resultset('TauG')->find({ n => $n });
-        if ($g->complete) {
-            printf "g(%s) = %s\n", $g->n, $g->maxg;
-        } elsif ($g->depend) {
-            printf "g(%s) = g(%s)\n", $g->n, $g->depend_n;
-        } else {
-            printf "g(%s) in [%s .. %s], checked to %s\n",
-                    $g->n, $g->ming, $g->maxg, $g->checked;
-        }
-        my $max = $g->maxg;
-        for my $f (@{ $g->fall($db) }) {
-            if ($f->complete && !$f->depend) {
-                if ($f->f) {
-                    printf "f(%s, %s) = %s\n", $f->n, $f->k, $f->f;
-                } elsif ($f->k <= $max) {
-                    printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked;
-                } # else ignore, it was proven impossible
-            } elsif ($f->complete && $f->depend) {
-                if ($f->f) {
-                    printf "f(%s, %s) = %s = %s f(%s, %s)\n",
-                            $f->n, $f->k, $f->f, $f->depend_m, $f->depend_n, $f->k;
-                } else {
-                    printf "f(%s, %s) = %s f(%s, %s)\n",
-                            $f->n, $f->k, $f->depend_m, $f->depend_n, $f->k;
-                }
-            } else {
-                printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked
-                        unless $g->depend;
-            }
-        }
-        return;
-    }
-    my $g = $db->resultset('TauG')->find({ n => $n });
-    my $f = $db->resultset('TauF')->find({ n => $n, k => $k });
-    for my $r ($f->runs->all) {
-        printf "[%s] %s\n",
-            join(' ', @{ $r->command }),
-            $r->complete ? sprintf('complete %.3f + %.3f',
-                    $r->preptime, $r->runtime)
-            : sprintf('%s, prio %.2f',
-                    $r->running ? 'running' : 'waiting', $r->priority);
-    }
 }
 
 package Seq::Starter {

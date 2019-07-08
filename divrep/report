@@ -1,0 +1,200 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use lib ('../lib', 'lib');
+use Seq::Db;
+use Math::GMP;
+use Math::Prime::Util qw{ factor_exp };
+use List::Util qw{ first };
+
+my($debug, $opt_composite, $opt_table) = (0, 0, 0);
+my $filter = sub { 1 };
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift(@ARGV);
+    last if $arg eq '--';
+    $debug = 1, next if $arg eq '-d';
+    $opt_composite = 1, next if $arg eq '-c';
+    $opt_table = 1, next if $arg eq '-t';
+    $filter = chain_sig($filter, $1 || shift(@ARGV)), next
+            if $arg =~ /^-s(.*)/;
+    $filter = chain_min($filter, $1 || shift(@ARGV)), next
+            if $arg =~ /^-n(.*)/;
+    $filter = chain_max($filter, $1 || shift(@ARGV)), next
+            if $arg =~ /^-x(.*)/;
+    die "Unknown option '$arg'";
+}
+my($n, $k) = @ARGV;
+
+local @ENV{qw{ DBI_TRACE DBIC_TRACE }} = (1, 1) if $debug;
+my $db = Seq::Db->new({
+    db => 'tauseq',
+    user => 'hv',
+    passwd => 'hv',
+});
+
+use Data::Dumper;
+local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
+
+if (!$n) {
+    report_g();
+} elsif (!$k) {
+    report_f();
+} else {
+    report_run();
+}
+exit 0;
+
+sub report_g {
+    for my $g ($db->resultset('TauG')->search(
+        undef, { order_by => 'n' }
+    )->all) {
+        my $n = $g->n;
+        next unless $filter->($n);
+        if ($g->depend && !$g->complete) {
+            $g->update_depends($db);
+        }
+        next if $opt_composite && (
+            $g->prime || $g->complete || $g->depend
+        );
+        if ($opt_table) {
+            my $f = (
+                !$g->complete && $g->depend && $g->depended->ming == $g->ming
+            ) ? sprintf('g(%s)', $g->depend_n)
+                : _fc(_maxf($g));
+            printf(
+                "%5s | %4s | %5s | %5s | %20s | %s\n",
+                $n, _tau($n), $g->ming, $g->maxg, $f, _comments($g),
+            );
+            next;
+        }
+        if ($g->complete) {
+            printf "g(%s) = %s\n", $g->n, $g->maxg;
+        } elsif ($g->depend) {
+            printf "g(%s) = g(%s)\n", $g->n, $g->depend_n;
+        } else {
+            printf "g(%s) in [%s .. %s], checked to %s\n",
+                    $g->n, $g->ming, $g->maxg, $g->checked;
+        }
+    }
+    return;
+}
+
+sub report_f {
+    my $g = $db->resultset('TauG')->find({ n => $n });
+    if ($g->complete) {
+        printf "g(%s) = %s\n", $g->n, $g->maxg;
+    } elsif ($g->depend) {
+        printf "g(%s) = g(%s)\n", $g->n, $g->depend_n;
+    } else {
+        printf "g(%s) in [%s .. %s], checked to %s\n",
+                $g->n, $g->ming, $g->maxg, $g->checked;
+    }
+    my $max = $g->maxg;
+    for my $f (@{ $g->fall($db) }) {
+        if ($f->impossible) {
+            printf "f(%s, %s) is impossible\n", $f->n, $f->k;
+        } elsif ($f->complete && !$f->depend) {
+            if ($f->f) {
+                printf "f(%s, %s) = %s\n", $f->n, $f->k, $f->f;
+            } elsif ($f->k <= $max) {
+                printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked;
+            } # else ignore, it was proven impossible
+        } elsif ($f->complete && $f->depend) {
+            if ($f->f) {
+                printf "f(%s, %s) = %s = %s f(%s, %s)\n",
+                        $f->n, $f->k, $f->f, $f->depend_m, $f->depend_n, $f->k;
+            } else {
+                printf "f(%s, %s) = %s f(%s, %s)\n",
+                        $f->n, $f->k, $f->depend_m, $f->depend_n, $f->k;
+            }
+        } else {
+            printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked
+                    unless $g->depend;
+        }
+    }
+    return;
+}
+
+sub report_run {
+    my $g = $db->resultset('TauG')->find({ n => $n });
+    my $f = $db->resultset('TauF')->find({ n => $n, k => $k });
+    for my $r ($f->runs->all) {
+        printf "[%s] %s\n",
+            join(' ', @{ $r->command }),
+            $r->complete ? sprintf('complete %.3f + %.3f',
+                    $r->preptime, $r->runtime // 0)
+            : sprintf('%s, prio %.2f',
+                    $r->running ? 'running' : 'waiting', $r->priority);
+    }
+}
+
+sub chain_min {
+    my($next, $min) = @_;
+    return sub { $_[0] >= $min && $next->($_[0]) };
+}
+
+sub chain_max {
+    my($next, $max) = @_;
+    return sub { $_[0] <= $max && $next->($_[0]) };
+}
+
+sub chain_sig {
+    my($next, $sig) = @_;
+    my $vsig = join ',', sort { $b <=> $a } split /,/, $sig;
+    return sub {
+        return 0 unless $next->($_[0]);
+        my $vn = join ',', sort { $b <=> $a } map $_->[1], factor_exp($_[0]);
+        return $vn eq $vsig ? 1 : 0;
+    };
+}
+
+sub _tau {
+    my($n) = @_;
+    my $k = 1;
+    $k *= $_->[1] + 1 for factor_exp($n);
+    return $k;
+}
+
+sub _maxf {
+    my($g) = @_;
+    my @f = grep $_->complete && $_->f, $g->f->all;
+    return @f ? $f[-1]->f : '-';
+}
+
+sub _comments {
+    my($g) = @_;
+    my $n = $g->n;
+    my @f = $g->f->all;
+    my @c;
+    if ($g->complete) {
+        push @c, 'complete';
+    } elsif ($g->depend) {
+        push @c, 'dependent';
+    } else {
+        push @c, sprintf 'checked %s', _fe('%.2g', $g->checked);
+    }
+    my $f = first { $_->complete && $_->depend } @f;
+    if ($f) {
+        push @c, sprintf'%s f(%s, k>%s)',
+                $f->depend_m, $f->depend_n, $f->k - 1;
+    }
+    $f = first { $_->minc } @f;
+    if ($f) {
+        my($r) = $f->runs->search_bitfield({ fix_power => 1 },
+                { limit => 1 })->all;
+        if ($r) {
+            push @c, sprintf 'fix_power: k >= %s, -c > %s',
+                    $r->k, $f->minc;
+        }
+    }
+    return join "; ", @c;
+}
+
+sub _fe {
+    my($ft, $n) = @_;
+    (sprintf $ft, $n) =~ s{e\+?0*(?=\d)}{e}r;
+}
+sub _fc {
+    my($n) = @_;
+    (sprintf '%s', $n) =~ s{(?<=\d)(?=(?:\d{3})+\z)}{,}gr;
+}
