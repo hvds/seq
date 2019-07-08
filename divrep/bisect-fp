@@ -69,6 +69,13 @@ sub good {
         # Prep finished, frequency 36.91 (184.980s)
         return $good;
     }
+    if ($line{402}) {
+        # The bisect is irrelevant, because a suitable opt_c shows
+        # the target is impossible.
+        printf "402 f(%s, %s) all values disallowed with -c %s (%.2fs)\n",
+                $n, $k, $c, sum(times());
+        exit 0;
+    }
     # Not an expected result.
     die "501 Error parsing logs from '$log'\n";
 }

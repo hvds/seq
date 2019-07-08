@@ -100,11 +100,24 @@ sub finalize {
         $n == $f->n && $k == $f->k
                 or return $self->failed("(n, k) mismatch in '$_'");
     }
+    for (@{ $line{402} // [] }) {
+        (my($n, $k), $minc) = m{
+            ^ 402 \s+ f\( (\d+) ,\s+ (\d+) \) \s+ all \s+ values \s+
+            disallowed \s+ with \s+ -c \s+ (\d+) \d+
+        }x or return $self->failed("Can't parse 402 line '$_'");
+        $n == $f->n && $k == $f->k
+                or return $self->failed("(n, k) mismatch in '$_'");
+        # We'll let the harness rediscover this for itself, to get
+        # a better trail of proof; for now we'll just let this force
+        # minc for the subsequent attempt.
+        # FALLTHROUGH
+    }
+
     if ($minc) {
         return $self->f->set_minc($db, $minc);
     }
     my $fail = join "\n", map @{ $line{$_} }, grep /^5/, keys %line;
-    return $self->failed("bisect failed: $_", $fail // 'unknown cause');
+    return $self->failed("bisect failed: %s", $fail // 'unknown cause');
 }
 
 1;
