@@ -172,6 +172,8 @@ sub final {
         printf "g(%s) = %s\n", $self->n, $self->maxg;
     }
     $self->update;
+    $_->delete for $self->f->search({ k => { '>', $self->maxg } })
+            ->search_bitfield({ 'complete' => 0 });
     return $self->complete ? () : ($self->fnext($db));
 }
 

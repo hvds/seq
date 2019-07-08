@@ -43,7 +43,7 @@ $tauf->define($TABLE, 'tauf', [
     'maybe bigint depend_m',
     'maybe uint depend_n',
     'maybe uint minc',
-    'flags(complete external estimated depend) status',
+    'flags(complete external estimated depend impossible) status',
     'float priority',
 ]);
 $tauf->belongs_to(
@@ -55,6 +55,11 @@ $tauf->has_many(
     runs => 'Seq::Run', {
         'foreign.n' => 'self.n',
         'foreign.k' => 'self.k',
+    },
+    {
+        order_by => 'runid',
+        # It is useful to keep them for debugging, but may need to reconsider
+        cascade_delete => 0,
     },
 );
 
@@ -86,6 +91,7 @@ sub good {
 sub ugly {
     my($self, $db, $run) = @_;
     $self->complete(1);
+    $self->impossible(1);
     $self->update;
     return $self->g->ugly($db, $self->k);
 }

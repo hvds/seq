@@ -3,6 +3,9 @@ use strict;
 use warnings;
 
 use DBI;
+BEGIN {
+    $ENV{DBIC_DONT_VALIDATE_RELS} = 1;
+}
 
 sub new {
     my($class, $args) = @_;
