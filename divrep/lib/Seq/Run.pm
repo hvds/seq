@@ -232,16 +232,22 @@ sub finalize {
     $self->fix_power(1) if $fix_power;
     $self->complete(1);
     $self->running(0);
-    $self->update;
 
-    return $self->f->good($db, $self, $good, $best) if $good;
-    if ($bad) {
-        my $badm = max(map Math::GMP->new($_), $bad, grep defined, $last_fail);
-        return $self->f->bad($db, $self, $badm);
-    }
-    return $self->f->ugly($db, $self) if $ugly;
-    return $self->f->depends($db, $depend_m, $depend_n) if $depend_n;
-    die "panic";
+    my @result =
+        $good ? $self->f->good($db, $self, $good, $best)
+        : $bad ? do {
+            my $badm = max(map Math::GMP->new($_),
+                    $bad, grep defined, $last_fail);
+            $self->f->bad($db, $self, $badm);
+        } : $ugly ? $self->f->ugly($db, $self)
+        : $depend_n ? $self->f->depends($db, $depend_m, $depend_n)
+        : die "panic";
+    eval { $self->update; 1 } or do {
+        my $e = $@;
+        print $self->Dump;
+        die $e;
+    };
+    return @result;
 }
 
 1;
