@@ -212,6 +212,19 @@ $c->debug && warn "apply $m\n";
         if ($fixpow) {
             # FIXME: can we construct and solve a Pell equation here?
             printf "317 Ignoring secondary fix_power(%s)\n", join ', ', @$force;
+            my($k1, $x1, $z1) = @$fixpow;
+            my($k2, $x2, $z2) = @$force;
+            if (($z1 & 1) == 0 && ($z2 & 1) == 0) {
+                my $a = ($k2 * $x1) ** ($z1 >> 1);
+                my $b = ($k1 * $x2) ** ($z2 >> 1);
+                my $c = $n * ($k2 - $k1);
+                my $g = gcd($a, gcd($b, $c));
+                $_ /= $g for ($a, $b, $c);
+                my $sign = '-';
+                ($sign, $b) = ('+', -$b) if $b < 0;
+                printf "317 satisfying Pell (%s x)^2 %s %s y^2 = %s\n",
+                        $a, $sign, $a * $b, $a * $c;
+            }
         } else {
             $fixpow = $force;
         }
