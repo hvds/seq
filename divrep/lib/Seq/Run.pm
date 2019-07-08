@@ -231,6 +231,7 @@ sub finalize {
 
     $self->fix_power(1) if $fix_power;
     $self->complete(1);
+    $self->running(0);
     $self->update;
 
     return $self->f->good($db, $self, $good, $best) if $good;
