@@ -28,8 +28,8 @@ my %types = (
     modlist => {
         data_type => 'text',
         munge => [
-            sub { join ' ', ${ $_[0] } },
-            sub { [ split /\s/, $_[0] ] },
+            sub { join ' ', @{ $_[0] } },
+            sub { [ split /\s+/, $_[0] ] },
         ],
     },
     flags => {
