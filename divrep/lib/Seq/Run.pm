@@ -54,7 +54,7 @@ sub gen {
         k => $tauf->k,
         %$args{qw{ optn optx optc optcp optm priority }},
     });
-    $self->optimizing(1) if $args->{optimizing};
+    $self->optimizing(1) if $args->{optimize} && !@{ $tauf->test_order };
     $self->insert;
     return $self;
 }
@@ -81,6 +81,7 @@ sub lastForN {
 
 sub command {
     my($self) = @_;
+    my $ts = join ',', @{ $self->f->test_order };
     return [
         $PROG,
         '-n', '' . $self->optn,
@@ -89,6 +90,8 @@ sub command {
         ($self->optc ? ('-c', $self->optc) : ()),
         ($self->optcp ? ('-cp', $self->optcp) : ()),
         ($self->optm ? ('-m', $self->optm) : ()),
+        ($ts ? ('-ts', $ts)
+            : $self->optimizing ? ('-ta') : ()),
         $self->n,
         $self->k,
     ];
@@ -136,6 +139,13 @@ sub failed {
     return ();
 }
 
+sub parse_ta {
+    my($self, $ta) = @_;
+    my($base, @num) = split /\s+/, $ta;
+    # higher numbers are better at rejecting candidates, so should come first
+    return [ sort { $num[$b - 1] <=> $num[$a - 1] } 1 .. @num ];
+}
+
 sub finalize {
     my($self, $db) = @_;
     my $log = $self->logpath;
@@ -149,11 +159,13 @@ sub finalize {
                 or return $self->failed("Can't parse log line '$_'");
         push @{ $line{$rc} }, $_;
     }
+    close $fh;
 
     my $ren = qr{\d+(?:e\d+)?};
     my $rend = sub { $_[0] =~ s{e(\d+)$}{0 x $1}er };
 
-    my($good, $bad, $ugly, $depend_m, $depend_n, $fix_power, $last_fail);
+    my($good, $bad, $ugly, $depend_m, $depend_n, $fix_power, $last_fail,
+            $test_order);
     for (@{ $line{309} // [] }) {
         /\((\d+\.\d*)s\)$/ && $self->preptime($1);
     }
@@ -170,13 +182,15 @@ sub finalize {
         $good = $rend->($d);
     }
     for (( $line{301} // [] )->[-1] // ()) {
-        my($n, $k, $d) = m{
+        my($n, $k, $d, $ta) = m{
             ^ 301 \s+ After \s+ [\d\.]+s \s+ for \s+ \( (\d+) ,\s+ (\d+) \)
             \s+ reach \s+ d=(\d+) \s+
+            \(.*?\) \s+ seen \s+ \[ (.*?) \] \z
         }x or return $self->failed("Can't parse 301 result: '$_'");
         $n == $self->n && $k == $self->k
                 or return $self->failed("(n, k) mismatch in '$_'");
         $last_fail = $d;
+        $test_order = $self->parse_ta($ta) if $self->optimizing;
     }
     for (@{ $line{500} // [] }) {
         my($n, $k, $d, $t) = m{
@@ -233,15 +247,21 @@ sub finalize {
     $self->complete(1);
     $self->running(0);
 
+    my $tauf = $self->f;
     my @result =
-        $good ? $self->f->good($db, $self, $good, $best)
+        $good ? $tauf->good($db, $self, $good, $best)
         : $bad ? do {
             my $badm = max(map Math::GMP->new($_),
                     $bad, grep defined, $last_fail);
-            $self->f->bad($db, $self, $badm);
-        } : $ugly ? $self->f->ugly($db, $self)
-        : $depend_n ? $self->f->depends($db, $depend_m, $depend_n)
+            $tauf->bad($db, $self, $badm);
+        } : $ugly ? $tauf->ugly($db, $self)
+        : $depend_n ? $tauf->depends($db, $depend_m, $depend_n)
         : die "panic";
+
+    if ($bad && $test_order && $self->optimizing) {
+        $tauf->test_order($test_order);
+        $tauf->update;
+    }
     eval { $self->update; 1 } or do {
         my $e = $@;
         print $self->Dump;

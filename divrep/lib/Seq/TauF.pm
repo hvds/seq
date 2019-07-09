@@ -12,6 +12,7 @@ my $SIMPLE = Math::GMP->new(1 << 20);
 # Assume we don't need to do much clever if expected runtime is this fast.
 my $FAST = 10;
 my $SLOW = 600;
+my $USE_TS = 1200;
 
 =head1 NAME
 
@@ -43,6 +44,7 @@ $tauf->define($TABLE, 'tauf', [
     'maybe bigint depend_m',
     'maybe uint depend_n',
     'maybe uint minc',
+    'modlist test_order',
     'flags(complete external estimated depend impossible) status',
     'float priority',
 ]);
@@ -230,6 +232,7 @@ sub _strategy {
             optn => $optn,
             optx => $optx,
             optc => $optc,
+            optimize => ($expect > $USE_TS),
             priority => $g->priority + min(0, -log($expect) / log(2)),
         },
     ), ($bisect // ()));
