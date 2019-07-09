@@ -9,8 +9,9 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr, $opt_D, $opt_f, $opt_b)
-        = (0, 0, 0, 100000, 0, 0, 0, 0, 0);
+my($opt_D, $opt_f, $opt_b, $opt_ta) = (0) x 4;
+my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr)
+        = (0, 0, 0, 100000, 0, 0);
 my($opt_mm);
 my($opt_ts, $opt_m, $opt_mq, $opt_dm, $opt_dmq) = ([], [], [], [], []);
 
@@ -20,6 +21,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_D = 1, next) if $arg eq '-D';
     ($opt_f = 1, next) if $arg eq '-f';
     ($opt_b = 1, next) if $arg eq '-b';
+    ($opt_ta = 1, next) if $arg eq '-ta';
     Constraint->debug_more(), next if $arg eq '-d';
     ($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
     ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
@@ -259,6 +261,7 @@ sub series {
         my $m2 = $m / $g;
         my $inv = ($k / $g)->bmodinv($m2);
         my $v2 = ($gv * $inv) % $m2;
+        ($c->debug > 2) && warn "k=$k, g=$g, gv=$gv, gvr=$gvr, m2=$m2, inv=$inv, v2=$v2\n";
         $c->suppress($m2, $v2, int(($max - $n) / $k) + 1);
     }
     ($c->debug > 1) && warn "series ($v, $m, $max): applied\n";
@@ -649,6 +652,7 @@ sub iter_factor {
         my($n, $f, $tau) = ($c->n, $c->f, $c->tau);
         my $k = $f - 1;
         my $tester = prepare_tester($c);
+        $tester = test_all($tester) if $opt_ta;
         my $cur;
         $c->init();
         check_mult($c) unless $opt_f;
@@ -658,13 +662,12 @@ OUT
         exit 0 if $opt_D;
 
         CUR: while ($cur = $c->next()) {
-            report_reach($n, $f, $cur, $c), $count = $c->tell_count unless --$count;
+            report_reach($n, $f, $cur, $c), $count = $c->tell_count
+                    unless --$count;
             for (0 .. $#$tester) {
-                $tester->[$_]->($cur)
-                    #|| (report_seq($n, $f, $cur), next CUR)
-                    #|| next CUR
-                    || ($seq_seen[$_]++ || report_seq($n, $f, $cur, $_), next CUR)
-                    #|| (++$seq_seen[$_-1], next CUR)
+                next if $tester->[$_]->($cur);
+                report_seq($n, $f, $cur, $_) unless $seq_seen[$_]++;
+                next CUR;
             }
             report_reach($n, $f, $cur, $c);
             return $cur;
@@ -681,6 +684,20 @@ OUT
         printf <<OUT, $t, $n, $f, $cur, $kept, $skipped, $tests, join ' ', map $_ || 0, @seq_seen;
 301 After %.2fs for (%s, %s) reach d=%s (keep %s, skip %s with %s tests) seen [%s]
 OUT
+    }
+
+    sub test_all {
+        my($tester) = @_;
+        return [ sub {
+            my($cur) = @_;
+            my $pass = 1;
+            for (0 .. $#$tester) {
+                next if $tester->[$_]->($cur);
+                ++$seq_seen[$_ + 1];
+                $pass = 0;
+            }
+            return $pass;
+        } ];
     }
 }
 
@@ -740,6 +757,9 @@ sub prepare_tester {
 
     my $all_prime = ($tau == 2) ? 1 : 0;
     my $short_prime = ($tau == 4 && @$np == 2) ? 1 : 0;
+
+    # override any other ordering if we're doing 'test all'
+    $opt_ts = [ 1 .. $f - 1 ] if $opt_ta;
     my $fixed = @$opt_ts ? 1 : 0;
 
     for my $k (1 .. $f - 1) {
