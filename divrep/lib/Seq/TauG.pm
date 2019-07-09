@@ -159,10 +159,10 @@ sub update_depends {
     my($self, $db) = @_;
     my $dep = $db->resultset($TABLE)->find({ n => $self->depend_n });
     Seq::TauF->update_depends($db, $self);
-    if ($dep->complete) {
-        $self->complete(1);
-        $self->update;
-    }
+    $self->ming($dep->ming) if $self->ming < $dep->ming;
+    $self->maxg($dep->maxg);
+    $self->complete(1) if $dep->complete;
+    $self->update;
     return;
 }
 

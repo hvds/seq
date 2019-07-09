@@ -120,29 +120,38 @@ sub depends {
 
 sub update_depends {
     my($class, $db, $g) = @_;
+    my $n = $g->n;
+    my $dn = $g->depend_n;
     my $table = $db->resultset($TABLE);
-    my $self = ($g->f->all)[-1];
-    my $depending = $table->search(
-        {
-            n => $self->depend_n,
-            k => { '>=', $self->k },
-        },
-        { order_by => 'k' },
-    )->search_bitfield({ complete => 1 });
-    for my $d ($depending->all) {
-        my $this = ($d->k == $self->k) ? $self : $table->new({
-            n => $self->n,
-            k => $d->k,
-        });
-        $this->f($d->f * $self->depend_m);
-        $this->depend_m($self->depend_m);
-        $this->depend_n($self->depend_n);
-        $this->priority(0);
-        $this->depend(1);
-        $this->complete(1);
-        ($this == $self) ? $this->update : $this->insert;
-        $g->good($db, $this->k, $this->f);
+    my @f = $g->f->all;
+    my %f = map +($_->k => $_), @f;
+    my $m = (first { $_->depend_m } @f)->depend_m;
+    my $gd = $g->depended;
+    my $ming = $g->ming;
+
+    for my $fd ($gd->f->all) {
+        next unless $fd->complete && $fd->f;
+        my $self;
+        my $new = 0;
+        if ($self = $f{$fd->k}) {
+            next if $self->f;
+        } else {
+            $self = $table->new({
+                n => $n,
+                k => $fd->k,
+            });
+            $new = 1;
+        }
+        $self->f($fd->f * $m);
+        $self->depend_m($m);
+        $self->depend_n($dn);
+        $self->priority(0);
+        $self->depend(1);
+        $self->complete(1);
+        $new ? $self->insert : $self->update;
+        $ming = $self->k if $ming < $self->k;
     }
+    $g->good($db, $ming, $g->checked);
     return;
 }
 
