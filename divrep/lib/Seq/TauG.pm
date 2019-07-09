@@ -52,7 +52,8 @@ $taug->define($TABLE, 'taug', [
     'maybe float bisect_time',
     'flags(complete depend prime) status',
 ]);
-$taug->has_many(f => 'Seq::TauF', 'n');
+$taug->has_many(f => 'Seq::TauF', 'n', { order_by => 'k' });
+$taug->might_have(depended => 'Seq::TauG', { 'foreign.n' => 'self.depend_n' });
 
 sub priority {
     my($class, $n) = @_;
