@@ -192,7 +192,7 @@ sub _comments {
 
 sub _fe {
     my($ft, $n) = @_;
-    (sprintf $ft, $n) =~ s{e\+?0*(?=\d)}{e}r;
+    (sprintf $ft, "$n") =~ s{e\+?0*(?=\d)}{e}r;
 }
 sub _fc {
     my($n) = @_;
