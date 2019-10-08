@@ -77,16 +77,25 @@ sub waitFor {
 }
 
 package Seq::Starter {
+    use List::Util qw{ max };
     sub new {
         my($class, $start, $count) = @_;
-        return bless {
+        my $self = bless {
             start => $start,
             count => $count,
         }, $class;
+        warn sprintf "new starter: from %s for %s prio %.2f\n",
+                $start, $count, $self->priority;
+        return $self;
     }
     sub priority {
         my($self) = @_;
-        return $self->{priority} //= Seq::TauG->priority($self->{start});
+        my $start = $self->{start};
+        # We don't want to block fetching of later entries just because
+        # there are low priority ones in the way.
+        return $self->{priority} //= max(
+            map Seq::TauG->priority($_), $start, $start * 2
+        );
     }
     sub prep {
         my($self, $db) = @_;
@@ -98,7 +107,7 @@ package Seq::Starter {
             Seq::TauG->genTo($db, $end);
         }
         return (
-            Seq::Starter->new($end + 1, 1),
+            Seq::Starter->new($end + 1, $count),
             Seq::TauG->range($db, $start, $end),
         );
     }
