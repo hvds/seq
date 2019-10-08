@@ -1,9 +1,10 @@
 package Seq::TauG;
 use strict;
 use warnings;
-use List::Util qw{ max };
+use List::Util qw{ max sum };
 use Math::GMP;
-use Math::Prime::Util qw{ is_prime };
+use Math::Prime::Util qw{ is_prime factor_exp };
+use Memoize;
 
 my $zero = Math::GMP->new('0');
 
@@ -55,20 +56,24 @@ $taug->define($TABLE, 'taug', [
 $taug->has_many(f => 'Seq::TauF', 'n', { order_by => 'k' });
 $taug->might_have(depended => 'Seq::TauG', { 'foreign.n' => 'self.depend_n' });
 
+memoize('_priority');
+sub _priority {
+    my($n) = @_;
+    my @f = factor_exp($n);
+    my $highest = $f[-1][0] // 1;
+    my $prime = (@f == 1) && ($f[0][1] == 1);
+    return - (
+        log($n) / log(2)
+        + ($prime ? 10 : 0)
+        + 10 * log($highest) / log(2)
+#       + 10 * int(log($n) / log(10))
+#       - sum map $_->[1], @f
+    ) / 2;
+}
+
 sub priority {
     my($class, $n) = @_;
-    CORE::state $log2 = log(2);
-    my $p;
-    if (ref($class)) {
-        $n = $class->n;
-        $p = $class->prime;
-    } else {
-        $p = is_prime($n);
-    }
-    $p = 0 if $n <= 23;
-    return -log($n) / $log2
-            - 10 * int(log($n) / log(10))
-            - ($p ? 10 : 0);
+    return _priority(ref($class) ? $class->n : $n);
 }
 
 sub max_known {
