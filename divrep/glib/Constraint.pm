@@ -505,6 +505,13 @@ U32 lkept() { return count_kept & (0xffffffff); }
  * Note: optimizations here assume we'll get to do many tests before
  * having to recalculate at (roughly) floor(MAXUINT / mult); if mult is
  * high enough (plausible for high prime runs) that may become invalid.
+ *
+ * TODO:
+ *   further optimize main loop: rearrange the bit-vectors so that we need
+ * only calculate (modval = iter % scm->mod), and replace the in-loop
+ * increments of count_tests and count_skipped with out-loop additions by
+ * a calculated value. The rearranged bit-vectors should need recalculating
+ * only around every MAX_INT iterations.
  */
 SV* cnext(SV* cur, SV* mult, AV* sc, I32 rebuild, SV* max) {
     int found;
