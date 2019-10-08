@@ -112,6 +112,10 @@ sub report_f {
                     unless $g->depend;
         }
     }
+    my $ts = $g->fall($db)->[-1]->test_order;
+    if (@$ts) {
+        printf "  -ts %s\n", join ',', @$ts;
+    }
     return;
 }
 

@@ -81,6 +81,7 @@ sub good {
             n => $self->n,
             k => $_,
             f => $good,
+            test_order => '',
         }), $self->k + 1 .. $best;
         $_->complete(1) for @extra;
         $_->insert for @extra;
@@ -141,6 +142,7 @@ sub update_depends {
             $self = $table->new({
                 n => $n,
                 k => $fd->k,
+                test_order => '',
             });
             $new = 1;
         }
@@ -231,7 +233,7 @@ sub _strategy {
             optn => $optn,
             optx => $optx,
             optc => $optc,
-            optimize => ($expect > $USE_TS),
+            optimize => ($expect > $USE_TS && !$g->prime),
             priority => $g->priority + min(0, -log($expect) / log(2)),
         },
     ), ($bisect // ()));
@@ -278,6 +280,7 @@ sub nextFor {
             n => $taug->n,
             k => $nextk,
             f => $zero,
+            test_order => '',
         });
         $self->minc($last->minc) if $last;
         $self->insert;
