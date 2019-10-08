@@ -251,6 +251,11 @@ sub finalize {
     my @result =
         $good ? $tauf->good($db, $self, $good, $best)
         : $bad ? do {
+            # set the test order before bad() generates the next run
+            if ($bad && $test_order && $self->optimizing) {
+                $tauf->test_order($test_order);
+                $tauf->update;
+            }
             my $badm = max(map Math::GMP->new($_),
                     $bad, grep defined, $last_fail);
             $tauf->bad($db, $self, $badm);
@@ -258,10 +263,6 @@ sub finalize {
         : $depend_n ? $tauf->depends($db, $depend_m, $depend_n)
         : die "panic";
 
-    if ($bad && $test_order && $self->optimizing) {
-        $tauf->test_order($test_order);
-        $tauf->update;
-    }
     eval { $self->update; 1 } or do {
         my $e = $@;
         print $self->Dump;
