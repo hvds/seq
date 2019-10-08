@@ -46,7 +46,6 @@ $tauf->define($TABLE, 'tauf', [
     'maybe uint minc',
     'modlist test_order',
     'flags(complete external estimated depend impossible) status',
-    'float priority',
 ]);
 $tauf->belongs_to(
     g => 'Seq::TauG', {
@@ -65,6 +64,8 @@ $tauf->has_many(
     },
 );
 
+sub priority { shift->g->priority }
+
 sub good {
     my($self, $db, $run, $good, $best) = @_;
     if ($run->optm) {
@@ -80,7 +81,6 @@ sub good {
             n => $self->n,
             k => $_,
             f => $good,
-            priority => 0,
         }), $self->k + 1 .. $best;
         $_->complete(1) for @extra;
         $_->insert for @extra;
@@ -147,7 +147,6 @@ sub update_depends {
         $self->f($fd->f * $m);
         $self->depend_m($m);
         $self->depend_n($dn);
-        $self->priority(0);
         $self->depend(1);
         $self->complete(1);
         $new ? $self->insert : $self->update;
@@ -281,7 +280,6 @@ sub nextFor {
             f => $zero,
         });
         $self->minc($last->minc) if $last;
-        $self->priority($taug->priority);
         $self->insert;
     }
     return $self;
