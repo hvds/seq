@@ -1,0 +1,50 @@
+#!/opt/maths/bin/perl -w
+use strict;
+
+=head1 square loop
+
+Find n such that there exists a loop of the integers 1 .. n in which each
+pair of consecutive values sums to a square.
+
+Bonus: find also n where a broken loop exists.
+
+This code finds first broken loop at n=17, with the sequence:
+  16 9 7 2 14 11 5 4 12 13 3 6 10 15 1 8 17
+
+Since the first squares > 18 are 25, 36, 49, this implies the first loop
+must have n >= 31.
+
+=cut
+
+my %sq;
+my $lastsq = 0;
+
+for (my $n = 1; 1; ++$n) {
+    while ($lastsq * $lastsq < $n) {
+        ++$lastsq;
+        $sq{$lastsq * $lastsq} = 1;
+    }
+
+    my %req = map +($_ => 1), 1 .. $n;
+    my $result;
+    for my $next (1 .. $n) {
+        $result = try($next, \%req);
+        last if $result;
+    }
+    print "$n: $result\n";
+}
+
+sub try {
+    my($this, $need) = @_;
+    delete $need->{$this};
+    if (keys %$need) {
+        for my $next (keys %$need) {
+            next unless $sq{$this + $next};
+            my $result = try($next, $need);
+            return $result if $result;
+        }
+        $need->{$this} = 1;
+        return 0;
+    }
+    return $sq{$this + 1} ? 2 : 1;
+}
