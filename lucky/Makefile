@@ -1,4 +1,4 @@
-GCC=LD_LIBRARY_PATH="/opt/mpfr-2.4.1/lib:/opt/mpc-0.8.1/lib" /opt/gcc-4.5.0/bin/gcc
+#GCC=LD_LIBRARY_PATH="/opt/mpfr-2.4.1/lib:/opt/mpc-0.8.1/lib" /opt/gcc-4.5.0/bin/gcc
 INCS=
 LIBS=
 LIBOPTS=
@@ -12,13 +12,13 @@ all: ${PROG}
 .SUFFIXES: .c .oo .do
 
 .c.oo:
-	${GCC} -g ${CC_OPT} ${INCS} -c -o $*.oo $*.c
+	${CC} -g ${CC_OPT} ${INCS} -c -o $*.oo $*.c
 
 .c.do:
-	${GCC} -g -DDEBUG ${INCS} -c -o $*.do $*.c
+	${CC} -g -DDEBUG ${INCS} -c -o $*.do $*.c
 
 ${PROG}:
-	${GCC} -o $@ ${CC_OPT} $^ ${LIBOPTS} ${LIBS}
+	${CC} -o $@ ${CC_OPT} $^ ${LIBOPTS} ${LIBS}
 
 cgen_lucky.do cgen_lucky.oo: cgen_lucky.c
 vsieve.do vsieve.oo: vsieve.c
