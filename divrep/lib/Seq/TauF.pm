@@ -187,9 +187,14 @@ sub _strategy {
     my $_n = sub { "$_[0]" + 0 };
     my $prep = $r->preptime;
 
+    # If last run was optimizing, we've done a lot of extra work; but the
+    # run would have targeted a size estimated at $SLOW, so guess that's
+    # what it would have taken
+    my $quasirun = $r->optimizing ? $SLOW : $r->runtime;
+
     # Note, must use $g->checked for the range, since the last run need
     # not have reached $r->optx.
-    my $run = $r->runtime * $_n->($optx + 1 - $optn)
+    my $run = $quasirun * $_n->($optx + 1 - $optn)
             / $_n->($g->checked + 1 - $r->optn);
     my $expect = ($prep + $run) || 1;
 
