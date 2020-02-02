@@ -7,6 +7,8 @@ use H::Heap;
 use Math::GMP;
 use POSIX qw{ :sys_wait_h };
 
+print "kill -HUP $$\n";
+
 my($opt_recreate, $debug, $opt_strategy) = (0, 0, 0);
 my($maxproc, $maxrun, $drain) = (10, 100, 0);
 $SIG{'HUP'} = sub { $drain = 1 };
