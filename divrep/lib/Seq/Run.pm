@@ -205,10 +205,18 @@ sub finalize {
         $bad = $rend->($d);
     }
     for (@{ $line{402} // [] }) {
+        # 402 Error: all values ... disallowed (${time}s)
         my($t) = m{
-            ^ 402 \s+ Error: \s+ all \s+ values \s+ \(.*?\) \s+ disallowed
-            \s+ \( (\d+\.\d+) s \) \s* $
+            ^ 402 \s+ Error: .*?  \s+ \( (\d+\.\d+) s \) \s* $
         }x or return $self->failed("Can't parse 402 result: '$_'");
+        $self->preptime($t);
+        $ugly = 1;
+    }
+    for (@{ $line{403} // [] }) {
+        # 403 Error: ... known impossible by exception (${time}s)
+        my($t) = m{
+            ^ 403 \s+ Error: .*?  \s+ \( (\d+\.\d+) s \) \s* $
+        }x or return $self->failed("Can't parse 403 result: '$_'");
         $self->preptime($t);
         $ugly = 1;
     }

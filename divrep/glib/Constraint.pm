@@ -614,6 +614,15 @@ sub fix_power {
     return Constraint::Power->new($self, $k, $x, $z, $opt_mq);
 }
 
+#
+# If n+ad forces a factorization of n+bd, we have some special cases.
+#
+sub fix_fact {
+    my($self) = @_;
+    require Constraint::Fact;
+    return Constraint::Fact->new($self);
+}
+
 sub disallowed {
     my($self, $n, $v) = @_;
     my $c = $self->{'c'}{$n};

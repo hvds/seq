@@ -9,7 +9,7 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_D, $opt_f, $opt_b, $opt_ta) = (0) x 4;
+my($opt_D, $opt_f, $opt_b, $opt_ta, $opt_fact, $opt_ix) = (0) x 6;
 my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr)
         = (0, 0, 0, 100000, 0, 0);
 my($opt_mm);
@@ -22,6 +22,8 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_f = 1, next) if $arg eq '-f';
     ($opt_b = 1, next) if $arg eq '-b';
     ($opt_ta = 1, next) if $arg eq '-ta';
+    ($opt_fact = 1, next) if $arg eq '-fact';
+    ($opt_ix = 1, next) if $arg eq '-ix';
     Constraint->debug_more(), next if $arg eq '-d';
     ($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
     ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
@@ -58,6 +60,7 @@ my $c = Constraint->new(
 );
 
 $c = apply($c) or exit 0;
+$opt_ix or check_exceptions($c);
 printf <<OUT, $c->elapsed(), 'rootseq', $n, $f, ntos($opt_n), ntos($opt_x), modfix(), $opt_c;
 300 Init %.2f: trying %s() for (%s, %s) in [%s, %s], %schecks up to mod %s
 OUT
@@ -99,6 +102,26 @@ sub check_mult {
 201 Dependent - %s:%s f(%s) # fix %s
 OUT
         exit 0;
+    }
+}
+
+#
+# For certain individual cases we have proven limits that we cannot easily
+# encode generically here. Avoid wasting time attempting to discover those
+# unless the user asks to ignore exceptions (-ix).
+#
+sub check_exceptions {
+    my($c) = @_;
+    for (
+        [ 243, 4 ], # see Constraint::Fact
+    ) {
+        my($n, $f) = @$_;
+        if ($c->n == $n && $c->f > $f) {
+            printf <<OUT, $n, $f, $c->elapsed;
+403 Error: f(%s) > %s known impossible by exception (%.2fs)
+OUT
+            exit 1;
+        }
     }
 }
 
@@ -233,7 +256,9 @@ $c->debug && warn "apply $m\n";
         # TODO: generate and use $tester
     }
 
-    if ($fixpow) {
+    if ($opt_fact) {
+        $c = $c->fix_fact();
+    } elsif ($fixpow) {
         my($k, $x, $z) = @$fixpow;
         print "311 Fixing power d = (${x}y^$z - n)/$k\n";
         mod_dump($c, $opt_dm, 'pre-fix');

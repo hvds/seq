@@ -72,6 +72,10 @@ sub bad {
         # 402 Error: all values (mod 2) disallowed (4.680s)
         return 1;
     }
+    if ($line{403}) {
+        # 403 Error: f(243) > 4 known impossible by exception (4.680s)
+        return 1;
+    }
     if ($line{309}) {
         # Prep finished, frequency 36.91 (184.980s)
         return 0;
