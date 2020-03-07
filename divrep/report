@@ -21,6 +21,10 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
             if $arg =~ /^-n(.*)/;
     $filter = chain_max($filter, $1 || shift(@ARGV)), next
             if $arg =~ /^-x(.*)/;
+    $filter = chain_maxprime($filter, $1 || shift(@ARGV)), next
+            if $arg =~ /^-mp(.*)/;
+    $filter = chain_topprime($filter, $1 || shift(@ARGV)), next
+            if $arg =~ /^-tp(.*)/;
     die "Unknown option '$arg'";
 }
 my($n, $k) = @ARGV;
@@ -149,6 +153,24 @@ sub chain_sig {
         return 0 unless $next->($_[0]);
         my $vn = join ',', sort { $b <=> $a } map $_->[1], factor_exp($_[0]);
         return $vn eq $vsig ? 1 : 0;
+    };
+}
+
+sub chain_maxprime {
+    my($next, $p) = @_;
+    return sub {
+        return 0 unless $next->($_[0]);
+        my $tp = (factor_exp($_[0]))[-1][0];
+        return $p >= $tp ? 1 : 0;
+    };
+}
+
+sub chain_topprime {
+    my($next, $p) = @_;
+    return sub {
+        return 0 unless $next->($_[0]);
+        my $tp = (factor_exp($_[0]))[-1][0];
+        return $p == $tp ? 1 : 0;
     };
 }
 
