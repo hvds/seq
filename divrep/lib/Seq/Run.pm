@@ -220,6 +220,14 @@ sub finalize {
         $self->preptime($t);
         $ugly = 1;
     }
+    for (@{ $line{404} // [] }) {
+        # 404 Error: n + ${k}d must be divisible by n (${time}s)
+        my($t) = m{
+            ^ 404 \s+ Error: .*?  \s+ \( (\d+\.\d+) s \) \s* $
+        }x or return $self->failed("Can't parse 404 result: '$_'");
+        $self->preptime($t);
+        $ugly = 1;
+    }
     for (@{ $line{201} // [] }) {
         my($k, $dm, $dn) = m{
             ^ 201 \s+ Dependent \s+ - \s+

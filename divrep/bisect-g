@@ -76,6 +76,10 @@ sub bad {
         # 403 Error: f(243) > 4 known impossible by exception (4.680s)
         return 1;
     }
+    if ($line{404}) {
+        # 404 Error: n + ${k}d must be divisible by n
+        return 1;
+    }
     if ($line{309}) {
         # Prep finished, frequency 36.91 (184.980s)
         return 0;

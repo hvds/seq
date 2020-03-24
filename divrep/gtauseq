@@ -341,6 +341,12 @@ sub find_fixed {
         print "502 Error: fixed $fixed_tau not available in tau $tn\n";
         exit 1;
     }
+    if ($tneed == 1) {
+        printf <<OUT, $n, $k, $c->elapsed;
+404 Error: %s + %sd must be divisible by n (%.2fs)
+OUT
+        exit 1;
+    }
     # now handle the rest of $float
     if ($tneed & 1) {
         # we can fix a square, and maybe more - highest fixable power is
