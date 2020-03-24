@@ -10,18 +10,20 @@ use POSIX qw{ :sys_wait_h };
 print "kill -HUP $$\n";
 
 my($opt_recreate, $debug, $opt_strategy) = (0, 0, 0);
-my($maxproc, $maxrun, $drain) = (10, 100, 0);
+my($maxproc, $maxrun, $maxload, $drain) = (10, 100, 0, 0);
 $SIG{'HUP'} = sub { $drain = 1 };
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift(@ARGV);
     last if $arg eq '--';
     $opt_recreate = 1, next if $arg eq '-r';
     $opt_strategy = 1, next if $arg eq '-s';
+    ($maxload = $1 || shift(@ARGV)), next if $arg =~ /^-a(\d*)$/;
     $debug = 1, next if $arg eq '-d';
     die "Unknown option '$arg'";
 }
 $maxproc = shift(@ARGV) if @ARGV;
 $maxrun = shift(@ARGV) if @ARGV;
+$maxload ||= $maxproc;
 
 local @ENV{qw{ DBI_TRACE DBIC_TRACE }} = (1, 1) if $debug;
 my $db = Seq::Db->new({
@@ -36,7 +38,7 @@ local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
 
 Seq::Run->restrategise($db) if $opt_strategy;
 my $prio = H::Heap->new(q{ $b->priority <=> $a->priority });
-$prio->insert(Seq::Starter->new(2, $maxproc));
+$prio->insert(Seq::Starter->new(2, $maxload));
 my(%pid, @runnable);
 
 while (1) {
