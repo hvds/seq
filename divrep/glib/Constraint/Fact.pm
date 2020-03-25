@@ -102,6 +102,7 @@ sub new {
         'max' => $c->max(),
         'check' => $c->check(),
         'tau' => $c->tau(),
+        'parent' => $c,
     );
 
     my @fact = factor_exp($self->n);

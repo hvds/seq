@@ -23,6 +23,7 @@ sub new {
         'max' => $c->max(),
         'check' => $c->check(),
         'tau' => $c->tau(),
+        'parent' => $c,
     );
 
     ($z & 1) == 0 or die "Constraint::Power->new: \$z must be even (not $z)";

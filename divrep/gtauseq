@@ -87,7 +87,7 @@ exit 0;
 #
 sub check_mult {
     my($c) = @_;
-    my($mult, $mod_mult) = ($c->mult, $c->mod_mult);
+    my($mult, $mod_mult) = ($c->parent->mult, $c->parent->mod_mult);
     my $mf = [ factor_exp($mult) ];
     for (@$mf) {
         my($p, $k) = @$_;   # p^k is fixed by constraints

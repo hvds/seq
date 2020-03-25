@@ -60,6 +60,11 @@ sub new {
     return $self;
 }
 
+sub parent {
+    my($self) = @_;
+    return $self->{'parent'} // $self;
+}
+
 for my $method (qw/
     cur n f tell_count t0 min max check tau min_potency mult mod_mult
 /) {
