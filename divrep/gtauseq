@@ -303,13 +303,6 @@ sub series {
 # [ k, x, z ] suitable to pass as arguments to the fix_power method,
 # and I<tester> is a subref or undef.
 #
-# FIXME: n=p^2q, k=p, d != 0 (mod p) fails to find fixed p^1; this stops
-# us finding fixpow(5, 5, 2) for n=575, f=6, -m5!0.
-#   my $gkn = gcd($k, $n);
-#   my $knfix = gcd($gkn, $n / $gkn); # now what?
-# I _think_ this is relevant only when p^k is fixed in n+kd for some k >= 1,
-# while p^{k+1} is disallowed and divides n.
-#
 sub find_fixed {
     my($c, $n, $tn, $k) = @_;
     my $kmult = $c->mult * $k;
@@ -323,18 +316,19 @@ sub find_fixed {
     # and so contribute a fixed multiple to tau(n+kd); primes in $float
     # but not in $fixp will show up at the floating power or greater.
     my($fixed_tau, $fixed_mult) = ($zone, $zone);
-    my $ffloat = [ grep {
-        (($fixp % $_->[0]) == 0) ? do {
+    my @ffloat = grep {
+        my($p, $x) = @$_;
+        is_fixed($p, $x, $c, $n, $fixp) ? do {
             # take the fixed power, splice out of the list of remaining
             # floating powers
-            $fixed_tau *= $_->[1] + 1;
-            $fixed_mult *= $_->[0] ** $_->[1];
+            $fixed_tau *= $x + 1;
+            $fixed_mult *= $p ** $x;
             0;
         } : do {
             # floating power: keep it in the list
             1;
-        }
-    } factor_exp($float) ];
+        };
+    } factor_exp($float);
 
     my($tneed, $sanity_check) = $tn->bdiv($fixed_tau);
     unless ($sanity_check == 0) {
@@ -356,11 +350,24 @@ OUT
         return ([ $k, $fixed_mult, $z ], undef);
     }
     printf("601 TODO generate tester k=%s for tau=%s%s\n",
-        $k, $tneed, @$ffloat ? sprintf(" and floating [%s]",
-            join ', ', map $_->[1], @$ffloat
+        $k, $tneed, @ffloat ? sprintf(" and floating [%s]",
+            join ', ', map $_->[1], @ffloat
         ) : "",
     );
     return (undef, undef);
+}
+
+sub is_fixed {
+    my($p, $x, $c, $n, $fixp) = @_;
+    if (($fixp % $p) == 0) {
+        return 1;
+    }
+    # if p^x would float, it may still be fixed if p^{x+1} divides n
+    # and 0 (mod p) is disallowed.
+    if (($n % ($p ** ($x + 1))) == 0 && $c->disallowed($p, 0)) {
+        return 1;
+    }
+    return 0;
 }
 
 #
