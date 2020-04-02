@@ -212,6 +212,7 @@ sub _strategy {
         || ($optc < $r->optc && $prep < $run / 10)
     );
     $optc = max($optc, $self->minc // 0);
+    $optc = int($optc);
     $eprep = $prep * $optc / $r->optc;
     $expect = ($eprep + $run) || 1;
 
