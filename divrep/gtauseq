@@ -164,7 +164,7 @@ sub unpack_mm {
     my($mm) = @_;
     # Expect "mod1=val1,mod2=val2,...modn=valn/b1b2...bn"
     die "Could not parse '-mm$mm'\n" unless $mm =~ m{
-        ^ (?: \d+ = \d+ ,)* \d+ = \d+ / [01]+ $
+        ^ (?: \d+ = \d+ ,)* \d+ = \d+ / \d+ $
     }x;
     my($modlist, $bits) = split '/', $mm;
     my @modlist = split /,/, $modlist;
