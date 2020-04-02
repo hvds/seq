@@ -28,6 +28,10 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     die "Unknown option '$arg'";
 }
 my($n, $k) = @ARGV;
+if ($n) {
+    $filter = chain_min($filter, $n);
+    $filter = chain_max($filter, $n);
+}
 
 local @ENV{qw{ DBI_TRACE DBIC_TRACE }} = (1, 1) if $debug;
 my $db = Seq::Db->new({
@@ -39,7 +43,7 @@ my $db = Seq::Db->new({
 use Data::Dumper;
 local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
 
-if (!$n) {
+if ($opt_table || !$n) {
     report_g();
 } elsif (!$k) {
     report_f();
