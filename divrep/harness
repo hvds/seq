@@ -11,6 +11,7 @@ print "kill -HUP $$\n";
 
 my($opt_recreate, $debug, $opt_strategy) = (0, 0, 0);
 my($maxproc, $maxrun, $maxload, $drain) = (10, 100, 0, 0);
+my %override;
 $SIG{'HUP'} = sub { $drain = 1 };
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift(@ARGV);
@@ -19,6 +20,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     $opt_strategy = 1, next if $arg eq '-s';
     ($maxload = $1 || shift(@ARGV)), next if $arg =~ /^-a(\d*)$/;
     $debug = 1, next if $arg eq '-d';
+    $override{$1} = $2, next if $arg =~ /^-p(-?\d+)=(-?\d+(?:\.\d+)?)$/;
     die "Unknown option '$arg'";
 }
 $maxproc = shift(@ARGV) if @ARGV;
@@ -37,7 +39,7 @@ use Data::Dumper;
 local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
 
 Seq::Run->restrategise($db) if $opt_strategy;
-my $prio = H::Heap->new(q{ $b->priority <=> $a->priority });
+my $prio = H::Heap->new(q{ ::prio($b) <=> ::prio($a) });
 $prio->insert(Seq::Starter->new(2, $maxload));
 my(%pid, @runnable);
 
@@ -67,6 +69,11 @@ while (1) {
 }
 exit 0;
 
+sub prio {
+    my($obj) = @_;
+    return $obj->priority + ($override{$obj->n} // 0);
+}
+
 sub waitFor {
     my($db, $pids, $block) = @_;
     my @t0 = times;
@@ -92,6 +99,7 @@ package Seq::Starter {
                 $start, $count, $self->priority;
         return $self;
     }
+    sub n { return -$_[0]->{start} }
     sub priority {
         my($self) = @_;
         my $start = $self->{start};

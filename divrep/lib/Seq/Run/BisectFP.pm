@@ -23,6 +23,7 @@ sub new {
 }
 
 sub g { shift->{g} }
+sub n { shift->g->n }
 sub f { shift->{f} }
 sub c { shift->{c} }
 

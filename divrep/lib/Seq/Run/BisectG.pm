@@ -23,13 +23,14 @@ sub new {
 }
 
 sub g { shift->{g} }
+sub n { shift->g->n }
 sub f { shift->{f} }
 sub c { shift->{c} }
 
 sub logpath {
     my($self) = @_;
     return sprintf '%s/rbg%s-%s',
-            $LOGS, $self->g->n, $self->c;
+            $LOGS, $self->n, $self->c;
 }
 
 sub priority {
