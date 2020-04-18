@@ -45,7 +45,7 @@ sub new {
     my $self = bless {
         c => {},            # hash lookup of constraints by modulus
         allc => [],         # list of all constraints sorted by modulus
-        sc => [],           # list of active constraints sorted by ?density?
+        sc => [],           # list of active constraints sorted by potency
         pend => [],         # list of not-yet-active constraints
         mult => MBI(1),     # d = mod_mult (mod mult) is required by constraints
         mod_mult => MBI(0),
@@ -93,6 +93,7 @@ sub c {
             0,      # [5] TRUE if new disallowed since last recalc
             $div,   # [6] d: d | p
             [],     # [7] d: p | d
+            0,      # [8] count of disallowed values
         ];
         # apply dependencies for my divisors
         for my $d (@$div) {
@@ -102,7 +103,10 @@ sub c {
             for my $v (0 .. $d - 1) {
                 next unless vec($cd->[2], $v, 1);
                 for my $m (0 .. $q - 1) {
-                    vec($c->[2], $m * $d + $v, 1) = 1;
+                    my $off = $m * $d + $v;
+                    next if vec($c->[2], $off, 1);
+                    vec($c->[2], $off, 1) = 1;
+                    ++$c->[8];
                     $c->[5] = 1
                 }
             }
@@ -171,7 +175,7 @@ sub find_active {
         if ($c->[5]) {
             # touched since we last looked
             $c->[5] = 0;
-            if (unpack('%32b*', $c->[2]) >= $d - 1) {
+            if ($c->[8] >= $d - 1) {
                 my $v = (grep !vec($c->[2], $_, 1), 0 .. $d - 1)[0];
                 unless (defined $v) {
                     printf <<OUT, $d, $self->elapsed;
@@ -192,7 +196,17 @@ OUT
     }
     $self->{'sc'} = \@sc;
     printf "302 checking %s(mod %s): %s\n",
-            $mod_mult, $mult, join ' ', map "$_->[3]/$_->[0]", @sc;
+            $mod_mult, $mult, join ' ', map "$_->[3]/$_->[8]/$_->[0]", @sc;
+}
+
+sub _potency {
+    my($c) = @_;
+    # |nonuniquely allowed| / |allowed|
+    #   = (n - |nonuniquely disallowed|) / (n - |disallowed|)
+    #   = (n - (|[2]| - |[1]|)) / (n - |[2]|)
+    my $a = numify($_->[0]) - numify($_->[8]);
+    my $nua = $a + numify($_->[3]);
+    return $nua / $a;
 }
 
 #
@@ -205,9 +219,7 @@ sub frequency {
         $self->find_active unless $self->{sc};
         my $f = 1;
         for (@{ $self->{sc} }) {
-            my $m = numify($_->[0]);
-            my $d = numify($_->[3]);
-            $f *= $m / ($m - $d);
+            $f *= _potency($_);
         }
         $f;
     };
@@ -231,9 +243,12 @@ sub pack_sc {
         'nn' => numify($_->[0]),
         'ncheck' => $_->[3],
         'vcheck' => $_->[1],
+        'potency' => _potency($_),
     }, @{ $self->{'sc'} };
 
     # where n_i divides n_j, merge a_i into a_j
+    # FIXME: this should be done after sorting, so we attribute potency
+    # of merged elements where they belong
     AI: for (my $i = 0; $i < @aux; ++$i) {
         my $ai = $aux[$i];
         my $ni = $ai->{'nn'};
@@ -247,8 +262,7 @@ sub pack_sc {
         }
     }
 
-    # Sort by potency ((number of uniquely disallowed values (mod m)) / m).
-    $_->{'potency'} = numify($_->{'ncheck'}) / $_->{'nn'} for @aux;
+    # Sort by potency
     @aux = sort { $b->{'potency'} <=> $a->{'potency'} } @aux;
 
     # where lcm(n_i, n_j) is within the requested range, merge a_j into a_i
@@ -263,7 +277,6 @@ sub pack_sc {
             splice(@aux, $j, 1);
             $ai->{'sc'} = $self->c($nij);
             _aux_merge2($ai, $aj, $nij);
-            $ai->{'potency'} = numify($ai->{'ncheck'}) / numify($nij);
             redo AI2;
         }
     }
@@ -301,6 +314,8 @@ sub _aux_merge {
             ++$dest->{'ncheck'};
         }
     }
+    $dest->{potency} *= $src->{potency};
+    return;
 }
 
 sub _aux_merge2 {
@@ -352,9 +367,10 @@ sub Dump {
                 "$s->{$_}[0]",                # p
                 unpack("b*", $s->{$_}[1]),    # v1
                 unpack("b*", $s->{$_}[2]),    # v2
-                "$s->{$_}[3]",                # unique
+                "$s->{$_}[3]",                # uniquely disallowed
                 "$s->{$_}[4]",                # fixed
                 "$s->{$_}[5]",                # changed
+                "$s->{$_}[8]",                # disallowed
             ];
         }
         $d;
@@ -671,14 +687,20 @@ sub suppress {
         (($debug > 2) && warn "suppress $v(mod $p): ignore\n"),
                 return $effect if vec($c->[2], $v, 1);
         ($debug > 2) && warn "suppress dependent $v(mod $p): apply\n";
-        vec($c->[2], $v, 1) = 1;
+        unless (vec($c->[2], $v, 1)) {
+            vec($c->[2], $v, 1) = 1;
+            ++$c->[8];
+        }
         $c->[5] = 1;
     } else {
         (($debug > 2) && warn "suppress $v(mod $p): ignore\n"),
                 return 0 if vec($c->[2], $v, 1);
         ($debug > 1) && warn "suppress independent $v(mod $p): apply\n";
+        unless (vec($c->[2], $v, 1)) {
 # FIXME: check for "all suppressed" here to shortcircuit the cascade storm
-        vec($c->[2], $v, 1) = 1;
+            vec($c->[2], $v, 1) = 1;
+            ++$c->[8];
+        }
         vec($c->[1], $v, 1) = 1;
         ++$c->[3];
         $c->[5] = 1;
