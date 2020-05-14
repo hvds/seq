@@ -62,7 +62,7 @@ sub report_g {
             $g->update_depends($db);
         }
         next if $opt_composite && (
-            $g->prime || $g->complete || $g->depend
+            $g->prime || $g->complete || $g->depend || $g->checked == 0
         );
         if ($opt_table) {
             my $f = (
