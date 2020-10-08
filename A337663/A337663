@@ -1,0 +1,281 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+
+=head1 A337663 - stepping stone puzzle
+
+a(n) is the greatest number that can be inscribed in an infinite square
+grid under the following rules:
+- the grid is initialized by writing 1 into n arbitrarily placed squares
+- thereafter numbers k = 2, 3 ... are placed into empty squares in order
+  such that at the point of placement the non-empty squares among its
+  eight neighbours sum to k.
+
+In implementation, we place the 1s in arrears, placing only as many as
+are needed to allow the next value of k to be placed.
+
+=cut
+
+my($n) = shift(@ARGV) // 2;
+
+if ($n >= 9) {
+    die "Can't yet calculate $n >= 9, need to be able to coalesce more than"
+        . " 2 groups simultaneously";
+}
+
+my $board = Board->new(2, $n, []);
+my($max, $max_board) = $board->try(1, $board);
+print "a($n) = $max\n";
+print $max_board->str, "\n";
+exit 0;
+
+package Board {
+    sub new {
+        my($class, $k, $unused, $groups) = @_;
+        return bless {
+            k => $k,
+            unused => $unused,
+            groups => $groups,
+        }, $class;
+    }
+    sub n { shift->{n} }
+    sub k { shift->{k} }
+    sub unused { shift->{unused} }
+    sub groups { shift->{groups} }
+
+    sub str {
+        my($self) = @_;
+        return join '; ', map $_->str, @{ $self->groups };
+    }
+
+    sub recurse {
+        my($self, $next_unused, $next_groups, $best, $best_board) = @_;
+        my $k = $self->k;
+        my $next = Board->new($k + 1, $next_unused, $next_groups);
+        my($next_best, $next_best_board) = $next->try($best, $best_board);
+        return +($next_best > $best ? ($next_best, $next_best_board)
+            : $k > $best ? ($k, $next)
+            : ($best, $best_board)
+        );
+    }
+
+    sub try {
+        my($self, $best, $best_board) = @_;
+        my $k = $self->k;
+        my $unused = $self->unused;
+        my $groups = $self->groups;
+
+        # try making a new group
+        if ($unused >= $k) {
+            my $next_unused = $unused - $k;
+            for my $group (Group->new_seed($k)) {
+                my $next_groups = [ @$groups, $group ];
+                ($best, $best_board) = $self->recurse(
+                    $next_unused, $next_groups, $best, $best_board,
+                );
+            }
+        }
+
+        # try extending an existing group
+        for my $i (0 .. $#$groups) {
+            my $gi = $groups->[$i];
+            my $sums = $gi->sums;
+
+            # try exact first
+            for my $locn (@{ $sums->[$k] // [] }) {
+                my $new_group = $gi->place($locn, $k);
+                my $next_groups = [ @$groups ];
+                $next_groups->[$i] = $new_group;
+                ($best, $best_board) = $self->recurse(
+                    $unused, $next_groups, $best, $best_board,
+                );
+            }
+
+            # try with unused
+            for my $diff (1 .. $unused) {
+                my $sum = $k - $diff;
+                last if $sum < 0;
+                my $locns = $sums->[$sum] // next;
+                my $next_unused = $unused - $diff;
+                for my $locn (@$locns) {
+                    for my $new_group ($gi->place_with($locn, $k, $diff)) {
+                        my $next_groups = [ @$groups ];
+                        $next_groups->[$i] = $new_group;
+                        ($best, $best_board) = $self->recurse(
+                            $next_unused, $next_groups, $best, $best_board,
+                        );
+                    }
+                }
+            }
+
+            # try by coalesce
+            for my $j ($i + 1 .. $#$groups) {
+                my $gj = $groups->[$j];
+                my $sumsj = $gj->sums;
+                for my $sumi (1 .. $k - 1) {
+                    my $locnsi = $sums->[$sumi] // next;
+                    my $need = $k - $sumi;
+                    my $min = $need - $unused;
+                    $min = 1 if $min < 1;
+                    for my $sumj ($min .. $need) {
+                        my $locnsj = $sumsj->[$sumj] // next;
+                        my $use = $need - $sumj;
+                        my $next_unused = $unused - $use;
+                        for my $locni (@$locnsi) {
+                            for my $locnj (@$locnsj) {
+                                for my $new_group ($gi->coalesce(
+                                    $locni, $gj, $locnj, $use,
+                                )) {
+                                    my $next_groups = [ @$groups ];
+                                    $next_groups->[$i] = $new_group;
+                                    splice @$next_groups, $j, 1;
+                                    ($best, $best_board) = $self->recurse(
+                                        $next_unused, $next_groups,
+                                        $best, $best_board,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return ($best, $best_board);
+    }
+};
+
+package Group {
+    our $SYM_xy; BEGIN { $SYM_xy = 0 }; # null symmetry
+    our $SYM_xY; BEGIN { $SYM_xY = 1 };
+    our $SYM_Xy; BEGIN { $SYM_Xy = 2 };
+    our $SYM_XY; BEGIN { $SYM_XY = 4 };
+    our $SYM_yx; BEGIN { $SYM_yx = 8 };
+    our $SYM_yX; BEGIN { $SYM_yX = 16 };
+    our $SYM_Yx; BEGIN { $SYM_Yx = 32 };
+    our $SYM_YX; BEGIN { $SYM_YX = 64 };
+    sub new {
+        my($class, $x, $y, $vals, $sym, $sums) = @_;
+        return bless {
+            x => $x,
+            y => $y,
+            vals => $vals,
+            sym => $sym,
+            sums => $sums,
+        }, $class;
+    }
+
+    sub x { shift->{x} }
+    sub y { shift->{y} }
+    sub vals { shift->{vals} }
+    sub sym { shift->{sym} }
+
+    sub str {
+        my($self) = @_;
+        return join ' ', map join('.', @$_), @{ $self->vals };
+    }
+
+    # returns a list of the distinct group objects that can be seeded by
+    # placing $k 1s around a single $k
+    sub new_seed {
+        my($class, $k) = @_;
+        if ($k == 2) {
+            return map $class->new(@$_), (
+                [ 2, 2, [ [ 1, 1 ], [ 2, 0 ] ], $SYM_xy, undef ],
+                [ 2, 2, [ [ 1, 0 ], [ 2, 1 ] ], $SYM_yx, undef ],
+                [ 3, 2, [ [ 1, 0 ], [ 2, 0 ], [ 0, 1 ] ], $SYM_xy, undef ],
+                [ 1, 3, [ [ 1, 2, 1 ] ], $SYM_xY | $SYM_Xy | $SYM_XY, undef ],
+                [ 2, 3, [ [ 1, 0, 1 ], [ 0, 2, 0 ] ], $SYM_Xy, undef ],
+                [ 3, 3, [ [ 1, 0, 0 ], [ 0, 2, 0 ], [ 0, 0, 1 ] ],
+                        $SYM_XY | $SYM_yx | $SYM_YX, undef ],
+            );
+        }
+use Carp; Carp::confess("k=$k");
+        die "to do: seeds for 3 <= k <= 8 (want $k)";
+    }
+
+    # returns an array indexed by sums of arrayrefs of locations [x, y]
+    sub sums {
+        my($self) = @_;
+        return $self->{sums} //= do {
+            my @sums;
+            my($x, $y) = ($self->x, $self->y);
+            my $vals = $self->vals;
+            for my $i (-1 .. $x) {
+                CELL: for my $j (-1 .. $y) {
+                    next if $i >= 0 && $i < $x && $j >= 0 && $j < $y
+                            && $vals->[$i][$j];
+                    my $sum = 0;
+                    for my $di (-1 .. 1) {
+                        next if $i + $di < 0;
+                        next if $i + $di >= $x;
+                        for my $dj (-1 .. 1) {
+                            next if $j + $dj < 0;
+                            next if $j + $dj >= $y;
+                            next if $di == 0 && $dj == 0;
+                            $sum += $vals->[$i + $di][$j + $dj];
+                        }
+                    }
+                    push @{ $sums[$sum] }, [ $i, $j ]
+                            if $sum;
+                }
+            }
+            \@sums;
+        };
+    }
+
+    # returns the symmetries retained by this group when a new unique
+    # value is placed at $locn
+    sub next_sym {
+        my($self, $locn) = @_;
+        my($x, $y, $sym) = ($self->x, $self->y, $self->sym);
+        my($locx, $locy) = @$locn;
+        my $next_sym = 0;
+        while ($sym) {
+            my $bit = $sym - ($sym & ($sym - 1));
+            $sym -= $bit;
+            my $check = {
+                $SYM_Xy => sub { $locx * 2 == $x },
+                $SYM_xY => sub { $locy * 2 == $y },
+                $SYM_XY => sub { $locx * 2 == $x && $locy * 2 == $y },
+                $SYM_yx => sub { $locx == $locy },
+                $SYM_yX => sub { $locx * 2 == $x && $locy * 2 == $y },
+                $SYM_Yx => sub { $locx * 2 == $x && $locy * 2 == $y },
+                $SYM_YX => sub { ($locx + $locy) * 2 == $x + $y },
+            };
+            $next_sym |= $bit if $check->{$bit}->();
+        }
+        return $next_sym;
+    }
+
+    # return a new group object made by placing the given $k at the
+    # specified $locn in $self
+    sub place {
+        my($self, $locn, $k) = @_;
+        my($x, $y, $vals) = ($self->x, $self->y, $self->vals);
+        my $sym = $self->next_sym($locn);
+        $vals = [ map [ @$_ ], @$vals ];
+        my($locx, $locy) = @$locn;
+        if ($locx < 0) {
+            unshift @$vals, [ (0) x $y ];
+            ++$locx;
+            ++$x;
+        }
+        if ($locx >= $x) {
+            push @$vals, [ (0) x $y ];
+            ++$x;
+        }
+        if ($locy < 0) {
+            unshift @$_, 0 for @$vals;
+            ++$locy;
+            ++$y;
+        }
+        if ($locy >= $y) {
+            push @$_, 0 for @$vals;
+            ++$y;
+        }
+        $vals->[$locx][$locy] = $k;
+        return Group->new($x, $y, $vals, $sym, undef);
+    }
+
+};
