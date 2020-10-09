@@ -149,7 +149,7 @@ package Board {
 
 package Group {
     our $SYM_xy; BEGIN { $SYM_xy = 0 }; # null symmetry
-    our $SYM_xY; BEGIN { $SYM_xY = 1 };
+    our $SYM_xY; BEGIN { $SYM_xY = 1 }; # x -> x, y -> -y
     our $SYM_Xy; BEGIN { $SYM_Xy = 2 };
     our $SYM_XY; BEGIN { $SYM_XY = 4 };
     our $SYM_yx; BEGIN { $SYM_yx = 8 };
@@ -177,22 +177,70 @@ package Group {
         return join ' ', map join('.', @$_), @{ $self->vals };
     }
 
+    my(%cache_seed, @seed_bits);
+    BEGIN {
+        # $seed_bits[$k] represents the possible arrangements of $k squares
+        # around a central square (distinct up to symmetry) representing
+        # the 8 possible locations as octal bits 0757.
+        @seed_bits = (
+            undef, # [ 0000 ], but we never need 0
+            undef, # [ 0400, 0200 ], but we never need 1
+            [ 0300, 0210, 0201, 0050, 0500, 0401 ],
+            [ 0700, 0610, 0601, 0602, 0604, 0640, 0504, 0502, 0412, 0250 ],
+            [ 0505, 0704, 0514, 0710, 0702, 0550, 0512, 0641, 0611,
+                    0603, 0642, 0342, 0252 ],
+            [ 0057, 0147, 0156, 0155, 0153, 0117, 0253, 0255, 0345, 0307 ],
+            [ 0457, 0547, 0556, 0707, 0257, 0356 ],
+            [ 0776, 0775 ],
+            [ 0777 ],
+        );
+    }
+
     # returns a list of the distinct group objects that can be seeded by
     # placing $k 1s around a single $k
     sub new_seed {
         my($class, $k) = @_;
-        if ($k == 2) {
-            return map $class->new(@$_), (
-                [ 2, 2, [ [ 1, 1 ], [ 2, 0 ] ], $SYM_xy, undef ],
-                [ 2, 2, [ [ 1, 0 ], [ 2, 1 ] ], $SYM_yx, undef ],
-                [ 3, 2, [ [ 1, 0 ], [ 2, 0 ], [ 0, 1 ] ], $SYM_xy, undef ],
-                [ 1, 3, [ [ 1, 2, 1 ] ], $SYM_xY | $SYM_Xy | $SYM_XY, undef ],
-                [ 2, 3, [ [ 1, 0, 1 ], [ 0, 2, 0 ] ], $SYM_Xy, undef ],
-                [ 3, 3, [ [ 1, 0, 0 ], [ 0, 2, 0 ], [ 0, 0, 1 ] ],
-                        $SYM_XY | $SYM_yx | $SYM_YX, undef ],
-            );
+        return @{ $cache_seed{$k} //= [ map $class->new_bits($k, $_), @{
+            $seed_bits[$k] // die "unexpected seed request for k = $k"
+        } ] };
+    }
+
+    use List::Util qw{ all };
+    sub new_bits {
+        my($class, $k, $bits) = @_;
+        my @row = unpack '(A3)3', sprintf '%09b', $bits;
+        my @vals = map [ map $_ + 0, split // ], @row;
+        my @tvals = map { my $i = $_; [ map $vals[$_][$i], 0 .. 2 ] } 0 .. 2;
+        my @col = map join('', @$_), @tvals;
+        $vals[1][1] = $k;
+
+        my $sym = $SYM_xy;
+        $sym |= $SYM_Xy if all { $row[$_] eq $row[2 - $_] } 0 .. 2;
+        $sym |= $SYM_xY if all { $col[$_] eq $col[2 - $_] } 0 .. 2;
+        $sym |= $SYM_XY if all { $row[$_] eq reverse $row[2 - $_] } 0 .. 2;
+        $sym |= $SYM_yx if all { $row[$_] eq $col[$_] } 0 .. 2;
+        $sym |= $SYM_yX if all { $row[$_] eq $col[2 - $_] } 0 .. 2;
+        $sym |= $SYM_Yx if all { $row[$_] eq reverse($col[$_]) } 0 .. 2;
+        $sym |= $SYM_YX if all { $row[$_] eq reverse($col[2 - $_]) } 0 .. 2;
+
+        my($x, $y) = (3, 3);
+        if ($row[2] eq '000') {
+            --$x;
+            pop @vals;
         }
-        die "to do: seeds for 3 <= k <= 8 (want $k)";
+        if ($row[0] eq '000') {
+            --$x;
+            shift @vals;
+        }
+        if ($col[2] eq '000') {
+            --$y;
+            pop @$_ for @vals;
+        }
+        if ($col[0] eq '000') {
+            --$y;
+            shift @$_ for @vals;
+        }
+        return $class->new($x, $y, \@vals, $sym);
     }
 
     # returns an array indexed by sums of arrayrefs of locations [x, y]
