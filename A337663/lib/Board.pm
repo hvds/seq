@@ -5,6 +5,7 @@ use warnings;
 use Group;
 
 our $count = 0;
+our $feedback = 4;
 
 sub new {
     my($class, $k, $unused, $groups) = @_;
@@ -31,6 +32,9 @@ sub recurse {
 
     # record count of boards recursed through
     ++$count;
+
+    # give some feedback of progress
+    print $next->str, "\n" if $k <= $feedback;
 
     my($next_best, $next_best_board) = $next->try($best, $best_board);
     return +($next_best > $best ? ($next_best, $next_best_board)
