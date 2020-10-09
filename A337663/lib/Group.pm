@@ -5,14 +5,8 @@ use warnings;
 use List::Util qw{ all min max };
 use Algorithm::Loops qw{ NestedLoops };
 
-our $SYM_xy; BEGIN { $SYM_xy = 0 }; # null symmetry
-our $SYM_xY; BEGIN { $SYM_xY = 1 }; # x -> x, y -> -y
-our $SYM_Xy; BEGIN { $SYM_Xy = 2 };
-our $SYM_XY; BEGIN { $SYM_XY = 4 };
-our $SYM_yx; BEGIN { $SYM_yx = 8 };
-our $SYM_yX; BEGIN { $SYM_yX = 16 };
-our $SYM_Yx; BEGIN { $SYM_Yx = 32 };
-our $SYM_YX; BEGIN { $SYM_YX = 64 };
+use lib 'lib';
+use Sym;
 
 my %cache_seed;
 # $seed_bits[$k] represents the possible arrangements of $k squares
@@ -69,14 +63,10 @@ sub new_bits {
     my @col = map join('', @$_), @tvals;
     $vals[1][1] = $k;
 
-    my $sym = $SYM_xy;
-    $sym |= $SYM_Xy if all { $row[$_] eq $row[2 - $_] } 0 .. 2;
-    $sym |= $SYM_xY if all { $col[$_] eq $col[2 - $_] } 0 .. 2;
-    $sym |= $SYM_XY if all { $row[$_] eq reverse $row[2 - $_] } 0 .. 2;
-    $sym |= $SYM_yx if all { $row[$_] eq $col[$_] } 0 .. 2;
-    $sym |= $SYM_yX if all { $row[$_] eq $col[2 - $_] } 0 .. 2;
-    $sym |= $SYM_Yx if all { $row[$_] eq reverse($col[$_]) } 0 .. 2;
-    $sym |= $SYM_YX if all { $row[$_] eq reverse($col[2 - $_]) } 0 .. 2;
+    my $sym = 0;
+    for (Sym->all) {
+        $sym |= $_->bit if $_->check(\@vals);
+    }
 
     my($x, $y) = (3, 3);
     if ($row[2] eq '000') {
@@ -107,24 +97,12 @@ sub sums {
         my $vals = $self->vals;
         my %seen;
         for my $i (-1 .. $x) {
-            for my $j (-1 .. $y) {
+            CELL: for my $j (-1 .. $y) {
                 next if $i >= 0 && $i < $x && $j >= 0 && $j < $y
                         && $vals->[$i][$j];
-                if ($sym) {
-                    next if ($sym & $SYM_xY)
-                        && $seen{"$i.@{[ $y - $j ]}"};
-                    next if ($sym & $SYM_Xy)
-                        && $seen{"@{[ $x - $i ]}.$j"};
-                    next if ($sym & $SYM_XY)
-                        && $seen{"@{[ $x - $i ]}.@{[ $y - $j ]}"};
-                    next if ($sym & $SYM_yx)
-                        && $seen{"$j.$i"};
-                    next if ($sym & $SYM_yX)
-                        && $seen{"$j.@{[ $x - $i ]}"};
-                    next if ($sym & $SYM_Yx)
-                        && $seen{"@{[ $y - $j ]}.$i"};
-                    next if ($sym & $SYM_YX)
-                        && $seen{"@{[ $y - $j ]}.@{[ $x - $i ]}"};
+                for (Sym->all_bits($sym)) {
+                    my($ti, $tj) = @{ $_->transform_loc($self, [ $i, $j ]) };
+                    next CELL if $seen{"$ti.$tj"};
                 }
                 my $sum = 0;
                 for my $di (-1 .. 1) {
@@ -152,22 +130,12 @@ sub sums {
 # value is placed at $locn
 sub next_sym {
     my($self, $locn) = @_;
-    my($x, $y, $sym) = ($self->x, $self->y, $self->sym);
     my($locx, $locy) = @$locn;
+    my $sym = $self->sym;
     my $next_sym = 0;
-    while ($sym) {
-        my $bit = $sym - ($sym & ($sym - 1));
-        $sym -= $bit;
-        my $check = {
-            $SYM_Xy => sub { $locx * 2 == $x - 1 },
-            $SYM_xY => sub { $locy * 2 == $y - 1 },
-            $SYM_XY => sub { $locx * 2 == $x - 1 && $locy * 2 == $y - 1 },
-            $SYM_yx => sub { $locx == $locy },
-            $SYM_yX => sub { $locx * 2 == $x - 1 && $locy * 2 == $y - 1 },
-            $SYM_Yx => sub { $locx * 2 == $x - 1 && $locy * 2 == $y - 1 },
-            $SYM_YX => sub { $locx + $locy == $x - 1 },
-        };
-        $next_sym |= $bit if $check->{$bit}->();
+    for (Sym->all_bits($sym)) {
+        my($tx, $ty) = @{ $_->transform_loc($self, $locn) };
+        $next_sym |= $_->bit if "$tx.$ty" eq "$locx.$locy";
     }
     return $next_sym;
 }
