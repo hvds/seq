@@ -23,9 +23,10 @@ if ($n >= 9) {
         . " 2 groups simultaneously";
 }
 
+our $count = 0;
 my $board = Board->new(2, $n, []);
 my($max, $max_board) = $board->try(1, $board);
-print "a($n) = $max\n";
+print "a($n) = $max ($count)\n";
 print $max_board->str, "\n";
 exit 0;
 
@@ -52,6 +53,7 @@ package Board {
         my($self, $next_unused, $next_groups, $best, $best_board) = @_;
         my $k = $self->k;
         my $next = Board->new($k + 1, $next_unused, $next_groups);
+++$::count;
         my($next_best, $next_best_board) = $next->try($best, $best_board);
         return +($next_best > $best ? ($next_best, $next_best_board)
             : $k > $best ? ($k, $next)
