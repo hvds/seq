@@ -234,13 +234,13 @@ package Group {
             my $bit = $sym - ($sym & ($sym - 1));
             $sym -= $bit;
             my $check = {
-                $SYM_Xy => sub { $locx * 2 == $x },
-                $SYM_xY => sub { $locy * 2 == $y },
-                $SYM_XY => sub { $locx * 2 == $x && $locy * 2 == $y },
+                $SYM_Xy => sub { $locx * 2 == $x - 1 },
+                $SYM_xY => sub { $locy * 2 == $y - 1 },
+                $SYM_XY => sub { $locx * 2 == $x - 1 && $locy * 2 == $y - 1 },
                 $SYM_yx => sub { $locx == $locy },
-                $SYM_yX => sub { $locx * 2 == $x && $locy * 2 == $y },
-                $SYM_Yx => sub { $locx * 2 == $x && $locy * 2 == $y },
-                $SYM_YX => sub { ($locx + $locy) * 2 == $x + $y },
+                $SYM_yX => sub { $locx * 2 == $x - 1 && $locy * 2 == $y - 1 },
+                $SYM_Yx => sub { $locx * 2 == $x - 1 && $locy * 2 == $y - 1 },
+                $SYM_YX => sub { $locx + $locy == $x - 1 },
             };
             $next_sym |= $bit if $check->{$bit}->();
         }
