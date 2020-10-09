@@ -190,7 +190,6 @@ package Group {
                         $SYM_XY | $SYM_yx | $SYM_YX, undef ],
             );
         }
-use Carp; Carp::confess("k=$k");
         die "to do: seeds for 3 <= k <= 8 (want $k)";
     }
 
