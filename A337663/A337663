@@ -277,4 +277,111 @@ package Group {
         return Group->new($x, $y, $vals, $sym, undef);
     }
 
+    # return a list of new group objects, each made by placing the given $k
+    # at the specified $locn in $self, as well as $use 1s arranged adjacent
+    # to $locn (but not adjacent to any other location in which some k > 1
+    # has been placed)
+    sub place_with {
+        my($self, $locn, $k, $use) = @_;
+        my($x, $y, $vals) = ($self->x, $self->y, $self->vals);
+        my $sym = 0;    # FIXME: work out the symmetries for each arrangement
+        $vals = [ map [ @$_ ], @$vals ];
+        my($locx, $locy) = @$locn;
+        if ($locx < 0) {
+            unshift @$vals, [ (0) x $y ];
+            ++$locx;
+            ++$x;
+        }
+        if ($locx >= $x) {
+            push @$vals, [ (0) x $y ];
+            ++$x;
+        }
+        if ($locy < 0) {
+            unshift @$_, 0 for @$vals;
+            ++$locy;
+            ++$y;
+        }
+        if ($locy >= $y) {
+            push @$_, 0 for @$vals;
+            ++$y;
+        }
+        $vals->[$locx][$locy] = $k;
+
+        # start with the 8 squares around $locn
+        my @avail = ([ 1, 1, 1 ], [ 1, 0, 1 ], [ 1, 1, 1 ]);
+        for my $dx (-2 .. 2) {
+            my $px = $locx + $dx;
+            next if $px < 0;
+            next if $px >= $x;
+            for my $dy (-2 .. 2) {
+                my $py = $locy + $dy;
+                next if $py < 0;
+                next if $py >= $y;
+                next if $dx == 0 && $dy == 0;
+                my $val = $vals->[$px][$py];
+                if ($val == 1) {
+                    # just reject this point
+                    $avail[$dx + 1][$dy + 1] = 0
+                            if $dx >= -1 && $dy >= -1
+                            && $dx <= 1 && $dy <= 1;
+                } elsif ($val > 1) {
+                    # reject any point neighbouring this
+                    for my $d2x ($dx - 1 .. $dx + 1) {
+                        next if $d2x < -1 || $d2x > 1;
+                        for my $d2y ($dy - 1 .. $dy + 1) {
+                            next if $d2y < -1 || $d2y > 1;
+                            $avail[$d2x + 1][$d2y + 1] = 0;
+                        }
+                    }
+                }
+            }
+        }
+        my @actual;
+        for my $px (0 .. 2) {
+            for my $py (0 .. 2) {
+                push @actual, [ $locx + $px - 1, $locy + $py - 1 ]
+                        if $avail[$px][$py];
+            }
+        }
+
+        return () if @actual < $use;
+
+        use Algorithm::Loops qw{ NestedLoops };
+        use List::Util qw{ min max };
+        my @result;
+        NestedLoops([
+            [ 0 .. $#actual ],
+            (sub { [ $_ + 1 .. $#actual ] }) x ($use - 1),
+        ], sub {
+            my @locns = @actual[@_];
+            my $next_vals = [ map [ @$_ ], @$vals ];
+            my($next_x, $next_y) = ($x, $y);
+            my($dx, $dy) = (0, 0);
+            my $minx = min(map $_->[0], @locns);
+            my $miny = min(map $_->[1], @locns);
+            my $maxx = max(map $_->[0], @locns);
+            my $maxy = max(map $_->[1], @locns);
+            if ($maxx >= $next_x) {
+                push @$next_vals, [ (0) x $next_y ];
+                ++$next_x;
+            }
+            if ($maxy >= $next_y) {
+                push @$_, 0 for @$next_vals;
+                ++$next_y;
+            }
+            if ($minx < 0) {
+                unshift @$next_vals, [ (0) x $next_y ];
+                ++$next_x;
+                ++$dx;
+            }
+            if ($miny < 0) {
+                unshift @$_, 0 for @$next_vals;
+                ++$next_y;
+                ++$dy;
+            }
+            $next_vals->[ $_->[0] + $dx ][ $_->[1] + $dy ] = 1 for @locns;
+            push @result, Group->new($next_x, $next_y, $next_vals, $sym, undef);
+        });
+        return @result;
+    }
 };
