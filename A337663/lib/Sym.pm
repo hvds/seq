@@ -22,6 +22,7 @@ sub all_bits {
 # null symmetry
 package Sym::xy {
     sub bit { 0 }
+    sub is_transpose { 0 }
 
     sub check {
         my($class, $vals) = @_;
@@ -42,6 +43,7 @@ package Sym::xy {
 # x -> x, y -> -y
 package Sym::xY {
     sub bit { 1 }
+    sub is_transpose { 0 }
 
     sub check {
         my($class, $vals) = @_;
@@ -64,6 +66,7 @@ package Sym::xY {
 # x -> -x, y -> y
 package Sym::Xy {
     sub bit { 2 }
+    sub is_transpose { 0 }
 
     sub check {
         my($class, $vals) = @_;
@@ -87,6 +90,7 @@ package Sym::Xy {
 # x -> -x, y -> -y
 package Sym::XY {
     sub bit { 4 }
+    sub is_transpose { 0 }
 
     sub check {
         my($class, $vals) = @_;
@@ -111,6 +115,7 @@ package Sym::XY {
 # x -> y, y -> x
 package Sym::yx {
     sub bit { 8 }
+    sub is_transpose { 1 }
 
     sub check {
         my($class, $vals) = @_;
@@ -141,6 +146,7 @@ package Sym::yx {
 # x -> y, y -> -x
 package Sym::yX {
     sub bit { 16 }
+    sub is_transpose { 1 }
 
     sub check {
         my($class, $vals) = @_;
@@ -171,6 +177,7 @@ package Sym::yX {
 # x -> -y, y -> x
 package Sym::Yx {
     sub bit { 32 }
+    sub is_transpose { 1 }
 
     sub check {
         my($class, $vals) = @_;
@@ -201,6 +208,7 @@ package Sym::Yx {
 # x -> -y, y -> -x
 package Sym::YX {
     sub bit { 64 }
+    sub is_transpose { 1 }
 
     sub check {
         my($class, $vals) = @_;
