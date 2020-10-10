@@ -108,7 +108,7 @@ sub try {
                     for my $locni (@$locnsi) {
                         for my $locnj (@$locnsj) {
                             for my $new_group ($gi->coalesce(
-                                $locni, $gj, $locnj, $use,
+                                $locni, $gj, $locnj, $k, $use,
                             )) {
                                 my $next_groups = [ @$groups ];
                                 $next_groups->[$i] = $new_group;

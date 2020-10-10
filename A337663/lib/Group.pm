@@ -276,4 +276,182 @@ sub place_with {
     return @result;
 }
 
+sub _neighbours {
+    my($self, $loc) = @_;
+    my @n = map [ 0, 0, 0 ], 0 .. 2;
+    my($x, $y, $vals) = ($self->x, $self->y, $self->vals);
+    my($lx, $ly) = @$loc;
+    for my $i (-2 .. 2) {
+        next if $lx + $i < 0 || $lx + $i >= $x;
+        for my $j (-2 .. 2) {
+            next if $ly + $j < 0 || $ly + $j >= $y;
+            my $val = $vals->[$lx + $i][$ly + $j];
+            next if $val == 0;
+            $n[$i + 1][$j + 1] = -1
+                    if $i >= -1 && $i <= 1 && $j >= -1 && $j <= 1;
+            if ($val > 1) {
+                for my $dx (-1 .. 1) {
+                    next if $dx + $i < -1 || $dx + $i > 1;
+                    for my $dy (-1 .. 1) {
+                        next if $dy + $j < -1 || $dy + $j > 1;
+                        $n[$dx + $i + 1][$dy + $j + 1] ||= 1;
+                    }
+                }
+            }
+        }
+    }
+    return \@n;
+}
+
+# return a list of new group objects, each made by coalescing the groups
+# $self and $other such that the location $sloc on $self and the location
+# $oloc on $other coincide; the value $k is placed in that shared location,
+# and an additional $use 1s are placed (safely) adjacent to it.
+sub coalesce {
+    my($self, $sloc, $other, $oloc, $k, $use) = @_;
+    my($sx, $sy, $svals, $ssym)
+            = ($self->x, $self->y, $self->vals, $self->sym);
+    my($ox, $oy, $ovals, $osym)
+            = ($other->x, $other->y, $other->vals, $other->sym);
+    my($slocx, $slocy) = @$sloc;
+    my($olocx, $olocy) = @$oloc;
+
+    # first look at the 3x3 square around the common location, to see
+    # if the two groups can in principle fit together around there
+    # _and_ leave room for an additional $use 1s.
+    # we mark -1 for spot in use, 0 for a spot available to use
+    my $slocal = $self->_neighbours($sloc);
+    my $olocal = $other->_neighbours($oloc);
+    $_->[1][1] = 1 for ($slocal, $olocal);
+    my $savail = grep $_ == 0, map @$_, @$slocal;
+    my $sneed = grep $_ == -1, map @$_, @$slocal;
+    my $oavail = grep $_ == 0, map @$_, @$olocal;
+    my $oneed = grep $_ == -1, map @$_, @$olocal;
+    return () if $savail < $oneed + $use
+            || $oavail < $sneed + $use;
+
+    # now check if any transform of $other would allow $olocal to be placed
+    # over $slocal without conflict, and still leaving enough free spots
+    # for us to add $use 1s.
+    my @sym;
+    SYM: for my $sym (Sym->all) {
+        my $tlocal = $sym->transform($olocal);
+        my @free;
+        for (my $i = 0; $i <= 2; ++$i) {
+            for (my $j = 0; $j <= 2; ++$j) {
+                my $sv = $slocal->[$i][$j];
+                my $tv = $tlocal->[$i][$j];
+                next SYM if ($sv == -1 && $tv != 0)
+                        || ($tv == -1 && $sv != 0);
+                push @free, [ $i - 1, $j - 1 ] if $sv == 0 && $tv == 0;
+            }
+        }
+        next unless @free >= $use;
+        push @sym, [ $sym, \@free ];
+    }
+
+    return () unless @sym;
+
+    # now try applying the same transform on the whole of $other, to
+    # coalesce with $self. If that succeeds, we then have a solution
+    # for each way we can distribute $use over $free.
+    my @result;
+    my($sxmin, $sxmax, $symin, $symax)
+            = (-$slocx, $sx - $slocx, -$slocy, $sy - $slocy);
+    SYM2: for (@sym) {
+        my($sym, $free) = @$_;
+        my $tvals = $sym->transform($ovals);
+        my($tlocx, $tlocy) = @{ $sym->transform_loc($other, $oloc) };
+        my($tx, $ty) = $sym->is_transpose ? ($oy, $ox) : ($ox, $oy);
+
+        my($txmin, $txmax, $tymin, $tymax)
+                = (-$tlocx, $tx - $tlocx, -$tlocy, $ty - $tlocy);
+        my $xmin = min($sxmin, $txmin);
+        my $xmax = max($sxmax, $txmax);
+        my $ymin = min($symin, $tymin);
+        my $ymax = max($symax, $tymax);
+        my $dsx = $sxmin - $xmin;
+        my $dsy = $symin - $ymin;
+        my $dtx = $txmin - $xmin;
+        my $dty = $tymin - $ymin;
+        my $cx = $xmax - $xmin;
+        my $cy = $ymax - $ymin;
+        my $clocx = $slocx + $dsx;
+        my $clocy = $slocy + $dsy;
+        my $cvals = [ map [ (0) x $cy ], 1 .. $cx ];
+
+        for my $i (0 .. $cx - 1) {
+            for my $j (0 .. $cy - 1) {
+                my $bs = ($i >= $dsx && $i <= $dsx + $sx - 1
+                        && $j >= $dsy && $j <= $dsy + $sy - 1);
+                my $bt = ($i >= $dtx && $i <= $dtx + $tx - 1
+                        && $j >= $dty && $j <= $dty + $ty - 1);
+                my $vs = $bs ? $svals->[$i - $dsx][$j - $dsy] : undef;
+                my $vt = $bt ? $tvals->[$i - $dtx][$j - $dty] : undef;
+                if ($bs && $bt) {
+                    next SYM2 if $vs && $vt;
+                    $cvals->[$i][$j] = $vs || $vt;
+                } elsif (!$bs && !$bt) {
+                    $cvals->[$i][$j] = 0;
+                } else {
+                    $cvals->[$i][$j] = $vs // $vt;
+                }
+            }
+        }
+
+        my $finish = sub {
+            my($vals, $frees) = @_;
+            my($rx, $ry) = ($cx, $cy);
+            my($rlocx, $rlocy) = ($clocx, $clocy);
+            for ([ $k, [ 0, 0 ] ], map [ 1, $_ ], @$frees) {
+                my($val, $rel) = @$_;
+                my($vx, $vy) = ($rlocx + $rel->[0], $rlocy + $rel->[1]);
+                if ($vx < 0) {
+                    unshift @$vals, [ (0) x $ry ];
+                    ++$rx;
+                    ++$vx;
+                }
+                if ($vx >= $rx) {
+                    push @$vals, [ (0) x $ry ];
+                    ++$rx;
+                }
+                if ($vy < 0) {
+                    unshift @$_, 0 for @$vals;
+                    ++$ry;
+                    ++$vy;
+                }
+                if ($vy >= $ry) {
+                    push @$_, 0 for @$vals;
+                    ++$ry;
+                }
+                $vals->[$vx][$vy] = $val;
+            }
+            # FIXME: is it worth finding symmetries here?
+            return Group->new($rx, $ry, $vals, 0);
+        };
+
+        my @select;
+        if ($use) {
+            NestedLoops([
+                [ 0 .. $#$free ],
+                (sub { [ $_ + 1 .. $#$free ] }) x ($use - 1),
+            ], sub {
+                push @select, [ @$free[@_] ];
+            });
+        } else {
+            push @select, [];
+        }
+
+        if (@select == 1) {
+            push @result, $finish->($cvals, $select[0]);
+        } else {
+            for my $select (@select) {
+                my $rvals = [ map [ @$_ ], @$cvals ];
+                push @result, $finish->($rvals, $select);
+            }
+        }
+    }
+    return @result;
+}
+
 1;
