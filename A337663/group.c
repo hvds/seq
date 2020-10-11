@@ -1,0 +1,334 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "group.h"
+#include "sym.h"
+
+grouplist_t *cache_seed[9];
+typedef struct seed_s {
+    int count;
+    int bits[13];  /* max needed */
+} seed_t;
+seed_t seed_base[9] = {
+    { 0, {} },
+    { 0, {} },
+    { 6, { 0300, 0210, 0201, 0050, 0500, 0401 } },
+    { 10, { 0700, 0610, 0601, 0602, 0604, 0640, 0504, 0502, 0412, 0250 } },
+    { 13, { 0505, 0704, 0514, 0710, 0702, 0550, 0512, 0641, 0611, 0603,
+            0642, 0342, 0252 } },
+    { 10, { 0057, 0147, 0156, 0155, 0153, 0117, 0253, 0255, 0345, 0307 } },
+    { 6, { 0457, 0547, 0556, 0707, 0257, 0356 } },
+    { 2, { 0776, 0775 } },
+    { 1, { 0777 } }
+};
+
+void init_group(void) {
+    return;
+}
+
+group_t *new_group(int x, int y, int sym, int* vals) {
+    group_t *g = malloc(sizeof(group_t));
+    int maxsum = 0;
+
+    g->x = x;
+    g->y = y;
+    g->sym = sym;
+    g->vals = vals;
+    /* caller will increment; freed on decrement to zero */
+    g->refcount = 0;
+
+    /* initialise to AVAIL = 0 */
+    g->avail = calloc((x + 2) * (y + 2), sizeof(avail_t));
+    for (int i = 0; i < x; ++i)
+        for (int j = 0; j < y; ++j)
+            if (g->vals[i * y + j])
+                g->avail[(i + 1) * (y + 2) + (j + 1)] = USED;
+
+    g->sum_chains = calloc((x + 2) * (y + 2), sizeof(int));
+    for (int i = 0; i < x; ++i)
+        for (int j = 0; j < y; ++j) {
+            int v = g->vals[i * y + j];
+            if (v == 0)
+                continue;
+            for (int di = 0; di < 3; ++di)
+                for (int dj = 0; dj < 3; ++dj) {
+                    int off = (i + di) * (y + 2) + (j + dj);
+                    if (v > 1 && g->avail[off] == AVAIL)
+                        g->avail[off] = RES;
+                    if (g->avail[off] != USED) {
+                        g->sum_chains[off] += v;
+                        if (g->sum_chains[off] > maxsum)
+                            maxsum = g->sum_chains[off];
+                    }
+                }
+        }
+
+    if (sym)
+        for (int s = 1; s <= MAXSYM; ++s) {
+            if (!(sym & (1 << s)))
+                continue;
+            for (int i = -1; i < x + 1; ++i)
+                for (int j = -1; j < y + 1; ++j) {
+                    loc_t l = sym_transloc(s, g, (loc_t){ i, j });
+                    if (l.x * (y + 2) + l.y < i * (y + 2) + j)
+                        g->sum_chains[(i + 1) * (y + 2) + (j + 1)] = 0;
+                }
+        }
+
+    g->maxsum = maxsum;
+    g->sum_heads = malloc((maxsum + 1) * sizeof(int));
+    memset(g->sum_heads, 0xff, (maxsum + 1) * sizeof(int));
+
+    /* Walk backwards turning the actual sums into linked lists headed by
+     * sum_heads[sum]. We mask out USED and zero locations.
+     * FIXME: should also mask out symmetries
+     */
+    for (int i = (x + 2) * (y + 2) - 1; i >= 0; --i) {
+        int sum = g->sum_chains[i];
+        if (sum == 0 || g->avail[i] == USED) {
+            g->sum_chains[i] = -1;
+        } else {
+            g->sum_chains[i] = g->sum_heads[sum];
+            g->sum_heads[sum] = i;
+        }
+    }
+
+    return g;
+}
+
+void ref_group(group_t *g) {
+    ++g->refcount;
+}
+
+void unref_group(group_t *g) {
+    if (--g->refcount == 0) {
+        free(g->vals);
+        free(g->avail);
+        free(g->sum_heads);
+        free(g->sum_chains);
+        free(g);
+    }
+}
+
+grouplist_t *new_grouplist(int size) {
+    grouplist_t *gl = malloc(sizeof(grouplist_t) + size * sizeof(group_t *));
+    gl->count = size;
+    return gl;
+}
+
+void free_grouplist(grouplist_t *gl) {
+    for (int i = 0; i < gl->count; ++i) {
+        unref_group(gl->g[i]);
+    }
+    free(gl);
+}
+
+void print_list(char *s, int x, int y, void *p, int size) {
+    printf("%s", s);
+    for (int i = 0; i < x; ++i) {
+        printf(i ? "; " : " ");
+        for (int j = 0; j < y; ++j) {
+            printf(" %d", (
+                size == 4 ? ((int *)p)[i * y + j]
+                : size == 2 ? ((short *)p)[i * y + j]
+                : size == 1 ? ((char *)p)[i * y + j]
+                : 0
+            ));
+        }
+    }
+    printf("\n");
+}
+
+void print_group(group_t *g) {
+    print_list("", g->x, g->y, g->vals, sizeof(int));
+}
+
+void dprint_group(group_t *g) {
+    printf("(%p) x=%d y=%d sym=%d maxsum=%d refcount=%d\n", g, g->x, g->y, g->sym, g->maxsum, g->refcount);
+    print_list(" vals: ", g->x, g->y, g->vals, sizeof(int));
+    print_list(" avail: ", g->x + 2, g->y + 2, g->avail, sizeof(avail_t));
+    print_list(" heads: ", 1, g->maxsum + 1, g->sum_heads, sizeof(int));
+    print_list(" chain: ", g->x + 2, g->y + 2, g->sum_chains, sizeof(int));
+}
+
+group_t *group_seedbits(int k, int bits) {
+    int *vals = malloc(sizeof(int) * 9);
+    int x = 3, y = 3, sym = 0, x0 = 0, y0 = 0;
+    group_t *g;
+
+    /* shrink to fit */
+    if ((bits & 0b000000111) == 0)
+        --x;
+    if ((bits & 0b111000000) == 0)
+        --x, ++x0;
+    if ((bits & 0b001001001) == 0)
+        --y;
+    if ((bits & 0b100100100) == 0)
+        --y, ++y0;
+
+    for (int i = 0; i < x; ++i)
+        for (int j = 0; j < y; ++j)
+            vals[i * y + j] = (bits & (1 << (8 - ((i + x0) * 3 + j + y0))))
+                    ? 1 : 0;
+    vals[(1 - x0) * y + (1 - y0)] = k;
+
+    for (int s = 1; s <= MAXSYM; ++s)
+        if (sym_check(s, x, y, vals))
+            sym |= (1 << s);
+
+    g = new_group(x, y, sym, vals);
+    ref_group(g);
+    return g;
+}
+
+grouplist_t *group_seed(int k) {
+    if (k < 2 || k > 8) {
+        fprintf(stderr, "Error: group_seed(%d) called\n", k);
+        exit(1);
+    }
+    if (!cache_seed[k]) {
+        seed_t *seed = &seed_base[k];
+        grouplist_t *gl = new_grouplist(seed->count);
+        for (int i = 0; i < seed->count; ++i) {
+            gl->g[i] = group_seedbits(k, seed->bits[i]);
+            ref_group(gl->g[i]);
+        }
+        cache_seed[k] = gl;
+    }
+    return cache_seed[k];
+}
+
+sym_t next_sym(group_t *g, loc_t l) {
+    int osym = g->sym, nsym = 0;
+
+    if (osym)
+        for (sym_t s = 1; s <= MAXSYM; ++s)
+            if (osym & (1 << s)) {
+                loc_t tl = sym_transloc(s, g, l);
+                if (tl.x == l.x && tl.y == l.y)
+                    nsym |= (1 << s);
+            }
+    return nsym;
+}
+
+group_t *group_place(group_t *g, loc_t loc, int k) {
+    int x = g->x, y = g->y, x0 = 0, y0 = 0;
+    int *vals, sym = next_sym(g, loc);
+
+    if (loc.x < 0)
+        ++x, ++x0;
+    if (loc.x >= x)
+        ++x;
+    if (loc.y < 0)
+        ++y, ++y0;
+    if (loc.y >= y)
+        ++y;
+
+    vals = calloc(x * y, sizeof(int));
+    for (int i = 0; i < g->x; ++i)
+        for (int j = 0; j < g->y; ++j)
+            vals[(i + x0) * y + (j + y0)] = g->vals[i * g->y + j];
+    vals[(loc.x + x0) * y + (loc.y + y0)] = k;
+
+    return new_group(x, y, sym, vals);
+}
+
+int _comb(int n, int d) {
+    int x = 1;
+    for (int i = 0; i < d; ++i)
+        x = x * (n - i) / (i + 1);
+    return x;
+}
+
+grouplist_t *group_place_with(group_t *g, loc_t loc, int k, int use) {
+    loc_t avail[9];
+    int availc = 0;
+    int stack[9];
+    int sp = 0;
+    int count;
+    grouplist_t *result;
+    int ri = 0;
+    int x, y, x0, y0, xmin, ymin, xmax, ymax;
+    int *vals;
+
+    /* put the centre location into the list to simplify bounding box checks */
+    avail[availc++] = loc;
+
+    /* find available places surrounding the location to put extra 1s */
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) {
+            if (i == 1 && j == 1)
+                continue;
+            if (loc.x + i < 0 || loc.x +i >= g->x + 2
+                || loc.y + j < 0 || loc.y + j >= g->y + 2
+                || g->avail[(loc.x + i) * (g->y + 2) + (loc.y + j)] == AVAIL
+            )
+                avail[availc++] = (loc_t){ loc.x + i - 1, loc.y + j - 1 };
+        }
+
+    if (availc - 1 < use)
+        count = 0;
+    else
+        count = _comb(availc - 1, use);
+    result = new_grouplist(count);
+
+    stack[sp++] = 0;    /* place central loc for bounding box check */
+    stack[sp] = 0;      /* skip 0 otherwise */
+    while (sp > 0) {    /* stop when we get back to central loc at stack[0] */
+        ++stack[sp];
+        if (stack[sp] >= availc) {
+            --sp;
+            continue;
+        }
+        if (sp < use) {
+            stack[sp + 1] = stack[sp];
+            ++sp;
+            continue;
+        }
+        x = g->x;
+        y = g->y;
+        x0 = y0 = xmin = ymin = xmax = ymax = 0;
+        for (int i = 0; i <= sp; ++i) {
+            if (avail[stack[i]].x < xmin)
+                xmin = avail[stack[i]].x;
+            if (avail[stack[i]].x > xmax)
+                xmax = avail[stack[i]].x;
+            if (avail[stack[i]].y < ymin)
+                ymin = avail[stack[i]].y;
+            if (avail[stack[i]].y > ymax)
+                ymax = avail[stack[i]].y;
+        }
+        if (xmin < 0)
+            x -= xmin, x0 -= xmin;
+        if (xmax >= g->x)
+            x += xmax + 1 - g->x;
+        if (ymin < 0)
+            y -= ymin, y0 -= ymin;
+        if (ymax >= g->y)
+            y += ymax + 1 - g->y;
+        vals = calloc(x * y, sizeof(int));
+        for (int i = 0; i < g->x; ++i)
+            for (int j = 0; j < g->y; ++j)
+                vals[(i + x0) * y + (j + y0)] = g->vals[i * g->y + j];
+        vals[(loc.x + x0) * y + (loc.y + y0)] = k;
+        for (int i = 0; i < use; ++i) {
+            loc_t loc1 = avail[stack[i + 1]];
+            vals[(loc1.x + x0) * y + (loc1.y + y0)] = 1;
+        }
+        result->g[ri] = new_group(x, y, 0, vals);
+        ref_group(result->g[ri++]);
+    }
+if (ri != count) {
+    printf("found %d of %d (for comb(%d, %d))\n", ri, count, availc - 1, use);
+    result->count = ri;
+}
+    return result;
+}
+
+grouplist_t *coalesce_group(
+    group_t *ga, loc_t la, group_t *gb, loc_t lb, int k, int use
+) {
+    fprintf(stderr, "coalesce_group: not yet\n");
+    exit(1);
+}

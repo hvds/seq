@@ -15,7 +15,6 @@ sub new {
         groups => $groups,
     }, $class;
 }
-sub n { shift->{n} }
 sub k { shift->{k} }
 sub unused { shift->{unused} }
 sub groups { shift->{groups} }

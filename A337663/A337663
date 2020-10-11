@@ -20,11 +20,12 @@ are needed to allow the next value of k to be placed.
 =cut
 
 my($n) = shift(@ARGV) // 2;
-
 if ($n >= 9) {
     die "Can't yet calculate $n >= 9, need to be able to coalesce more than"
         . " 2 groups simultaneously";
 }
+
+$| = 1;
 
 my $board = Board->new(2, $n, []);
 my($max, $max_board) = $board->try(1, $board);
