@@ -124,12 +124,15 @@ void free_grouplist(grouplist_t *gl) {
     free(gl);
 }
 
-void print_list(char *s, int x, int y, void *p, int size) {
+void print_list(char *s, int x, int y, void *p, int size, bool nl) {
     printf("%s", s);
     for (int i = 0; i < x; ++i) {
-        printf(i ? "; " : " ");
+        if (i)
+            printf("; ");
         for (int j = 0; j < y; ++j) {
-            printf(" %d", (
+            if (j)
+                printf(" ");
+            printf("%d", (
                 size == 4 ? ((int *)p)[i * y + j]
                 : size == 2 ? ((short *)p)[i * y + j]
                 : size == 1 ? ((char *)p)[i * y + j]
@@ -137,19 +140,21 @@ void print_list(char *s, int x, int y, void *p, int size) {
             ));
         }
     }
-    printf("\n");
+    if (nl)
+        printf("\n");
 }
 
 void print_group(group_t *g) {
-    print_list("", g->x, g->y, g->vals, sizeof(int));
+    print_list("", g->x, g->y, g->vals, sizeof(int), 0);
 }
 
 void dprint_group(group_t *g) {
-    printf("(%p) x=%d y=%d sym=%d maxsum=%d refcount=%d\n", g, g->x, g->y, g->sym, g->maxsum, g->refcount);
-    print_list(" vals: ", g->x, g->y, g->vals, sizeof(int));
-    print_list(" avail: ", g->x + 2, g->y + 2, g->avail, sizeof(avail_t));
-    print_list(" heads: ", 1, g->maxsum + 1, g->sum_heads, sizeof(int));
-    print_list(" chain: ", g->x + 2, g->y + 2, g->sum_chains, sizeof(int));
+    printf("(%p) x=%d y=%d sym=%d maxsum=%d refcount=%d\n",
+            g, g->x, g->y, g->sym, g->maxsum, g->refcount);
+    print_list(" vals: ", g->x, g->y, g->vals, sizeof(int), 1);
+    print_list(" avail: ", g->x + 2, g->y + 2, g->avail, sizeof(avail_t), 1);
+    print_list(" heads: ", 1, g->maxsum + 1, g->sum_heads, sizeof(int), 1);
+    print_list(" chain: ", g->x + 2, g->y + 2, g->sum_chains, sizeof(int), 1);
 }
 
 group_t *group_seedbits(int k, int bits) {

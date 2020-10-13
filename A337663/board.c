@@ -58,11 +58,14 @@ board_t *new_board(int k, int unused, group_t *g0, group_t *g1) {
 }
 
 void print_board(board_t *b) {
-    printf("k: %d; unused: %d; groups: %d ->", b->k, b->unused, b->groups);
+    printf("b=%lu; k=%d; u=%d; g=%d ->  ",
+            board_count, b->k, b->unused, b->groups);
     for (int i = 0; i < b->groups; ++i) {
-        printf("  ");
+        if (i)
+            printf("  //  ");
         print_group(b->group[i]);
     }
+    printf("\n");
 }
 
 void recurse(board_t *b, int unused, group_t *g0, group_t *g1) {
