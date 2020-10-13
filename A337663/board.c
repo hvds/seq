@@ -147,8 +147,6 @@ void try_board(board_t *b) {
             }
         }
 
-/* TODO */
-#if 0
         /* try by coalesce */
         for (int jg = ig + 1; jg < groups; ++jg) {
             group_t *gj = b->group[jg];
@@ -182,6 +180,5 @@ void try_board(board_t *b) {
                 }
             }
         }
-#endif
     }
 }

@@ -329,6 +329,183 @@ if (ri != count) {
 grouplist_t *coalesce_group(
     group_t *ga, loc_t la, group_t *gb, loc_t lb, int k, int use
 ) {
-    fprintf(stderr, "coalesce_group: not yet\n");
-    exit(1);
+    int ax = ga->x, ay = ga->y;
+    int bx = gb->x, by = gb->y;
+    int afree = 0, aneed = 0, bfree = 0, bneed = 0;
+    /* not avail_t [], since we're passing to sym_transform() */
+    int aavail[9], bavail[9];
+    int maxavail, maxcombs;
+    grouplist_t *result;
+    int ri = 0;
+    int axmin = -la.x, axmax = ax - la.x, aymin = -la.y, aymax = ay - la.y;
+
+    /* first look at the 3x3 square around the common location, to see
+     * if the two groups can in principle fit together around there
+     * _and_ leave room for an additional 'use' 1s/
+     */
+    for (int i = 0; i <= 2; ++i)
+        for (int j = 0; j <= 2; ++j) {
+            if (i == 1 && j == 1)
+                continue;
+            if (la.x + i < 0 || la.x + i >= ax + 2
+                || la.y + j < 0 || la.y + j >= ay + 2
+            ) {
+                ++afree;
+                aavail[i * 3 + j] = AVAIL;
+            } else {
+                avail_t a = ga->avail[(la.x + i) * (ay + 2) + (la.y + j)];
+                if (a == AVAIL)
+                    ++afree;
+                else if (a == USED)
+                    ++aneed;
+                aavail[i * 3 + j] = a;
+            }
+            if (lb.x + i < 0 || lb.x + i >= bx + 2
+                || lb.y + j < 0 || lb.y + j >= by + 2
+            ) {
+                ++bfree;
+                bavail[i * 3 + j] = AVAIL;
+            } else {
+                avail_t a = gb->avail[(lb.x + i) * (by + 2) + (lb.y + j)];
+                if (a == AVAIL)
+                    ++bfree;
+                else if (a == USED)
+                    ++bneed;
+                bavail[i * 3 + j] = a;
+            }
+        }
+
+    if (afree < bneed + use || bfree < aneed + use)
+        return new_grouplist(0);
+
+    /* prepare a space big enough for the maximum possible number of results */
+    maxavail = (afree - bneed < bfree - aneed)
+        ? afree - bneed
+        : bfree - aneed;
+    maxcombs = _comb(maxavail, use);
+    result = new_grouplist((MAXSYM + 1) * maxcombs);
+
+    /* Now for each transform of gb, check first whether its 3x3 square can
+     * be placed over ga's without conflict, and still leaving enough free
+     * spots for us to add 'use' 1s. If it can, try the full monty.
+     */
+    for (int s = 0; s <= MAXSYM; ++s) {
+        int *tavail = sym_transform(s, 3, 3, bavail);
+        int free_c = 0;
+        loc_t lfree[9];
+        int ok = 1;
+
+        lfree[free_c++] = la;
+
+        for (int i = 0; ok && i <= 2; ++i)
+            for (int j = 0; ok && j <= 2; ++j) {
+                avail_t aa = aavail[i * 3 + j];
+                avail_t ta = tavail[i * 3 + j];
+
+                if (i == 1 && j == 1)
+                    continue;
+
+                if ((aa == USED && ta != AVAIL)
+                    || (ta == USED && aa != AVAIL)
+                ) {
+                    ok = 0;
+                    break;
+                }
+                if (aa == AVAIL && ta == AVAIL)
+                    lfree[free_c++] = (loc_t){ la.x + i - 1, la.y + j - 1 };
+            }
+        if (ok && free_c - 1 < use)
+            ok = 0;
+        free(tavail);
+
+        if (ok) {
+            int *tvals = sym_transform(s, bx, by, gb->vals);
+            loc_t lt = sym_transloc(s, gb, lb);
+            bool trans = is_transpose(s);
+            int tx = trans ? by : bx, ty = trans ? bx : by;
+            int txmin = -lt.x, txmax = tx - lt.x;
+            int tymin = -lt.y, tymax = ty - lt.y;
+            int xmin = (axmin < txmin) ? axmin : txmin;
+            int xmax = (axmax > txmax) ? axmax : txmax;
+            int ymin = (aymin < tymin) ? aymin : tymin;
+            int ymax = (aymax > tymax) ? aymax : tymax;
+            int dax = axmin - xmin, day = aymin - ymin;
+            int dtx = txmin - xmin, dty = tymin - ymin;
+            int cx = xmax - xmin, cy = ymax - ymin;
+            loc_t lc = (loc_t){ la.x + dax, la.y + day };
+            int *cvals = calloc(cx * cy, sizeof(int));
+
+            for (int i = 0; ok && i < cx; ++i)
+                for (int j = 0; ok && j < cy; ++j) {
+                    bool ba = (i >= dax && i <= dax + ax - 1
+                        && j >= day && j <= day + ay - 1);
+                    bool bt = (i >= dtx && i <= dtx + tx - 1
+                        && j >= dty && j <= dty + ty - 1);
+                    int va = ba ? ga->vals[(i - dax) * ay + (j - day)] : 0;
+                    int vt = bt ? tvals[(i - dtx) * ty + (j - dty)] : 0;
+                    if (va && vt) {
+                        ok = 0;
+                        break;
+                    }
+                    cvals[i * cy + j] = va ? va : vt;
+                }
+
+            int stack[9];
+            int sp = 0;
+            stack[sp++] = 0;    /* place central loc for bounding box check */
+            stack[sp] = 0;      /* skip 0 otherwise */
+            while (ok && sp > 0) { /* stop when we get back to stack[0] */
+                ++stack[sp];
+                if (stack[sp] >= free_c) {
+                    --sp;
+                    continue;
+                }
+                if (sp < use) {
+                    stack[sp + 1] = stack[sp];
+                    ++sp;
+                    continue;
+                }
+                if (use == 0)
+                    sp = 0;
+
+                int fx = cx, fy = cy;
+                int fx0 = 0, fy0 = 0;
+                int fxmin = 0, fymin = 0, fxmax = 0, fymax = 0;
+                for (int i = 0; i <= sp; ++i) {
+                    if (lfree[stack[i]].x < fxmin)
+                        fxmin = lfree[stack[i]].x;
+                    if (lfree[stack[i]].x > fxmax)
+                        fxmax = lfree[stack[i]].x;
+                    if (lfree[stack[i]].y < fymin)
+                        fymin = lfree[stack[i]].y;
+                    if (lfree[stack[i]].y > fymax)
+                        fymax = lfree[stack[i]].y;
+                }
+                if (fxmin < 0)
+                    fx -= fxmin, fx0 -= fxmin;
+                if (fxmax >= cx)
+                    fx += fxmax + 1 - cx;
+                if (fymin < 0)
+                    fy -= fymin, fy0 -= fymin;
+                if (fymax >= cy)
+                    fy += fymax + 1 - cy;
+
+                int *fvals = calloc(fx * fy, sizeof(int));
+                for (int i = 0; i < cx; ++i)
+                    for (int j = 0; j < cy; ++j)
+                        fvals[(i + fx0) * fy + (j + fy0)] = cvals[i * cy + j];
+                fvals[(la.x + fx0) * fy + (la.y + fy0)] = k;
+                for (int i = 0; i < use; ++i) {
+                    loc_t loc1 = lfree[stack[i + 1]];
+                    fvals[(loc1.x + fx0) * fy + (loc1.y + fy0)] = 1;
+                }
+                result->g[ri] = new_group(fx, fy, 0, fvals);
+                ref_group(result->g[ri++]);
+            }
+            free(cvals);
+            free(tvals);
+        }
+    }
+    result->count = ri;
+    return result;
 }
