@@ -70,7 +70,7 @@ group_t *new_group(int x, int y, int sym, int* vals) {
                 continue;
             for (int i = -1; i < x + 1; ++i)
                 for (int j = -1; j < y + 1; ++j) {
-                    loc_t l = sym_transloc(s, g, (loc_t){ i, j });
+                    loc_t l = sym_transloc(s, x, y, (loc_t){ i, j });
                     if (l.x * (y + 2) + l.y < i * (y + 2) + j)
                         g->sum_chains[(i + 1) * (y + 2) + (j + 1)] = 0;
                 }
@@ -209,11 +209,9 @@ sym_t next_sym(group_t *g, loc_t l) {
 
     if (osym)
         for (sym_t s = 1; s <= MAXSYM; ++s)
-            if (osym & (1 << s)) {
-                loc_t tl = sym_transloc(s, g, l);
-                if (tl.x == l.x && tl.y == l.y)
+            if (osym & (1 << s))
+                if (sym_checkloc(s, g->x, g->y, l))
                     nsym |= (1 << s);
-            }
     return nsym;
 }
 
@@ -395,6 +393,12 @@ grouplist_t *coalesce_group(
      * spots for us to add 'use' 1s. If it can, try the full monty.
      */
     for (int s = 0; s <= MAXSYM; ++s) {
+        /* if this transform is a symmetry of the group _and_ the location
+         * is invariant under the symmetry, we've already checked it.
+         */
+        if ((gb->sym & (1 << s)) && sym_checkloc(s, bx, by, lb))
+            continue;
+
         int *tavail = sym_transform(s, 3, 3, bavail);
         int free_c = 0;
         loc_t lfree[9];
@@ -425,7 +429,7 @@ grouplist_t *coalesce_group(
 
         if (ok) {
             int *tvals = sym_transform(s, bx, by, gb->vals);
-            loc_t lt = sym_transloc(s, gb, lb);
+            loc_t lt = sym_transloc(s, bx, by, lb);
             bool trans = is_transpose(s);
             int tx = trans ? by : bx, ty = trans ? bx : by;
             int txmin = -lt.x, txmax = tx - lt.x;

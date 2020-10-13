@@ -113,25 +113,28 @@ int *sym_transform(sym_t s, int x, int y, int *vals) {
     return v;
 }
 
-loc_t sym_transloc(sym_t s, group_t *g, loc_t l) {
-    int xm = g->x - 1, ym = g->y - 1;
+bool sym_checkloc(sym_t s, int x, int y, loc_t l) {
+    loc_t l2 = sym_transloc(s, x, y, l);
+    return (l.x == l2.x && l.y == l2.y);
+}
 
+loc_t sym_transloc(sym_t s, int x, int y, loc_t l) {
     switch (s) {
         case xy:
             return (loc_t){ l.x, l.y };
         case xY:
-            return (loc_t){ l.x, ym - l.y };
+            return (loc_t){ l.x, y - 1 - l.y };
         case Xy:
-            return (loc_t){ xm - l.x, l.y };
+            return (loc_t){ x - 1 - l.x, l.y };
         case XY:
-            return (loc_t){ xm - l.x, ym - l.y };
+            return (loc_t){ x - 1 - l.x, y - 1 - l.y };
         case yx:
             return (loc_t){ l.y, l.x };
         case yX:
-            return (loc_t){ l.y, xm - l.x };
+            return (loc_t){ l.y, x - 1 - l.x };
         case Yx:
-            return (loc_t){ ym - l.y, l.x };
+            return (loc_t){ y - 1 - l.y, l.x };
         case YX:
-            return (loc_t){ ym - l.y, xm - l.x };
+            return (loc_t){ y - 1 - l.y, x - 1 - l.x };
     }
 }

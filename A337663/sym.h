@@ -20,7 +20,8 @@ typedef enum {
 extern void init_sym(void);
 extern bool is_transpose(sym_t s);
 extern bool sym_check(sym_t s, int x, int y, int *vals);
+extern bool sym_checkloc(sym_t s, int x, int y, loc_t l);
 extern int *sym_transform(sym_t s, int x, int y, int *vals);
-extern loc_t sym_transloc(sym_t s, group_t *g, loc_t l);
+extern loc_t sym_transloc(sym_t s, int x, int y, loc_t l);
 
 #endif
