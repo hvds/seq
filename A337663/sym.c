@@ -92,22 +92,22 @@ int *sym_transform(sym_t s, int x, int y, int *vals) {
         case yx:
             for (int i = 0; i < x; ++i)
                 for (int j = 0; j < y; ++j) 
-                    v[j * y + i] = vals[i * y + j];
+                    v[j * x + i] = vals[i * y + j];
             break;
         case yX:
             for (int i = 0; i < x; ++i)
                 for (int j = 0; j < y; ++j)
-                    v[j * y + ym - i] = vals[i * y + j];
+                    v[j * x + xm - i] = vals[i * y + j];
             break;
         case Yx:
             for (int i = 0; i < x; ++i)
                 for (int j = 0; j < y; ++j) 
-                    v[(xm - j) * y + i] = vals[i * y + j];
+                    v[(ym - j) * x + i] = vals[i * y + j];
             break;
         case YX:
             for (int i = 0; i < x; ++i)
                 for (int j = 0; j < y; ++j) 
-                    v[(xm - j) * y + ym - i] = vals[i * y + j];
+                    v[(ym - j) * x + xm - i] = vals[i * y + j];
             break;
     }
     return v;
