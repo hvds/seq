@@ -19,8 +19,16 @@ sub all_bits {
     return map $by_bits{$_}, grep !$_ || ($bits & $_), @ordered_bits;
 }
 
+sub check_loc {
+    my($class, $x, $y, $loc) = @_;
+    my $l2 = $class->transform_loc($x, $y, $loc);
+    return $loc->[0] == $l2->[0] && $loc->[1] == $l2->[1];
+}
+
 # null symmetry
 package Sym::xy {
+    use parent qw{ Sym };
+
     sub bit { 0 }
     sub is_transpose { 0 }
 
@@ -30,7 +38,7 @@ package Sym::xy {
     }
 
     sub transform_loc {
-        my($class, $group, $loc) = @_;
+        my($class, $x, $y, $loc) = @_;
         return [ @$loc ];
     }
 
@@ -42,6 +50,8 @@ package Sym::xy {
 
 # x -> x, y -> -y
 package Sym::xY {
+    use parent qw{ Sym };
+
     sub bit { 1 }
     sub is_transpose { 0 }
 
@@ -53,8 +63,8 @@ package Sym::xY {
     }
 
     sub transform_loc {
-        my($class, $group, $loc) = @_;
-        return [ $loc->[0], $group->y - 1 - $loc->[1] ];
+        my($class, $x, $y, $loc) = @_;
+        return [ $loc->[0], $y - 1 - $loc->[1] ];
     }
 
     sub transform {
@@ -65,6 +75,8 @@ package Sym::xY {
 
 # x -> -x, y -> y
 package Sym::Xy {
+    use parent qw{ Sym };
+
     sub bit { 2 }
     sub is_transpose { 0 }
 
@@ -77,8 +89,8 @@ package Sym::Xy {
     }
 
     sub transform_loc {
-        my($class, $group, $loc) = @_;
-        return [ $group->x - 1 - $loc->[0], $loc->[1] ];
+        my($class, $x, $y, $loc) = @_;
+        return [ $x - 1 - $loc->[0], $loc->[1] ];
     }
 
     sub transform {
@@ -89,6 +101,8 @@ package Sym::Xy {
 
 # x -> -x, y -> -y
 package Sym::XY {
+    use parent qw{ Sym };
+
     sub bit { 4 }
     sub is_transpose { 0 }
 
@@ -102,8 +116,8 @@ package Sym::XY {
     }
 
     sub transform_loc {
-        my($class, $group, $loc) = @_;
-        return [ $group->x - 1 - $loc->[0], $group->y - 1 - $loc->[1] ];
+        my($class, $x, $y, $loc) = @_;
+        return [ $x - 1 - $loc->[0], $y - 1 - $loc->[1] ];
     }
 
     sub transform {
@@ -114,6 +128,8 @@ package Sym::XY {
 
 # x -> y, y -> x
 package Sym::yx {
+    use parent qw{ Sym };
+
     sub bit { 8 }
     sub is_transpose { 1 }
 
@@ -130,7 +146,7 @@ package Sym::yx {
     }
 
     sub transform_loc {
-        my($class, $group, $loc) = @_;
+        my($class, $x, $y, $loc) = @_;
         return [ $loc->[1], $loc->[0] ];
     }
 
@@ -145,6 +161,8 @@ package Sym::yx {
 
 # x -> y, y -> -x
 package Sym::yX {
+    use parent qw{ Sym };
+
     sub bit { 16 }
     sub is_transpose { 1 }
 
@@ -161,8 +179,8 @@ package Sym::yX {
     }
 
     sub transform_loc {
-        my($class, $group, $loc) = @_;
-        return [ $loc->[1], $group->x - 1 - $loc->[0] ];
+        my($class, $x, $y, $loc) = @_;
+        return [ $loc->[1], $x - 1 - $loc->[0] ];
     }
 
     sub transform {
@@ -176,6 +194,8 @@ package Sym::yX {
 
 # x -> -y, y -> x
 package Sym::Yx {
+    use parent qw{ Sym };
+
     sub bit { 32 }
     sub is_transpose { 1 }
 
@@ -192,8 +212,8 @@ package Sym::Yx {
     }
 
     sub transform_loc {
-        my($class, $group, $loc) = @_;
-        return [ $group->y - 1 - $loc->[1], $loc->[0] ];
+        my($class, $x, $y, $loc) = @_;
+        return [ $y - 1 - $loc->[1], $loc->[0] ];
     }
 
     sub transform {
@@ -207,6 +227,8 @@ package Sym::Yx {
 
 # x -> -y, y -> -x
 package Sym::YX {
+    use parent qw{ Sym };
+
     sub bit { 64 }
     sub is_transpose { 1 }
 
@@ -223,8 +245,8 @@ package Sym::YX {
     }
 
     sub transform_loc {
-        my($class, $group, $loc) = @_;
-        return [ $group->y - 1 - $loc->[1], $group->x - 1 - $loc->[0] ];
+        my($class, $x, $y, $loc) = @_;
+        return [ $y - 1 - $loc->[1], $x - 1 - $loc->[0] ];
     }
 
     sub transform {

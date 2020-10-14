@@ -5,3 +5,6 @@ dA337663: main.c board.c board.h group.c group.h sym.c sym.h
 uA337663: main.c board.c board.h group.c group.h sym.c sym.h
 	clang -g -o uA337663 -fsanitize=address main.c board.c group.c sym.c
 # ASAN_SYMBOLIZER_PATH=/usr/lib/llvm-6.0/bin/llvm-symbolizer ./uA337663
+
+t/test_sym: t/test_sym.c t/test_sym.h t/common.c t/common.h sym.c sym.h
+	gcc -O6 -o t/test_sym t/test_sym.c t/common.c sym.c

@@ -11,6 +11,13 @@ is(8, 0 + @all, "there are 8 syms");
 is(join('-', sort Sym->all_bits(0xff)), join('-', sort @all),
         "all_bits(0xff) finds them all");
 
+for my $s (@all) {
+    my $t = $s->is_transpose;
+    my $match = ($s =~ /::xy/i) ? 0 : ($s =~ /::yx/i) ? 1
+            : die "unexpected Sym class '$s'";
+    is(!$t, !$match, "$s is_transpose");
+}
+
 # make a vals arrayref of arrayrefs from a string
 sub _v {
     my($str) = @_;
@@ -23,95 +30,73 @@ sub _u {
     return join '; ', map join(' ', @$_), @$vals;
 }
 
-for (
-    [ 'Sym::xy', '1 2; 3 4' ],
-    [ 'Sym::xy', '1 3 5 7' ],
-    [ 'Sym::xy', '1; 3; 5; 7' ],
-    [ 'Sym::xY', '1; 2; 3; 4' ],
-    [ 'Sym::xY', '1 1; 2 2; 3 3' ],
-    [ 'Sym::xY', '1 3 1; 2 4 2' ],
-    [ 'Sym::Xy', '1 2 3 4' ],
-    [ 'Sym::Xy', '1 2 3; 1 2 3' ],
-    [ 'Sym::Xy', '1 2; 3 4; 1 2' ],
-    [ 'Sym::XY', '1 1 0; 0 1 1' ],
-    [ 'Sym::XY', '1 1 0; 0 0 0; 0 1 1' ],
-    [ 'Sym::XY', '1 0; 1 1; 0 1' ],
-    [ 'Sym::yx', '1 2; 2 3' ],
-    [ 'Sym::yx', '1 3 5; 3 9 13; 5 13 21' ],
-    [ 'Sym::yX', '1 1; 1 1' ],
-    [ 'Sym::yX', '1 0 1; 0 2 0; 1 0 1' ],
-    [ 'Sym::Yx', '1 1; 1 1' ],
-    [ 'Sym::Yx', '1 0 1; 0 2 0; 1 0 1' ],
-    [ 'Sym::YX', '0 1; 1 0' ],
-    [ 'Sym::YX', '0 1 1; 3 0 1; 5 3 0' ],
-) {
-    my($class, $str) = @$_;
-    my $v = _v($str);
-    is($class->check($v), 1, "$class check $str ok");
-    is(_u($class->transform($v)), $str, "$class transform $str ok");
+# make a class name from a short name
+sub _c {
+    my($short) = @_;
+    return "Sym::$short";
 }
 
-for (
-    [ 'Sym::xY', '1 2; 3 4', '2 1; 4 3' ],
-    [ 'Sym::xY', '1 2 3 4', '4 3 2 1' ],
-    [ 'Sym::Xy', '1 2; 3 4', '3 4; 1 2' ],
-    [ 'Sym::Xy', '1; 2; 3; 4', '4; 3; 2; 1' ],
-    [ 'Sym::XY', '1 2; 3 4', '4 3; 2 1' ],
-    [ 'Sym::XY', '1; 2; 3; 4', '4; 3; 2; 1' ],
-    [ 'Sym::XY', '1 2 3 4', '4 3 2 1' ],
-    [ 'Sym::yx', '1 2; 3 4', '1 3; 2 4' ],
-    [ 'Sym::yx', '1; 2; 3; 4', '1 2 3 4' ],
-    [ 'Sym::yx', '1 2 3 4', '1; 2; 3; 4' ],
-    [ 'Sym::yX', '1 2; 3 4', '3 1; 4 2' ],
-    [ 'Sym::yX', '1; 2; 3; 4', '4 3 2 1' ],
-    [ 'Sym::yX', '1 2 3 4', '1; 2; 3; 4' ],
-    [ 'Sym::Yx', '1 2; 3 4', '2 4; 1 3' ],
-    [ 'Sym::Yx', '1; 2; 3; 4', '1 2 3 4' ],
-    [ 'Sym::Yx', '1 2 3 4', '4; 3; 2; 1' ],
-    [ 'Sym::YX', '1 2; 3 4', '4 2; 3 1' ],
-    [ 'Sym::YX', '1; 2; 3; 4', '4 3 2 1' ],
-    [ 'Sym::YX', '1 2 3 4', '4; 3; 2; 1' ],
-) {
-    my($class, $str, $trans) = @$_;
-    my $v = _v($str);
-    is($class->check($v), 0, "$class check $str ok");
-    is(_u($class->transform($v)), $trans, "$class transform $str ok");
+# make a dimension string from a vals arrayref
+sub _d {
+    my($vals) = @_;
+    return join('-', 0 + @$vals, 0 + @{ $vals->[0] });
 }
 
-for (
-    [ 'Sym::xy', 3, 3, 0, 0, 0, 0 ],
-    [ 'Sym::xy', 9, 1, 2, 2, 2, 2 ],
-    [ 'Sym::xy', 9, 1, -2, -2, -2, -2 ],
-    [ 'Sym::xY', 3, 3, 0, 0, 0, 2 ],
-    [ 'Sym::xY', 9, 1, 2, 2, 2, -2 ],
-    [ 'Sym::xY', 9, 1, -2, -2, -2, 2 ],
-    [ 'Sym::Xy', 3, 3, 0, 0, 2, 0 ],
-    [ 'Sym::Xy', 9, 1, 2, 2, 6, 2 ],
-    [ 'Sym::Xy', 9, 1, -2, -2, 10, -2 ],
-    [ 'Sym::XY', 3, 3, 0, 0, 2, 2 ],
-    [ 'Sym::XY', 9, 1, 2, 2, 6, -2 ],
-    [ 'Sym::XY', 9, 1, -2, -2, 10, 2 ],
-    [ 'Sym::yX', 3, 3, 0, 0, 0, 2 ],
-    [ 'Sym::yX', 9, 1, 2, 2, 2, 6 ],
-    [ 'Sym::yX', 9, 1, -2, -2, -2, 10 ],
-    [ 'Sym::Yx', 3, 3, 0, 0, 2, 0 ],
-    [ 'Sym::Yx', 9, 1, 2, 2, -2, 2 ],
-    [ 'Sym::Yx', 9, 1, -2, -2, 2, -2 ],
-    [ 'Sym::YX', 3, 3, 0, 0, 2, 2 ],
-    [ 'Sym::YX', 9, 1, 2, 2, -2, 6 ],
-    [ 'Sym::YX', 9, 1, -2, -2, 2, 10 ],
-) {
-    my($class, $x, $y, $lx, $ly, $ex, $ey) = @$_;
-    my $g = G->new($x, $y);
-    my($tx, $ty) = @{ $class->transform_loc($g, [ $lx, $ly ]) };
-    is("$tx.$ty", "$ex.$ey", "$class transform_loc ok");
+open(my $f, '<', 't/test_sym.h')
+        or die "t/test_sym.h: $!";
+my %data;
+while (<$f>) {
+    my($type, $data) = m{
+        ^ \s* \(
+            test_(\w+)_t
+        \)\{ \s*
+            (.*?)
+        \s* \} ,? $
+    }x or next;
+    my @args = map s{^"(.*)"$}{$1}r, split /,\s*/, $data;
+    push @{ $data{$type} }, \@args;
+}
+close $f;
+for my $type (qw{ sym asym loc }) {
+    my $tests = delete $data{$type}
+            // die "Failed to find tests of type '$type'";
+    if ($type eq 'sym') {
+        for (@$tests) {
+            my($s, $x, $y, $d) = @$_;
+            my $class = _c($s);
+            my $vals = _v($d);
+            _d($vals) eq "$x-$y" or die "unwrapped '$d'";
+            is($class->check($vals), 1, "$class check $d");
+            my $trans = $class->transform($vals);
+            _d($trans) eq "$x-$y" or die "$class transform $d";
+            is(_u($trans), $d, "$class transform $d");
+        }
+    } elsif ($type eq 'asym') {
+        for (@$tests) {
+            my($s, $x, $y, $d, $e) = @$_;
+            my $class = _c($s);
+            my $vals = _v($d);
+            _d($vals) eq "$x-$y" or die "unwrapped '$d'";
+            is($class->check($vals), 0, "$class check $d");
+            my $trans = $class->transform($vals);
+            _d($trans) eq ($class->is_transpose ? "$y-$x" : "$x-$y")
+                    or die "$class transform $d dims";
+            is(_u($trans), $e, "$class transform $d");
+        }
+    } elsif ($type eq 'loc') {
+        for (@$tests) {
+            my($s, $x, $y, $lx, $ly, $ex, $ey) = @$_;
+            my $class = _c($s);
+            my $same = ($lx == $ex && $ly == $ey);
+            my($tx, $ty) = @{ $class->transform_loc($x, $y, [ $lx, $ly ]) };
+            is("$tx-$ty", "$ex-$ey", "$class transform_loc $lx.$ly");
+            is($class->check_loc($x, $y, [ $lx, $ly ]), $same,
+                    "$class check_loc $lx.$ly");
+        }
+    }
+}
+if (keys %data) {
+    die "Unexpected test data types: @{[ join ', ', keys %data ]}\n";
 }
 
 done_testing();
-
-# transform_loc needs something Group-like enough to respond to x and y.
-package G {
-    sub new { bless [ @_[1, 2] ], $_[0] }
-    sub x { shift->[0] }
-    sub y { shift->[1] }
-};
