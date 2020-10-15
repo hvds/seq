@@ -114,8 +114,24 @@ int *sym_transform(sym_t s, int x, int y, int *vals) {
 }
 
 bool sym_checkloc(sym_t s, int x, int y, loc_t l) {
-    loc_t l2 = sym_transloc(s, x, y, l);
-    return (l.x == l2.x && l.y == l2.y);
+    switch (s) {
+        case xy:
+            return 1;
+        case xY:
+            return (l.y << 1) == y - 1;
+        case Xy:
+            return (l.x << 1) == x - 1;
+        case XY:
+            return ((l.x << 1) == x - 1) && ((l.y << 1) == y - 1);
+        case yx:
+            return l.x == l.y;
+        case yX:
+            return ((l.x << 1) == x - 1) && ((l.y << 1) == y - 1);
+        case Yx:
+            return ((l.x << 1) == x - 1) && ((l.y << 1) == y - 1);
+        case YX:
+            return ((l.x + l.y) >> 1) == x + y - 2;
+    }
 }
 
 loc_t sym_transloc(sym_t s, int x, int y, loc_t l) {
