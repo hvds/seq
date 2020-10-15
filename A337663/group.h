@@ -19,7 +19,9 @@ typedef struct group_s {
     int maxsum;
     int refcount;
     int *vals;
+    int **tvals;
     avail_t *avail;
+    avail_t **tavail;
     int *sum_heads;
     int *sum_chains;
 } group_t;

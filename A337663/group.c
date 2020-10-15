@@ -35,11 +35,13 @@ group_t *new_group(int x, int y, int sym, int* vals) {
     g->y = y;
     g->sym = sym;
     g->vals = vals;
+    g->tvals = (int **)NULL;
     /* caller will increment; freed on decrement to zero */
     g->refcount = 0;
 
     /* initialise to AVAIL = 0 */
     g->avail = calloc((x + 2) * (y + 2), sizeof(avail_t));
+    g->tavail = (avail_t**)NULL;
     for (int i = 0; i < x; ++i)
         for (int j = 0; j < y; ++j)
             if (g->vals[i * y + j])
@@ -104,7 +106,17 @@ void ref_group(group_t *g) {
 void unref_group(group_t *g) {
     if (--g->refcount == 0) {
         free(g->vals);
+        if (g->tvals) {
+            for (int i = 1; i <= MAXSYM; ++i)
+                free(g->tvals[i]);
+            free(g->tvals);
+        }
         free(g->avail);
+        if (g->tavail) {
+            for (int i = 1; i <= MAXSYM; ++i)
+                free(g->tavail[i]);
+            free(g->tavail);
+        }
         free(g->sum_heads);
         free(g->sum_chains);
         free(g);
@@ -155,6 +167,22 @@ void dprint_group(group_t *g) {
     print_list(" avail: ", g->x + 2, g->y + 2, g->avail, sizeof(avail_t), 1);
     print_list(" heads: ", 1, g->maxsum + 1, g->sum_heads, sizeof(int), 1);
     print_list(" chain: ", g->x + 2, g->y + 2, g->sum_chains, sizeof(int), 1);
+}
+
+int *trans_vals(group_t *g, sym_t s) {
+    if (!g->tvals)
+        g->tvals = calloc(MAXSYM + 1, sizeof(int *));
+    if (!g->tvals[s])
+        g->tvals[s] = sym_transform(s, g->x, g->y, g->vals);
+    return g->tvals[s];
+}
+
+avail_t *trans_avail(group_t *g, sym_t s) {
+    if (!g->tavail)
+        g->tavail = calloc(MAXSYM + 1, sizeof(avail_t *));
+    if (!g->tavail[s])
+        g->tavail[s] = (avail_t *)sym_transform(s, g->x, g->y, (int *)g->avail);
+    return g->tavail[s];
 }
 
 group_t *group_seedbits(int k, int bits) {
@@ -399,7 +427,7 @@ grouplist_t *coalesce_group(
         if ((gb->sym & (1 << s)) && sym_checkloc(s, bx, by, lb))
             continue;
 
-        int *tavail = sym_transform(s, 3, 3, bavail);
+        avail_t *tavail = trans_avail(gb, s);
         int free_c = 0;
         loc_t lfree[9];
         int ok = 1;
@@ -425,10 +453,9 @@ grouplist_t *coalesce_group(
             }
         if (ok && free_c - 1 < use)
             ok = 0;
-        free(tavail);
 
         if (ok) {
-            int *tvals = sym_transform(s, bx, by, gb->vals);
+            int *tvals = trans_vals(gb, s);
             loc_t lt = sym_transloc(s, bx, by, lb);
             bool trans = is_transpose(s);
             int tx = trans ? by : bx, ty = trans ? bx : by;
@@ -512,7 +539,6 @@ grouplist_t *coalesce_group(
                 ref_group(result->g[ri++]);
             }
             free(cvals);
-            free(tvals);
         }
     }
     result->count = ri;
