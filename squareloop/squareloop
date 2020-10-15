@@ -17,34 +17,46 @@ must have n >= 31.
 =cut
 
 my %sq;
+my @sq;
+my @pair;
 my $lastsq = 0;
 
-for (my $n = 1; 1; ++$n) {
-    while ($lastsq * $lastsq < $n) {
+my $n;
+for ($n = 1; 1; ++$n) {
+    while ($lastsq * $lastsq < $n + $n) {
         ++$lastsq;
+        push @sq, $lastsq * $lastsq;
         $sq{$lastsq * $lastsq} = 1;
+    }
+
+    shift @sq while @sq && $sq[0] <= $n;
+    for (@sq) {
+        my $other = $_ - $n;
+        next if $other == $n;
+        last if $other > $n;
+        push @{ $pair[$other] }, $n;
+        push @{ $pair[$n] }, $other;
     }
 
     my %req = map +($_ => 1), 1 .. $n;
     my $result;
-    for my $next (1 .. $n) {
-        $result = try($next, \%req);
+    for my $this (1 .. $n) {
+        $result = try($this, \%req, $n - 1);
         last if $result;
     }
     print "$n: $result\n";
 }
 
 sub try {
-    my($this, $need) = @_;
-    delete $need->{$this};
-    if (keys %$need) {
-        for my $next (keys %$need) {
-            next unless $sq{$this + $next};
-            my $result = try($next, $need);
+    my($this, $need, $remain) = @_;
+    if ($remain) {
+        local $need->{$this} = 0;
+        for my $next (@{ $pair[$this] }) {
+            next unless $need->{$next};
+            my $result = try($next, $need, $remain - 1);
             return $result if $result;
         }
-        $need->{$this} = 1;
         return 0;
     }
-    return $sq{$this + 1} ? 2 : 1;
+    return 1;
 }

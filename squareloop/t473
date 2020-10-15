@@ -1,0 +1,21 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+
+use Graph;
+use lib 'lib';
+use Graph::Hamilton;
+
+my $g = Graph::Undirected->new;
+for my $i (2..9) {
+    my $cu = $i * $i * $i;
+    for my $j (1 .. 473) {
+        my $k = $cu - $j;
+        last if $k <= $j;
+        next if $k > 473;
+        $g->add_edge($j, $k);
+    }
+}
+local $SIG{__WARN__} = sub { warn @_ unless $_[0] =~ /^Deep recursion/ };
+print join ' ', @{ Graph::Hamilton->findLoop($g, 'findBFF') // [] }, "\n";
+

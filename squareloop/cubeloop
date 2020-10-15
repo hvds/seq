@@ -1,0 +1,60 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+no warnings 'recursion';
+
+use Graph;
+use lib 'lib';
+use Graph::Hamilton;
+
+=head1 
+
+1 32 473 9641
+
+=cut
+
+my $cg = Graph::Undirected->new,
+my $n = 0;
+
+local $SIG{__DIE__} = sub { use Carp; Carp::confess(@_) };
+
+while (1) {
+    ++$n;
+    print "$n\n";
+    add_new($cg, $n);
+    my $h = Graph::Hamilton->findBFF($cg) or next;
+    print $h, "\n";
+    last;
+}
+exit 0;
+
+{
+    my @val;
+    my $last; BEGIN { $last = 1 }
+    my $next_val; BEGIN { $next_val = 1 }
+    sub add_new {
+        my($g, $n) = @_;
+
+        # We want to see this vertex even if we add no edges to it.
+        $g->add_vertex($n);
+
+        # Ensure each reachable [cube] is in the list: we can reach values
+        # from $n + 1 to $n + ($n - 1). Note that the calculation of $next_val
+        # is the only point in the code that knows we're doing cubes.
+        if ($n + $n - 1 >= $next_val) {
+            push @val, $next_val;
+            ++$last;
+            $next_val = $last * $last;
+        }
+        shift @val while @val && $val[0] < $n + 1;
+
+        # Add edges for everything reachable from the new vertex
+        for (@val) {
+            my $m = $_ - $n;
+            next if $m < 0;
+            next if $m >= $n;
+            $g->add_edge($m, $n);
+        }
+        return;
+    }
+}
