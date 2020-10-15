@@ -80,6 +80,10 @@ sub bad {
         # 404 Error: n + ${k}d must be divisible by n
         return 1;
     }
+    if ($line{502}) {
+        # Error: fixed 18 not available in tau 48
+        return 1;
+    }
     if ($line{309}) {
         # Prep finished, frequency 36.91 (184.980s)
         return 0;
