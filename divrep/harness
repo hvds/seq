@@ -9,7 +9,7 @@ use POSIX qw{ :sys_wait_h };
 
 print "kill -HUP $$\n";
 
-my($opt_recreate, $debug, $opt_strategy) = (0, 0, 0);
+my($opt_recreate, $debug, $opt_strategy, $opt_gain) = (0, 0, 0, 0);
 my($maxproc, $maxrun, $maxload, $drain) = (10, 100, 0, 0);
 my %override;
 $SIG{'HUP'} = sub { $drain = 1 };
@@ -21,6 +21,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($maxload = $1 || shift(@ARGV)), next if $arg =~ /^-a(\d*)$/;
     $debug = 1, next if $arg eq '-d';
     $override{$1} = $2, next if $arg =~ /^-p(-?\d+)=(-?\d+(?:\.\d+)?)$/;
+    $opt_gain = $1, next if $arg =~ /^-g(-?\d+(?:\.\d+)?)$/;
     die "Unknown option '$arg'";
 }
 $maxproc = shift(@ARGV) if @ARGV;
@@ -40,7 +41,7 @@ local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
 
 Seq::Run->restrategise($db) if $opt_strategy;
 my $prio = H::Heap->new(q{ ::prio($b) <=> ::prio($a) });
-$prio->insert(Seq::Starter->new(2, $maxload));
+$prio->insert(Seq::Starter->new(0, $maxload));
 my(%pid, @runnable);
 
 while (1) {
@@ -55,6 +56,7 @@ while (1) {
             waitFor($db, \%pid, 1);
         } else {
             my $r = shift @runnable;
+            $override{$r->n} -= $opt_gain;
             my $pid = $r->run;
             if ($pid) {
                 $pid{$pid} = $r;
@@ -103,10 +105,11 @@ package Seq::Starter {
     sub priority {
         my($self) = @_;
         my $start = $self->{start};
+        my $count = $self->{count};
         # We don't want to block fetching of later entries just because
         # there are low priority ones in the way.
         return $self->{priority} //= max(
-            map Seq::TauG->priority($_), $start, $start * 2
+            map Seq::TauG->priority($_), grep $_ > 1, $start .. $start + $count
         );
     }
     sub prep {
