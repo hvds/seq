@@ -85,6 +85,10 @@ exit 0;
 # divisible, g(n) = p^k g(n / p^k) for the rest of the sequence, and there's
 # no point recalculating them. (The -f flag forces the calculation.)
 #
+# FIXME: we should report this only if g(n / p^k) would fix p, else not
+# all solutions for g(n / p^k) would generate solutions for g(n), and in
+# particular the minimum solution may not.
+#
 sub check_mult {
     my($c) = @_;
     my($mult, $mod_mult) = ($c->parent->mult, $c->parent->mod_mult);
