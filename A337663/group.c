@@ -149,6 +149,7 @@ void unref_group(group_t *g) {
 grouplist_t *new_grouplist(int size) {
     grouplist_t *gl = malloc(sizeof(grouplist_t) + size * sizeof(group_t *));
     gl->count = size;
+    memset(&gl->g[0], 0, size * sizeof(group_t *));
     return gl;
 }
 
