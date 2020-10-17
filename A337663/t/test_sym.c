@@ -82,9 +82,12 @@ void test_loc(void) {
 
 int main(void) {
     init_test();
+    init_sym();
+
     test_basics();
     test_sym();
     test_asym();
     test_loc();
+
     done_testing();
 }
