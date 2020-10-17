@@ -10,10 +10,16 @@ board_t *best_board;
 unsigned long board_count;
 board_t *b0;
 
+/*
+ * Increment the refcount of a board.
+ */
 void ref_board(board_t *b) {
     ++b->refcount;
 }
 
+/*
+ * Decrement the refcount of a board, freeing it if it reaches zero.
+ */
 void unref_board(board_t *b) {
     if (--b->refcount > 0)
         return;
@@ -24,6 +30,10 @@ void unref_board(board_t *b) {
     free(b);
 }
 
+/*
+ * Perform initialization for a run to find A337663(n0), displaying
+ * progress at each board for which the last value placed is <= feedback0.
+ */
 board_t *init_board(int n0, int feedback0) {
     n = n0;
     feedback = feedback0;
@@ -37,11 +47,18 @@ board_t *init_board(int n0, int feedback0) {
     return b0;
 }
 
+/*
+ * Clean up.
+ */
 void finish_board(void) {
     unref_board(best_board);
     unref_board(b0);
 }
 
+/*
+ * Construct and return a new board structure with the specified details.
+ * The refcount is initialised to 1.
+ */
 board_t *new_board(int k, int unused, group_t *g0, group_t *g1) {
     board_t *b = malloc(sizeof(board_t));
 
@@ -68,6 +85,13 @@ void print_board(board_t *b) {
     printf("\n");
 }
 
+/*
+ * Recursive coroutine with try_board(): construct a new board from this
+ * board with new details, then call try_board() on it.
+ *
+ * Progress is tracked here. On return, all possible continuations of
+ * the fresh board have been checked.
+ */
 void recurse(board_t *b, int unused, group_t *g0, group_t *g1) {
     int k = b->k;
     board_t *nb = new_board(k + 1, unused, g0, g1);
@@ -88,6 +112,12 @@ void recurse(board_t *b, int unused, group_t *g0, group_t *g1) {
     unref_board(nb);
 }
 
+/*
+ * Recursive coroutine with recurse(): try each way to extend this board.
+ *
+ * On return, best_k will contain the highest k seen, and best_board the
+ * first board we saw with that k.
+ */
 void try_board(board_t *b) {
     int k = b->k, unused = b->unused, groups = b->groups;
     group_t *g0 = b->group[0], *g1 = b->group[1];

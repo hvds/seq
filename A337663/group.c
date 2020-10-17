@@ -10,6 +10,13 @@ typedef struct seed_s {
     int count;
     int bits[13];  /* max needed */
 } seed_t;
+
+/*
+ * Packed representation for symmetry-reduced ways to arrange n 1s in the
+ * 8 squares neighbouring a central point.
+ * Bit numbers are [ 765 // 4*3 // 210 ] ie bit 7 represents { -1, -1 }
+ * relative to the centre.
+ */
 seed_t seed_base[9] = {
     { 0, {} },
     { 0, {} },
@@ -27,6 +34,13 @@ void init_group(void) {
     return;
 }
 
+/*
+ * Allocate and initialize a new group struct with the supplied details.
+ *
+ * Initial refcount is zero; caller is expected to give it its initial
+ * increment; on decrement to 0 both the group struct and 'vals' will
+ * be freed.
+ */
 group_t *new_group(int x, int y, int sym, int* vals) {
     group_t *g = malloc(sizeof(group_t));
     int maxsum = 0;
@@ -99,10 +113,16 @@ group_t *new_group(int x, int y, int sym, int* vals) {
     return g;
 }
 
+/*
+ * Increment the refcount of the group.
+ */
 void ref_group(group_t *g) {
     ++g->refcount;
 }
 
+/*
+ * Decrement the refcount of the group; free it if it hits zero.
+ */
 void unref_group(group_t *g) {
     if (--g->refcount == 0) {
         free(g->vals);
@@ -123,12 +143,18 @@ void unref_group(group_t *g) {
     }
 }
 
+/*
+ * Allocate a grouplist of the specified size; set the size to 'size'.
+ */
 grouplist_t *new_grouplist(int size) {
     grouplist_t *gl = malloc(sizeof(grouplist_t) + size * sizeof(group_t *));
     gl->count = size;
     return gl;
 }
 
+/*
+ * Free the grouplist, and dereference any groups within it.
+ */
 void free_grouplist(grouplist_t *gl) {
     for (int i = 0; i < gl->count; ++i) {
         unref_group(gl->g[i]);
@@ -169,6 +195,13 @@ void dprint_group(group_t *g) {
     print_list(" chain: ", g->x + 2, g->y + 2, g->sum_chains, sizeof(int), 1);
 }
 
+/*
+ * Return an array of ints representing this group's vals transformed
+ * under the specified symmetry 's'.
+ *
+ * The dimensions of the result will be swapped if is_transpose(s).
+ * The array is cached in the group, and will be freed when the group is.
+ */
 int *trans_vals(group_t *g, sym_t s) {
     if (!g->tvals)
         g->tvals = calloc(MAXSYM + 1, sizeof(int *));
@@ -177,6 +210,13 @@ int *trans_vals(group_t *g, sym_t s) {
     return g->tvals[s];
 }
 
+/*
+ * Return an array of avail_t representing this group's avail transformed
+ * under the specified symmetry 's'.
+ *
+ * The dimensions of the result will be swapped if is_transpose(s).
+ * The array is cached in the group, and will be freed when the group is.
+ */
 avail_t *trans_avail(group_t *g, sym_t s) {
     if (!g->tavail)
         g->tavail = calloc(MAXSYM + 1, sizeof(avail_t *));
@@ -185,6 +225,14 @@ avail_t *trans_avail(group_t *g, sym_t s) {
     return g->tavail[s];
 }
 
+/*
+ * Construct and return a group consisting of a value k surrounded by
+ * 0 or more 1s in the positions indicated by 'bits', using the
+ * representation described for 'seed_base'.
+ *
+ * The group has an initial refcount of 1 for its copy in the cache,
+ * which is never freed.
+ */
 group_t *group_seedbits(int k, int bits) {
     int *vals = malloc(sizeof(int) * 9);
     int x = 3, y = 3, sym = 0, x0 = 0, y0 = 0;
@@ -215,6 +263,12 @@ group_t *group_seedbits(int k, int bits) {
     return g;
 }
 
+/*
+ * Return a grouplist with all groups (reduced by symmetry) consisting of
+ * a central value k surrounded by k 1s in the neighbouring 8 squares.
+ *
+ * The grouplist is cached, and never freed.
+ */
 grouplist_t *group_seed(int k) {
     if (k < 2 || k > 8) {
         fprintf(stderr, "Error: group_seed(%d) called\n", k);
@@ -232,6 +286,10 @@ grouplist_t *group_seed(int k) {
     return cache_seed[k];
 }
 
+/*
+ * Return a packed representation of the symmetries preserved by this
+ * group when you add a new unique value at the specified location.
+ */
 sym_t next_sym(group_t *g, loc_t l) {
     int osym = g->sym, nsym = 0;
 
@@ -243,6 +301,12 @@ sym_t next_sym(group_t *g, loc_t l) {
     return nsym;
 }
 
+/*
+ * Construct and return a new group formed by adding a new value k
+ * at the specified location in this group.
+ *
+ * The new group has an initial refcount of 0.
+ */
 group_t *group_place(group_t *g, loc_t loc, int k) {
     int x = g->x, y = g->y, x0 = 0, y0 = 0;
     int *vals, sym = next_sym(g, loc);
@@ -265,6 +329,7 @@ group_t *group_place(group_t *g, loc_t loc, int k) {
     return new_group(x, y, sym, vals);
 }
 
+/* nCd = n! / d! (n - d)! */
 int _comb(int n, int d) {
     int x = 1;
     for (int i = 0; i < d; ++i)
@@ -272,6 +337,11 @@ int _comb(int n, int d) {
     return x;
 }
 
+/*
+ * Construct and return a grouplist of the new groups formed by adding
+ * a new value k at the specified location in this group, along with
+ * 'use' 1s in any of the 8 surrounding squares that are available.
+ */
 grouplist_t *group_place_with(group_t *g, loc_t loc, int k, int use) {
     loc_t avail[9];
     int availc = 0;
@@ -357,6 +427,17 @@ if (ri != count) {
     return result;
 }
 
+/*
+ * Construct and return a grouplist of the new groups formed by adding
+ * a new value k at a common point connecting two existing groups, such
+ * that the location of that point is as specified for each of the two
+ * groups, along with 'use' 1s in any of the 8 surrounding squares that
+ * are available.
+ *
+ * All relevant symmetries of the two groups are considered, and the
+ * results include only those combinations that allowed the two groups
+ * to be combined according to location availability checks.
+ */
 grouplist_t *coalesce_group(
     group_t *ga, loc_t la, group_t *gb, loc_t lb, int k, int use
 ) {

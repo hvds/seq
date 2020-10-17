@@ -7,10 +7,16 @@ void init_sym(void) {
     return;
 }
 
+/*
+    Return true if the dimensions of a grid are transposed by this symmetry.
+*/
 bool is_transpose(sym_t s) {
     return (s & 4) ? 1 : 0;
 }
 
+/*
+    Return true if the specified grid is invariant under this symmetry.
+*/
 bool sym_check(sym_t s, int x, int y, int *v) {
     int xm = x - 1, ym = y - 1;
 
@@ -64,6 +70,12 @@ bool sym_check(sym_t s, int x, int y, int *v) {
     }
 }
 
+/*
+    Apply this symmetry to the supplied grid.
+
+    Returns a newly malloced array of ints with the transformed grid.
+    The dimensions of the grid will be swapped if is_transpose(s).
+*/
 int *sym_transform(sym_t s, int x, int y, int *vals) {
     int *v = malloc(sizeof(int *) * x * y);
     int xm = x - 1, ym = y - 1;
@@ -113,6 +125,9 @@ int *sym_transform(sym_t s, int x, int y, int *vals) {
     return v;
 }
 
+/*
+    Return true if the specified location is invariant under this symmetry.
+*/
 bool sym_checkloc(sym_t s, int x, int y, loc_t l) {
     switch (s) {
         case xy:
@@ -134,6 +149,9 @@ bool sym_checkloc(sym_t s, int x, int y, loc_t l) {
     }
 }
 
+/*
+    Apply this symmetry to the supplied location.
+*/
 loc_t sym_transloc(sym_t s, int x, int y, loc_t l) {
     switch (s) {
         case xy:
