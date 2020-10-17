@@ -8,6 +8,8 @@
 void test_basics(void) {
     sym_t not_tr[4] = { xy, xY, Xy, XY };
     sym_t is_tr[4] = { yx, yX, Yx, YX };
+    sym_t not_ref[4] = { xy, XY, yX, Yx };
+    sym_t is_ref[4] = { xY, Xy, yx, YX };
 
     is_int(MAXSYM + 1, 8, "there are 8 syms");
     ok("all_bits(0xff) finds them all (skipped)");
@@ -17,6 +19,12 @@ void test_basics(void) {
     for (int i = 0; i < 4; ++i)
         is_bool(is_transpose(is_tr[i]), true,
                 "%d is_transpose", is_tr[i]);
+    for (int i = 0; i < 4; ++i)
+        is_bool(is_reflect(not_ref[i]), false,
+                "%d is_reflect", not_ref[i]);
+    for (int i = 0; i < 4; ++i)
+        is_bool(is_reflect(is_ref[i]), true,
+                "%d is_reflect", is_ref[i]);
 }
 
 void test_sym(void) {
@@ -80,6 +88,53 @@ void test_loc(void) {
     }
 }
 
+void test_dup(void) {
+    int base[4] = { 1, 2, 4, 8 }, symi[4];
+    int *v, vc[4], vd[4], c, d;
+
+    for (sym_t i = 0; i <= MAXSYM; ++i) {
+        if (!is_reflect(i))
+            continue;
+        /* construct a grid that shows this symmetry */
+        v = sym_transform(i, 2, 2, &base[0]);
+        for (int k = 0; k < 4; ++k)
+            symi[k] = base[k] | v[k];
+
+        c = d = 0;
+        for (sym_t j = 0; j <= MAXSYM; ++j) {
+            int *w = sym_transform(j, 2, 2, &symi[0]);
+            int packed = (w[0] << 24) | (w[1] << 16) | (w[2] << 8) | w[3];
+            if (sym_dup(i, j))
+                vd[d++] = packed;
+            else
+                vc[c++] = packed;
+            free(w);
+        }
+        if ((d != 4) || (c != 4))
+            fatal("Got %d canonical and %d dup, possibly memory corruption",
+                    c, d);
+        /* we expect each of the canonical vc[] to be distinct; we expect
+         * each of the dup vd[] to be a copy of something canonical
+         */
+        int cbad = 0, dbad = 0;
+        for (int ci = 0; ci < c - 1; ++ci)
+            for (int cj = ci + 1; cj < c; ++cj)
+                if (vc[ci] == vc[cj])
+                    ++cbad;
+        for (int di = 0; di < d; ++di) {
+            ++dbad;
+            for (int ci = 0; ci < c; ++ci)
+                if (vd[di] == vc[ci]) {
+                    --dbad;
+                    break;
+                }
+        }
+        is_int(cbad, 0, "No duplicate canonical for %d", i);
+        is_int(dbad, 0, "Every dup dups a canonical for %d", i);
+        free(v);
+    }
+}
+
 int main(void) {
     init_test();
     init_sym();
@@ -88,6 +143,7 @@ int main(void) {
     test_sym();
     test_asym();
     test_loc();
+    test_dup();
 
     done_testing();
 }

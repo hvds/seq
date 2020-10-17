@@ -15,6 +15,41 @@ bool is_transpose(sym_t s) {
 }
 
 /*
+    Return true if this symmetry is a reflection.
+*/
+bool is_reflect(sym_t s) {
+    return (s == xY || s == Xy || s == yx || s == YX);
+}
+
+/*
+    Return true if t is non-canonical, when copmosed with this symmetry.
+
+    If s is a reflection, and s x t = t', this will return false for only
+    one of t, t'; if not, it will always return false.
+*/
+bool sym_dup(sym_t s, sym_t t) {
+    switch (s) {
+        case xy:
+        case XY:
+        case yX:
+        case Yx:
+            return 0;
+        case xY:
+            return !(t == xy || t == Xy || t == yx || t == YX);
+            /* opposing:  xY         XY         yX         Yx */
+        case Xy:
+            return !(t == xy || t == xY || t == yx || t == YX);
+            /*            Xy         XY         Yx         yX */
+        case yx:
+            return !(t == xy || t == xY || t == Xy || t == XY);
+            /*            yx         yX         Yx         YX */
+        case YX:
+            return !(t == xy || t == xY || t == Xy || t == yx);
+            /*            YX         yX         Yx         XY */
+    }
+}
+
+/*
     Return true if the specified grid is invariant under this symmetry.
 */
 bool sym_check(sym_t s, int x, int y, int *v) {

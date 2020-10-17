@@ -31,6 +31,7 @@ package Sym::xy {
 
     sub bit { 0 }
     sub is_transpose { 0 }
+    sub is_reflect { 0 }
 
     sub check {
         my($class, $vals) = @_;
@@ -54,6 +55,7 @@ package Sym::xY {
 
     sub bit { 1 }
     sub is_transpose { 0 }
+    sub is_reflect { 1 }
 
     sub check {
         my($class, $vals) = @_;
@@ -79,6 +81,7 @@ package Sym::Xy {
 
     sub bit { 2 }
     sub is_transpose { 0 }
+    sub is_reflect { 1 }
 
     sub check {
         my($class, $vals) = @_;
@@ -105,6 +108,7 @@ package Sym::XY {
 
     sub bit { 4 }
     sub is_transpose { 0 }
+    sub is_reflect { 0 }
 
     sub check {
         my($class, $vals) = @_;
@@ -132,6 +136,7 @@ package Sym::yx {
 
     sub bit { 8 }
     sub is_transpose { 1 }
+    sub is_reflect { 1 }
 
     sub check {
         my($class, $vals) = @_;
@@ -165,6 +170,7 @@ package Sym::yX {
 
     sub bit { 16 }
     sub is_transpose { 1 }
+    sub is_reflect { 0 }
 
     sub check {
         my($class, $vals) = @_;
@@ -198,6 +204,7 @@ package Sym::Yx {
 
     sub bit { 32 }
     sub is_transpose { 1 }
+    sub is_reflect { 0 }
 
     sub check {
         my($class, $vals) = @_;
@@ -231,6 +238,7 @@ package Sym::YX {
 
     sub bit { 64 }
     sub is_transpose { 1 }
+    sub is_reflect { 1 }
 
     sub check {
         my($class, $vals) = @_;

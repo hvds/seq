@@ -38,6 +38,15 @@ void fail(char *legend, va_list argp) {
     ++failed;
 }
 
+void fatal(char *legend, ...) {
+    va_list argp;
+    va_start(argp, legend);
+    vfprintf(stderr, legend, argp);
+    va_end(argp);
+    fprintf(stderr, "\n");
+    exit(1);
+}
+
 void print_grid(int x, int y, int *vals) {
     for (int i = 0; i < x; ++i) {
         if (i) printf("; ");
@@ -50,10 +59,8 @@ void print_grid(int x, int y, int *vals) {
 
 char *_expect(char *str, char *expect) {
     size_t len = strlen(expect);
-    if (strncmp(str, expect, len)) {
-        fprintf(stderr, "Expected '%s', not '%s'\n", expect, str);
-        exit(1);
-    }
+    if (strncmp(str, expect, len))
+        fatal("Expected '%s', not '%s'\n", expect, str);
     return str + len;
 }
 
@@ -68,17 +75,13 @@ int *parse_vals(int x, int y, char *str) {
             if (j)
                 str = _expect(str, " ");
             vals[i * y + j] = strtod(str, &next);
-            if (str == next) {
-                fprintf(stderr, "Expected number at '%s'", str);
-                exit(1);
-            }
+            if (str == next)
+                fatal("Expected number at '%s'", str);
             str = next;
         }
     }
-    if (*str) {
-        fprintf(stderr, "Expected end of string at '%s'", str);
-        exit(1);
-    }
+    if (*str)
+        fatal("Expected end of string at '%s'", str);
     return vals;
 }
 

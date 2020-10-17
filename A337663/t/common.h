@@ -11,6 +11,7 @@ extern void init_test(void);
 extern void done_testing(void);
 
 extern void ok(char *legend, ...);
+extern void fatal(char *legend, ...);
 extern void is_bool(bool got, bool expect, char *legend, ...);
 extern void is_int(int got, int expect, char *legend, ...);
 extern void is_grid(int x, int y, int *got, int *expect, char *legend, ...);
