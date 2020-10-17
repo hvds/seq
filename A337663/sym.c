@@ -22,6 +22,20 @@ bool is_reflect(sym_t s) {
 }
 
 /*
+    Return the symmetry out of the given (packed) symmetries for which
+    the location lies on a line of reflection, or 0 if there is none.
+*/
+sym_t sym_reflect(int syms, int x, int y, loc_t l) {
+    for (sym_t s = 1; s <= MAXSYM; ++s)
+        if (is_reflect(s)
+            && (syms & (1 << s))
+            && sym_checkloc(s, x, y, l)
+        )
+            return s;
+    return 0;
+}
+        
+/*
     Return true if t is non-canonical, when copmosed with this symmetry.
 
     If s is a reflection, and s x t = t', this will return false for only

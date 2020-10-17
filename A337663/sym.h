@@ -23,6 +23,7 @@ extern bool is_reflect(sym_t s);
 extern bool sym_dup(sym_t s, sym_t t);
 extern bool sym_check(sym_t s, int x, int y, int *vals);
 extern bool sym_checkloc(sym_t s, int x, int y, loc_t l);
+extern sym_t sym_reflect(int syms, int x, int y, loc_t l);
 extern int *sym_transform(sym_t s, int x, int y, int *vals);
 extern loc_t sym_transloc(sym_t s, int x, int y, loc_t l);
 

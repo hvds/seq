@@ -451,6 +451,7 @@ grouplist_t *coalesce_group(
     grouplist_t *result;
     int ri = 0;
     int axmin = -la.x, axmax = ax - la.x, aymin = -la.y, aymax = ay - la.y;
+    sym_t reflect;
 
     /* first look at the 3x3 square around the common location, to see
      * if the two groups can in principle fit together around there
@@ -498,6 +499,9 @@ grouplist_t *coalesce_group(
     maxcombs = _comb(maxavail, use);
     result = new_grouplist((MAXSYM + 1) * maxcombs);
 
+    /* check if the first group's location is on a line of reflection */
+    reflect = sym_reflect(ga->sym, ax, ay, la);
+
     /* Now for each transform of gb, check first whether its 3x3 square can
      * be placed over ga's without conflict, and still leaving enough free
      * spots for us to add 'use' 1s. If it can, try the full monty.
@@ -507,6 +511,13 @@ grouplist_t *coalesce_group(
          * is invariant under the symmetry, we've already checked it.
          */
         if ((gb->sym & (1 << s)) && sym_checkloc(s, bx, by, lb))
+            continue;
+
+        /* if the shared location is on a line of symmetry of the other group,
+         * check this symmetry on this group only if it is canonical under
+         * that symmetry on the other group.
+         */
+        if (reflect && sym_dup(reflect, s))
             continue;
 
         avail_t *tavail = trans_avail(gb, s);
