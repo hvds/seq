@@ -310,6 +310,7 @@ sym_t next_sym(group_t *g, loc_t l) {
  * Construct and return a new group formed by adding a new value k
  * at the specified location in this group.
  *
+ * Equivalent to group_place_with(g, loc, k, 0).
  * The new group has an initial refcount of 0.
  */
 group_t *group_place(group_t *g, loc_t loc, int k) {
@@ -348,63 +349,56 @@ int _comb(int n, int d) {
  * 'use' 1s in any of the 8 surrounding squares that are available.
  */
 grouplist_t *group_place_with(group_t *g, loc_t loc, int k, int use) {
-    loc_t avail[9];
-    int availc = 0;
-    int stack[9];
-    int sp = 0;
-    int count;
+    int maxcount;
     grouplist_t *result;
     int ri = 0;
     int x, y, x0, y0, xmin, ymin, xmax, ymax;
-    int *vals;
+    int packed = 0;
+    int *vals, reflect, *refset;
+    pack_set_t *maybes;
 
-    /* put the centre location into the list to simplify bounding box checks */
-    avail[availc++] = loc;
-
-    /* find available places surrounding the location to put extra 1s */
+    /* create a packed representation of the available slots in which
+     * to place 1s
+     */
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j) {
             if (i == 1 && j == 1)
                 continue;
-            if (loc.x + i < 0 || loc.x +i >= g->x + 2
+            packed <<= 1;
+            if (loc.x + i < 0 || loc.x + i >= g->x + 2
                 || loc.y + j < 0 || loc.y + j >= g->y + 2
                 || g->avail[(loc.x + i) * (g->y + 2) + (loc.y + j)] == AVAIL
             )
-                avail[availc++] = (loc_t){ loc.x + i - 1, loc.y + j - 1 };
+                packed |= 1;
         }
 
-    if (availc - 1 < use)
-        count = 0;
-    else
-        count = _comb(availc - 1, use);
-    result = new_grouplist(count);
+    if (bitcount[packed] < use)
+        return new_grouplist(0);
 
-    stack[sp++] = 0;    /* place central loc for bounding box check */
-    stack[sp] = 0;      /* skip 0 otherwise */
-    while (sp > 0) {    /* stop when we get back to central loc at stack[0] */
-        ++stack[sp];
-        if (stack[sp] >= availc) {
-            --sp;
+    maxcount = _comb(bitcount[packed], use);
+    result = new_grouplist(maxcount);
+
+    reflect = sym_reflect(g->sym, g->x, g->y, loc);
+    refset = sym_lookup(reflect);
+    maybes = &pack_set[use];
+
+    for (int i = 0; i < maybes->count; ++i) {
+        int maybe = maybes->set[i];
+        /* skip if it requires spots we don't have */
+        if (maybe & ~packed)
             continue;
-        }
-        if (sp < use) {
-            stack[sp + 1] = stack[sp];
-            ++sp;
+        /* skip if it's a reflection of one we've already taken */
+        if (refset[maybe] < maybe)
             continue;
-        }
+
         x = g->x;
         y = g->y;
-        x0 = y0 = xmin = ymin = xmax = ymax = 0;
-        for (int i = 0; i <= sp; ++i) {
-            if (avail[stack[i]].x < xmin)
-                xmin = avail[stack[i]].x;
-            if (avail[stack[i]].x > xmax)
-                xmax = avail[stack[i]].x;
-            if (avail[stack[i]].y < ymin)
-                ymin = avail[stack[i]].y;
-            if (avail[stack[i]].y > ymax)
-                ymax = avail[stack[i]].y;
-        }
+        x0 = 0;
+        y0 = 0;
+        xmin = (maybe & 0b11100000) ? loc.x - 1 : loc.x;
+        xmax = (maybe & 0b00000111) ? loc.x + 1 : loc.x;
+        ymin = (maybe & 0b10010100) ? loc.y - 1 : loc.y;
+        ymax = (maybe & 0b00101001) ? loc.y + 1 : loc.y;
         if (xmin < 0)
             x -= xmin, x0 -= xmin;
         if (xmax >= g->x)
@@ -413,22 +407,34 @@ grouplist_t *group_place_with(group_t *g, loc_t loc, int k, int use) {
             y -= ymin, y0 -= ymin;
         if (ymax >= g->y)
             y += ymax + 1 - g->y;
-        vals = calloc(x * y, sizeof(int));
+
+        int *vals = calloc(x * y, sizeof(int));
         for (int i = 0; i < g->x; ++i)
             for (int j = 0; j < g->y; ++j)
                 vals[(i + x0) * y + (j + y0)] = g->vals[i * g->y + j];
         vals[(loc.x + x0) * y + (loc.y + y0)] = k;
-        for (int i = 0; i < use; ++i) {
-            loc_t loc1 = avail[stack[i + 1]];
-            vals[(loc1.x + x0) * y + (loc1.y + y0)] = 1;
-        }
+        if (maybe & 0b10000000)
+            vals[(loc.x + x0 - 1) * y + (loc.y + y0 - 1)] = 1;
+        if (maybe & 0b01000000)
+            vals[(loc.x + x0 - 1) * y + (loc.y + y0    )] = 1;
+        if (maybe & 0b00100000)
+            vals[(loc.x + x0 - 1) * y + (loc.y + y0 + 1)] = 1;
+        if (maybe & 0b00010000)
+            vals[(loc.x + x0    ) * y + (loc.y + y0 - 1)] = 1;
+        if (maybe & 0b00001000)
+            vals[(loc.x + x0    ) * y + (loc.y + y0 + 1)] = 1;
+        if (maybe & 0b00000100)
+            vals[(loc.x + x0 + 1) * y + (loc.y + y0 - 1)] = 1;
+        if (maybe & 0b00000010)
+            vals[(loc.x + x0 + 1) * y + (loc.y + y0    )] = 1;
+        if (maybe & 0b00000001)
+            vals[(loc.x + x0 + 1) * y + (loc.y + y0 + 1)] = 1;
+
         result->g[ri] = new_group(x, y, 0, vals);
         ref_group(result->g[ri++]);
     }
-if (ri != count) {
-    printf("found %d of %d (for comb(%d, %d))\n", ri, count, availc - 1, use);
-    result->count = ri;
-}
+    if (ri < maxcount)
+        result->count = ri;
     return result;
 }
 
