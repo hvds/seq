@@ -145,5 +145,6 @@ int main(void) {
     test_loc();
     test_dup();
 
+    finish_sym();
     done_testing();
 }

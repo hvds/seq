@@ -7,6 +7,10 @@ void init_sym(void) {
     return;
 }
 
+void finish_sym(void) {
+    return;
+}
+
 /*
     Return true if the dimensions of a grid are transposed by this symmetry.
 */

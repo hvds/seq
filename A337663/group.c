@@ -15,11 +15,12 @@ typedef struct seed_s {
  * Packed representation for symmetry-reduced ways to arrange n 1s in the
  * 8 squares neighbouring a central point.
  * Bit numbers are [ 765 // 4*3 // 210 ] ie bit 7 represents { -1, -1 }
- * relative to the centre.
+ * relative to the centre. Seed bits for k are the complement of those
+ * for (8 - k).
  */
 seed_t seed_base[9] = {
-    { 0, {} },
-    { 0, {} },
+    { 0, {} },  /* actually { 1, { 0 } }, but we never need it */
+    { 0, {} },  /* actually { 2, { 1, 2 } }, but we never need it */
     { 6, { 0300, 0210, 0201, 0050, 0500, 0401 } },
     { 10, { 0700, 0610, 0601, 0602, 0604, 0640, 0504, 0502, 0412, 0250 } },
     { 13, { 0505, 0704, 0514, 0710, 0702, 0550, 0512, 0641, 0611, 0603,
@@ -32,6 +33,12 @@ seed_t seed_base[9] = {
 
 void init_group(void) {
     return;
+}
+
+void finish_group(void) {
+    for (int i = 0; i <= 8; ++i)
+        if (cache_seed[i])
+            free_grouplist(cache_seed[i]);
 }
 
 /*
@@ -157,9 +164,8 @@ grouplist_t *new_grouplist(int size) {
  * Free the grouplist, and dereference any groups within it.
  */
 void free_grouplist(grouplist_t *gl) {
-    for (int i = 0; i < gl->count; ++i) {
+    for (int i = 0; i < gl->count; ++i)
         unref_group(gl->g[i]);
-    }
     free(gl);
 }
 
@@ -232,7 +238,7 @@ avail_t *trans_avail(group_t *g, sym_t s) {
  * representation described for 'seed_base'.
  *
  * The group has an initial refcount of 1 for its copy in the cache,
- * which is never freed.
+ * which is freed via finish_group().
  */
 group_t *group_seedbits(int k, int bits) {
     int *vals = malloc(sizeof(int) * 9);
@@ -268,7 +274,7 @@ group_t *group_seedbits(int k, int bits) {
  * Return a grouplist with all groups (reduced by symmetry) consisting of
  * a central value k surrounded by k 1s in the neighbouring 8 squares.
  *
- * The grouplist is cached, and never freed.
+ * The grouplist is cached, and freed via finish_group().
  */
 grouplist_t *group_seed(int k) {
     if (k < 2 || k > 8) {
@@ -278,10 +284,8 @@ grouplist_t *group_seed(int k) {
     if (!cache_seed[k]) {
         seed_t *seed = &seed_base[k];
         grouplist_t *gl = new_grouplist(seed->count);
-        for (int i = 0; i < seed->count; ++i) {
+        for (int i = 0; i < seed->count; ++i)
             gl->g[i] = group_seedbits(k, seed->bits[i]);
-            ref_group(gl->g[i]);
-        }
         cache_seed[k] = gl;
     }
     return cache_seed[k];

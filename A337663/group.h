@@ -32,6 +32,7 @@ typedef struct grouplist_t {
 } grouplist_t;
 
 extern void init_group(void);
+extern void finish_group(void);
 extern void print_group(group_t *g);
 extern void ref_group(group_t *g);
 extern void unref_group(group_t *g);

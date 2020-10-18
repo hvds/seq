@@ -13,6 +13,8 @@ board_t *init(int n, int feedback) {
 
 void finish(void) {
     finish_board();
+    finish_group();
+    finish_sym();
 }
 
 int main(int argc, char** argv) {

@@ -18,6 +18,7 @@ typedef enum {
 #define MAXSYM 7
 
 extern void init_sym(void);
+extern void finish_sym(void);
 extern bool is_transpose(sym_t s);
 extern bool is_reflect(sym_t s);
 extern bool sym_dup(sym_t s, sym_t t);
