@@ -1,10 +1,50 @@
 #include <stdlib.h>
+#include <string.h>
 
 #include "sym.h"
 #include "group.h"
 
+int bitcount[256];
+
+/* For i in 0 .. 8, the set of distinct values in (0 .. 255) with i bits set.
+ * These will be used as packed representations of the 8 squares neighbouring
+ * a central square.
+ */
+pack_set_t pack_set[9];
+
+/* What each packed representation maps to under each of the symmetries.
+ */
+int lookup[(MAXSYM + 1) * 256];
+
 void init_sym(void) {
-    return;
+    for (int i = 0; i < 8; ++i)
+        for (int j = 0; j < (1 << i); ++j)
+            bitcount[j + (1 << i)] = bitcount[j] + 1;
+
+    for (int i = 0; i < 256; ++i) {
+        int k = bitcount[i];
+        pack_set[k].set[ pack_set[k].count++ ] = i;
+    }
+
+    int transform[64] = {
+        0, 1, 2, 3, 4, 5, 6, 7,     /* xy */
+        2, 1, 0, 4, 3, 7, 6, 5,     /* xY */
+        5, 6, 7, 3, 4, 0, 1, 2,     /* Xy */
+        7, 6, 5, 4, 3, 2, 1, 0,     /* XY */
+        0, 3, 5, 1, 6, 2, 4, 7,     /* yx */
+        2, 4, 7, 1, 6, 0, 3, 5,     /* yX */
+        5, 3, 0, 6, 1, 7, 4, 2,     /* Yx */
+        7, 4, 2, 6, 1, 5, 3, 0      /* YX */
+    };
+    for (int i = 0; i < 256; ++i) {
+        int t[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        for (int j = 0; j < 8; ++j)
+            if (i & (1 << j))
+                for (int k = 0; k < 8; ++k)
+                    t[k] |= 1 << transform[ k * 8 + j ];
+        for (int k = 0; k < 8; ++k)
+            lookup[k * 256 + i] = t[k];
+    }
 }
 
 void finish_sym(void) {
@@ -39,6 +79,10 @@ sym_t sym_reflect(int syms, int x, int y, loc_t l) {
     return 0;
 }
         
+int *sym_lookup(sym_t s) {
+    return &lookup[256 * s];
+}
+
 /*
     Return true if t is non-canonical, when copmosed with this symmetry.
 
