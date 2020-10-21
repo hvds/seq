@@ -16,5 +16,6 @@ extern void is_bool(bool got, bool expect, char *legend, ...);
 extern void is_int(int got, int expect, char *legend, ...);
 extern void is_grid(int x, int y, int *got, int *expect, char *legend, ...);
 extern void is_loc(loc_t got, loc_t expect, char *legend, ...);
+extern void is_group(group_t *got, group_t *expect, char *legend, ...);
 
 extern int *parse_vals(int x, int y, char *str);
