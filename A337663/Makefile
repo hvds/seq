@@ -14,3 +14,5 @@ uA337663: main.c board.c board.h group.c group.h sym.c sym.h
 # tests
 t/test_sym: t/test_sym.c t/test_sym.h t/common.c t/common.h sym.c sym.h
 	gcc -O3 -o t/test_sym t/test_sym.c t/common.c sym.c
+t/test_group: t/test_group.c t/test_group.h t/common.c t/common.h group.c group.h sym.c sym.h
+	gcc -O3 -o t/test_group t/test_group.c t/common.c group.c sym.c
