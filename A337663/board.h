@@ -15,7 +15,7 @@ extern int best_k;
 extern board_t *best_board;
 extern unsigned long board_count;
 
-extern board_t *init_board(int n, int feedback);
+extern board_t *init_board(int n, int freq, char *start_hist);
 extern void finish_board(void);
 extern board_t *new_board(int k, int unused, group_t *g0, group_t *g1);
 extern void try_board(board_t *b);

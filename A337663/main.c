@@ -5,10 +5,10 @@
 #include "group.h"
 #include "sym.h"
 
-board_t *init(int n, int feedback) {
+board_t *init(int n, int freq, char *start_hist) {
     init_sym();
     init_group();
-    return init_board(n, feedback);
+    return init_board(n, freq, start_hist);
 }
 
 void finish(void) {
@@ -19,7 +19,9 @@ void finish(void) {
 
 int main(int argc, char** argv) {
     board_t *b;
-    int n = 2, feedback = 4;
+    int n = 2, freq = 100;
+
+    setvbuf(stdout, (char *)NULL, _IOLBF, 0);
 
     if (argc > 1) {
         n = atoi(argv[1]);
@@ -34,15 +36,13 @@ int main(int argc, char** argv) {
         }
     }
     if (argc > 2) {
-        feedback = atoi(argv[2]);
+        freq = atoi(argv[2]);
     }
 
-    b = init(n, feedback);
+    b = init(n, freq, (argc > 3) ? argv[3] : (char*)NULL);
     try_board(b);
     printf("a(%d) = %d (%lu)\n", n, best_k, board_count);
-    print_board(best_board);
 
     finish();
-
     return 0;
 }
