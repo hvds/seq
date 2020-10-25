@@ -242,7 +242,7 @@ bool sym_checkloc(sym_t s, int x, int y, loc_t l) {
         case Yx:
             return ((l.x << 1) == x - 1) && ((l.y << 1) == y - 1);
         case YX:
-            return ((l.x + l.y) >> 1) == x + y - 2;
+            return l.x + l.y == (x + y - 2) << 1;
     }
 }
 
