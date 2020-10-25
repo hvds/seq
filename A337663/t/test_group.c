@@ -22,7 +22,7 @@ group_t *_parse_group(pgroup_t pg) {
     return g;
 }
 
-void _is_group(group_t *got, group_t *expect, char *legend, va_list argp) {
+void vis_group(group_t *got, group_t *expect, char *legend, va_list argp) {
     int bad = 0, broken = 0;
     if (got->x != expect->x) {
         broken = 1;
@@ -54,7 +54,7 @@ void _is_group(group_t *got, group_t *expect, char *legend, va_list argp) {
 void is_group(group_t *got, group_t *expect, char *legend, ...) {
     va_list argp;
     va_start(argp, legend);
-    _is_group(got, expect, legend, argp);
+    vis_group(got, expect, legend, argp);
     va_end(argp);
 }
 
@@ -72,7 +72,7 @@ int _cmpgroup(const void *a, const void *b) {
     return result;
 }
 
-void _is_grouplist(grouplist_t *got, grouplist_t *expect, char *legend, va_list argp) {
+void vis_grouplist(grouplist_t *got, grouplist_t *expect, char *legend, va_list argp) {
     qsort(&got->g[0], got->count, sizeof(group_t *), _cmpgroup);
     qsort(&expect->g[0], expect->count, sizeof(group_t *), _cmpgroup);
 
@@ -115,7 +115,7 @@ void _is_grouplist(grouplist_t *got, grouplist_t *expect, char *legend, va_list 
 void is_grouplist(grouplist_t *got, grouplist_t *expect, char *legend, ...) {
     va_list argp;
     va_start(argp, legend);
-    _is_grouplist(got, expect, legend, argp);
+    vis_grouplist(got, expect, legend, argp);
     va_end(argp);
 }
 
