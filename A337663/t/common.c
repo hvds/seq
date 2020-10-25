@@ -155,7 +155,7 @@ void _is_grid(int x, int y, int *got, int *expect, char *legend, va_list argp) {
 void is_grid(int x, int y, int *got, int *expect, char *legend, ...) {
     va_list argp;
     va_start(argp, legend);
-    _is_grid(x, y, got, expect, legend, argp);
+    vis_grid(x, y, got, expect, legend, argp);
     va_end(argp);
 }
 
