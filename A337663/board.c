@@ -163,7 +163,7 @@ void recurse(board_t *b, int unused, group_t *g0, group_t *g1) {
     out_histstr[MAXSTR * k] = 0;
 
     ++board_count;
-    if (b->unused && --fcount == 0) {
+    if (--fcount == 0) {
         fcount = freq;
         for (int i = k; i >= 2; --i) {
             hist_t h = out_hist[i];
