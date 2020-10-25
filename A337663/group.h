@@ -40,6 +40,7 @@ extern void unref_group(group_t *g);
 extern group_t *new_group(int x, int y, int sym, int* vals);
 extern group_t *group_place(group_t *g, loc_t loc, int k);
 
+extern grouplist_t *new_grouplist(int size);
 extern void free_grouplist(grouplist_t *gl);
 extern grouplist_t *group_seed(int k);
 extern grouplist_t *group_place_with(group_t *g, loc_t loc, int k, int use);
