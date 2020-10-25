@@ -1,7 +1,7 @@
 #ifndef SYM_H
 #define SYM_H
 
-#include "group.h"
+#include "loc.h"
 
 typedef unsigned char bool;
 

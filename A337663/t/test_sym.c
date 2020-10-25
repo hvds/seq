@@ -1,7 +1,6 @@
 #include <stdlib.h>
 
 #include "../sym.h"
-#include "../group.h"
 #include "common.h"
 #include "test_sym.h"
 

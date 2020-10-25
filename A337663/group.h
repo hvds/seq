@@ -1,16 +1,13 @@
 #ifndef GROUP_H
 #define GROUP_H
 
+#include "loc.h"
+
 typedef enum {
     AVAIL = 0,
     RES = 1,
     USED = 2,
 } avail_t;
-
-typedef struct loc_s {
-    int x;
-    int y;
-} loc_t;
 
 typedef struct group_s {
     int x;
