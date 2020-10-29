@@ -84,7 +84,8 @@ void vis_grouplist(grouplist_t *got, grouplist_t *expect, char *legend, va_list 
                 : -1
             : 1;
         if (diff < 0) {
-            printf("# Got unexpected group ");
+            bool repeat = (gi && _cmpgroup(&got->g[gi - 1], &got->g[gi]) == 0);
+            printf("# Got unexpected group %s", repeat ? "(repeat) " : "");
             print_group(got->g[gi]);
             printf("\n");
             bad = 1;
@@ -206,11 +207,9 @@ void test_place_with(void) {
 void test_coalesce(void) {
     group_t *g1 = _parse_group((pgroup_t){ 1, 1, all_sym, "2" });
     group_t *g2 = _parse_group((pgroup_t){ 2, 2, 0, "1 3; 1 0" });
-
-    grouplist_t *got = coalesce_group(
-        g1, (loc_t){ -1, 1 }, g2, (loc_t){ -1, 2 }, 4, 2
-    );
-    pgroup_t pexpect[7] = {
+    loc_t l1 = (loc_t){ -1, 1 }, l2 = (loc_t){ -1, 2 };
+#define count 7
+    pgroup_t pexpect[count] = {
         /* xY */
         (pgroup_t){ 4, 4, 0, "1 1 0 0; 0 4 0 0; 2 0 3 1; 0 0 0 1" },
         (pgroup_t){ 4, 4, 0, "1 0 1 0; 0 4 0 0; 2 0 3 1; 0 0 0 1" },
@@ -222,10 +221,43 @@ void test_coalesce(void) {
         /* YX */
         (pgroup_t){ 4, 4, 0, "0 0 1 1; 1 0 3 0; 0 4 0 0; 2 0 1 0" },
     };
-    grouplist_t *expect = new_grouplist(7);
-    for (int i = 0; i < 7; ++i)
+
+    grouplist_t *expect = new_grouplist(count);
+    for (int i = 0; i < count; ++i)
         expect->g[i] = _parse_group(pexpect[i]);
-    is_grouplist(got, expect, "group_coalesce with 2");
+    grouplist_t *got = coalesce_group(g1, l1, g2, l2, 4, 2);
+    is_grouplist(got, expect, "group_coalesce (a, b) with 2");
+    free_grouplist(got);
+    free_grouplist(expect);
+
+    /* Should work identically if we swap the groups and associated
+     * locations, but in this case we don't suppress all the symmetries, so
+     * we end up with 2 copies of each result. See TODO in coalesce_group().
+     */
+    expect = new_grouplist(count * 2);
+    for (int i = 0; i < count; ++i) {
+        group_t *g = _parse_group(pexpect[i]), *gt;
+        int x = g->x, y = g->y, *v;
+        /* This time round it is gb that is held stationary while ga is
+         * transformed to fit, so the results are transformed too.
+         */
+        sym_t s = (0 <= i && i <= 2) ? xY
+            : (3 <= i && i <= 5) ? Xy
+            : yx;
+        v = sym_transform(s, x, y, g->vals);
+        if (is_transpose(s))
+            gt = new_group(y, x, 0, v);
+        else
+            gt = new_group(x, y, 0, v);
+        unref_group(g);
+        ref_group(gt);
+        expect->g[i * 2] = gt;
+        ref_group(gt);
+        expect->g[i * 2 + 1] = gt;
+    }
+    got = coalesce_group(g2, l2, g1, l1, 4, 2);
+    printf("# (TODO) Should return groups without duplication\n");
+    is_grouplist(got, expect, "group_coalesce (b, a) with 2");
     free_grouplist(got);
     free_grouplist(expect);
 
