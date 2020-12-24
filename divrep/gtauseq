@@ -12,8 +12,8 @@ sub MBI { return Math::GMP->new(@_) }
 my($opt_D, $opt_f, $opt_b, $opt_ta, $opt_fact, $opt_ix) = (0) x 6;
 my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr)
         = (0, 0, 0, 100000, 0, 0);
-my($opt_mm);
-my($opt_ts, $opt_m, $opt_mq, $opt_dm, $opt_dmq) = ([], [], [], [], []);
+my($opt_ts, $opt_m, $opt_mq, $opt_mm, $opt_dm, $opt_dmq)
+        = ([], [], [], [], [], []);
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
@@ -32,8 +32,8 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
     ($opt_ts = [ split /,/, $arg || shift(@ARGV) ]), next if $arg =~ s{^-ts}{};
     ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t}{};
-    ($opt_mm = $arg || shift(@ARGV)), next if $arg =~ s{^-mm}{};
     push(@$opt_mq, $arg || shift(@ARGV)), next if $arg =~ s{^-mq}{};
+    push(@$opt_mm, $arg || shift(@ARGV)), next if $arg =~ s{^-mm}{};
     push(@$opt_m, $arg || shift(@ARGV)), next if $arg =~ s{^-m}{};
     push(@$opt_dmq, $arg || shift(@ARGV)), next if $arg =~ s{^-dmq}{};
     push(@$opt_dm, $arg || shift(@ARGV)), next if $arg =~ s{^-dm}{};
@@ -194,7 +194,7 @@ sub apply {
     }
 
     # Unpack $opt_mm into @$opt_m and @$opt_mq
-    unpack_mm($opt_mm) if defined $opt_mm;
+    unpack_mm($_) for @$opt_mm;
 
     # If options specify overriding modular constraints, apply those next.
     mod_override($c, $_) for @$opt_m;
