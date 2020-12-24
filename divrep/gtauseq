@@ -400,9 +400,9 @@ sub is_fixed {
 sub test_m_rad_m {
     my($c, $pmr, $tn) = @_;
     my $debug = $c->debug;
-    $debug > 1 && print "m rad m: try $pmr\n";
+    $debug > 1 && warn "m rad m: try $pmr\n";
     my($p, $m, $r) = discern_rad($pmr) or do {
-        $debug > 2 && print "m rad m: too many spares\n";
+        $debug > 2 && warn "m rad m: too many spares\n";
         return;
     };
     my $mf = [ factor_exp($m) ];
@@ -416,7 +416,7 @@ sub test_m_rad_m {
         for my $u (1 .. $qrp - 1) {
             next if gcd($u, $qr) > 1;
             next if vec($vec, $u % $mod, 1);
-            $debug > 2 && print "m rad m: series $u * $qm, $pmr\n";
+            $debug > 2 && warn "m rad m: series $u * $qm, $pmr\n";
             series($c, $u * $qm, $pmr, 0);
         }
     };
@@ -474,7 +474,7 @@ sub test_m_rad_m {
 
     for my $u (1 .. $r - 1) {
         next if gcd($u, $r) > 1;
-        $c->debug && print "m rad m: suppress $m * $u mod $pmr\n";
+        $c->debug && warn "m rad m: suppress $m * $u mod $pmr\n";
         series($c, $m * $u, $pmr, 0);
     }
 }
