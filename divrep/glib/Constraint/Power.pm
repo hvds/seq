@@ -76,15 +76,22 @@ sub _dtoceily {
 
 #
 # Calculate d given y: d = (xy^z - n) / k
-# We expect k should always divide the expression exactly, or raise an error.
+# We expect k should always divide the expression exactly, or raise an error;
+# however in rare cases that's ok, these are marked by setting $::LOOSE_CUR.
 #
 sub _ytod {
     my($self, $val) = @_;
     my $base = $self->{pow_x} * $val ** $self->{pow_z} - $self->{n};
     my($div, $rem) = $base->bdiv($self->{pow_k});
-    die sprintf "_ytod(k = %s, x = %s, z = %s => %s) not divisible by k",
-            @$self{qw{ pow_k pow_x pow_z }}, $val
-        if $rem != 0;
+    if ($rem != 0) {
+        use Carp;
+        confess sprintf(
+            "_ytod(k = %s, x = %s, z = %s => %s) not divisible by k",
+            @$self{qw{ pow_k pow_x pow_z }}, $val,
+        ) unless $::LOOSE_CUR;
+        # if loose is good enough, return the floor but mark it
+        $div .= ':LOOSE';
+    }
     return $div;
 }
 

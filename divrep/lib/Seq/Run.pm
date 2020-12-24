@@ -184,7 +184,7 @@ sub finalize {
     for (( $line{301} // [] )->[-1] // ()) {
         my($n, $k, $d, $ta) = m{
             ^ 301 \s+ After \s+ [\d\.]+s \s+ for \s+ \( (\d+) ,\s+ (\d+) \)
-            \s+ reach \s+ d=(\d+) \s+
+            \s+ reach \s+ d=(\d+) (?: :LOOSE)? \s+
             \(.*?\) \s+ seen \s+ \[ (.*?) \] \z
         }x or return $self->failed("Can't parse 301 result: '$_'");
         $n == $self->n && $k == $self->k

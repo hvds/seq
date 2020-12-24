@@ -714,6 +714,10 @@ OUT
             report_reach($n, $f, $cur, $c);
             return $cur;
         }
+        # We're done; if cur is a derived value (eg for Constraint::Power),
+        # it is not necessarily an integer at this point, but that's ok.
+        no warnings qw{once};
+        local $::LOOSE_CUR = 1;
         report_reach($n, $f, $c->cur, $c);
         return undef;
     }
