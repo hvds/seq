@@ -131,12 +131,12 @@ OUT
 
 sub mod_override {
     my($c, $override) = @_;
-    my($mod, $op, $val) = m{ ^ (\d+) ([=!]) (\d+) \z }x
+    my($mod, $op, $val) = m{ ^ (\d+) ([=!]) ([\d,]+) \z }x
             or die "Invalid mod override '$_'";
     if ($op eq '=') {
         $c->require($mod, $val);
     } else {
-        $c->suppress($mod, $val);
+        $c->suppress($mod, $_) for split /,/, $val;
     }
 }
 
