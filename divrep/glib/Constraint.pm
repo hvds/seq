@@ -83,6 +83,7 @@ sub c {
     my($self, $n) = @_;
     $self->{'c'}{$n} ||= do {
         my $nb = ref($n) ? $n : MBI($n);
+        my $ni = ref($n) ? 0 + "$n" : $n;
         my $div = _highfactors($nb);    # x: x>1, px=n
         my $c = [
             $nb,    # [0] the modulus
@@ -95,22 +96,27 @@ sub c {
             [],     # [7] d: p | d
             0,      # [8] count of disallowed values
         ];
+        my $vn = '';
+        my $new = 0;
+        my $dis = 0;
         # apply dependencies for my divisors
-        for my $d (@$div) {
+        for my $d (map "$_", @$div) {
             my $cd =  $self->c($d);
             push @{ $cd->[7] }, $n;
-            my $q = $n / $d;
+            my $vd = $cd->[2];
+            my $q = $ni / $d;
             for my $v (0 .. $d - 1) {
-                next unless vec($cd->[2], $v, 1);
+                next unless vec($vd, $v, 1);
                 for my $m (0 .. $q - 1) {
                     my $off = $m * $d + $v;
-                    next if vec($c->[2], $off, 1);
-                    vec($c->[2], $off, 1) = 1;
-                    ++$c->[8];
-                    $c->[5] = 1
+                    next if vec($vn, $off, 1);
+                    vec($vn, $off, 1) = 1;
+                    ++$dis;
+                    $new = 1
                 }
             }
         }
+        @$c[2, 5, 8] = ($vn, $new, $dis);
         ($debug > 2) && warn "init $n with vec [@{[ unpack 'b*', $c->[2] ]}]\n";
         _insert($self->{'allc'}, $c);
         $c;
@@ -414,6 +420,14 @@ typedef struct scmod_t {
     UV multmod;
 } scmod;
 
+/*
+ * The next integer to test is: base + mult * iter, where 0 <= iter < limit.
+ * For a given scmod, we have base + mult * iter == basemod + multmod * iter
+ * (modulo mod), and limit has been chosen to ensure the RHS does not overflow
+ * a UV.
+ * Each time iter reaches limit, we must recalculate base and all basemod,
+ * and reset it.
+ */
 typedef struct sclist_t {
     int len;
     scmod* sc;
