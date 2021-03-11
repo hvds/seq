@@ -5,7 +5,7 @@
 #include "group.h"
 #include "sym.h"
 
-grouplist_t *cache_seed[9];
+grouplist_t *cache_seed[6];
 typedef struct seed_s {
     int count;
     int bits[13];  /* max needed */
@@ -18,17 +18,13 @@ typedef struct seed_s {
  * relative to the centre. Seed bits for k are the complement of those
  * for (8 - k).
  */
-seed_t seed_base[9] = {
+seed_t seed_base[6] = {
     { 0, {} },  /* actually { 1, { 0 } }, but we never need it */
     { 0, {} },  /* actually { 2, { 1, 2 } }, but we never need it */
-    { 6, { 0300, 0210, 0201, 0050, 0500, 0401 } },
-    { 10, { 0700, 0610, 0601, 0602, 0604, 0640, 0504, 0502, 0412, 0250 } },
-    { 13, { 0505, 0704, 0514, 0710, 0702, 0550, 0512, 0641, 0611, 0603,
-            0642, 0342, 0252 } },
-    { 10, { 0057, 0147, 0156, 0155, 0153, 0117, 0253, 0255, 0345, 0307 } },
-    { 6, { 0457, 0547, 0556, 0707, 0257, 0356 } },
-    { 2, { 0776, 0775 } },
-    { 1, { 0777 } }
+    { 2, { 0210, 0050 } },
+    { 2, { 0250, 0260 } },
+    { 1, { 0252 } },
+    { 1, { 0262 } }
 };
 
 void init_group(void) {
@@ -76,13 +72,15 @@ group_t *new_group(int x, int y, int sym, int* vals) {
                 continue;
             for (int di = 0; di < 3; ++di)
                 for (int dj = 0; dj < 3; ++dj) {
-                    int off = (i + di) * (y + 2) + (j + dj);
-                    if (v > 1 && g->avail[off] == AVAIL)
-                        g->avail[off] = RES;
-                    if (g->avail[off] != USED) {
-                        g->sum_chains[off] += v;
-                        if (g->sum_chains[off] > maxsum)
-                            maxsum = g->sum_chains[off];
+                    if (di == 1 || dj == 1) {
+                        int off = (i + di) * (y + 2) + (j + dj);
+                        if (v > 1 && g->avail[off] == AVAIL)
+                            g->avail[off] = RES;
+                        if (g->avail[off] != USED) {
+                            g->sum_chains[off] += v;
+                            if (g->sum_chains[off] > maxsum)
+                                maxsum = g->sum_chains[off];
+                        }
                     }
                 }
         }
@@ -362,14 +360,16 @@ grouplist_t *group_place_with(group_t *g, loc_t loc, int k, int use) {
      */
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j) {
-            if (i == 1 && j == 1)
-                continue;
-            packed <<= 1;
-            if (loc.x + i < 0 || loc.x + i >= g->x + 2
-                || loc.y + j < 0 || loc.y + j >= g->y + 2
-                || g->avail[(loc.x + i) * (g->y + 2) + (loc.y + j)] == AVAIL
-            )
-                packed |= 1;
+            if (i == 1 || j == 1) {
+                if (i == 1 && j == 1)
+                    continue;
+                packed <<= 1;
+                if (loc.x + i < 0 || loc.x + i >= g->x + 2
+                    || loc.y + j < 0 || loc.y + j >= g->y + 2
+                    || g->avail[(loc.x + i) * (g->y + 2) + (loc.y + j)] == AVAIL
+                )
+                    packed |= 1;
+            }
         }
 
     if (bitcount[packed] < use)
@@ -467,33 +467,35 @@ grouplist_t *coalesce_group(
      */
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j) {
-            if (i == 1 && j == 1)
-                continue;
-            afree <<= 1;
-            aneed <<= 1;
-            bfree <<= 1;
-            bneed <<= 1;
-            if (la.x + i < 0 || la.x + i >= ax + 2
-                || la.y + j < 0 || la.y + j >= ay + 2
-            ) {
-                afree |= 1;
-            } else {
-                avail_t a = ga->avail[(la.x + i) * (ay + 2) + (la.y + j)];
-                if (a == AVAIL)
+            if (i == 1 || j == 1) {
+                if (i == 1 && j == 1)
+                    continue;
+                afree <<= 1;
+                aneed <<= 1;
+                bfree <<= 1;
+                bneed <<= 1;
+                if (la.x + i < 0 || la.x + i >= ax + 2
+                    || la.y + j < 0 || la.y + j >= ay + 2
+                ) {
                     afree |= 1;
-                else if (a == USED)
-                    aneed |= 1;
-            }
-            if (lb.x + i < 0 || lb.x + i >= bx + 2
-                || lb.y + j < 0 || lb.y + j >= by + 2
-            ) {
-                bfree |= 1;
-            } else {
-                avail_t a = gb->avail[(lb.x + i) * (by + 2) + (lb.y + j)];
-                if (a == AVAIL)
+                } else {
+                    avail_t a = ga->avail[(la.x + i) * (ay + 2) + (la.y + j)];
+                    if (a == AVAIL)
+                        afree |= 1;
+                    else if (a == USED)
+                        aneed |= 1;
+                }
+                if (lb.x + i < 0 || lb.x + i >= bx + 2
+                    || lb.y + j < 0 || lb.y + j >= by + 2
+                ) {
                     bfree |= 1;
-                else if (a == USED)
-                    bneed |= 1;
+                } else {
+                    avail_t a = gb->avail[(lb.x + i) * (by + 2) + (lb.y + j)];
+                    if (a == AVAIL)
+                        bfree |= 1;
+                    else if (a == USED)
+                        bneed |= 1;
+                }
             }
         }
 
