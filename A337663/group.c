@@ -18,13 +18,12 @@ typedef struct seed_s {
  * relative to the centre. Seed bits for k are the complement of those
  * for (8 - k).
  */
-seed_t seed_base[6] = {
+seed_t seed_base[5] = {
     { 0, {} },  /* actually { 1, { 0 } }, but we never need it */
     { 0, {} },  /* actually { 2, { 1, 2 } }, but we never need it */
     { 2, { 0210, 0050 } },
-    { 2, { 0250, 0260 } },
+    { 1, { 0250 } },
     { 1, { 0252 } },
-    { 1, { 0262 } }
 };
 
 void init_group(void) {
