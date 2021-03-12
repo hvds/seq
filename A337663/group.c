@@ -31,7 +31,7 @@ void init_group(void) {
 }
 
 void finish_group(void) {
-    for (int i = 0; i <= 8; ++i)
+    for (int i = 0; i <= 4; ++i)
         if (cache_seed[i])
             free_grouplist(cache_seed[i]);
 }
