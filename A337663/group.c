@@ -274,7 +274,7 @@ group_t *group_seedbits(int k, int bits) {
  * The grouplist is cached, and freed via finish_group().
  */
 grouplist_t *group_seed(int k) {
-    if (k < 2 || k > 8) {
+    if (k < 2 || k > 4) {
         fprintf(stderr, "Error: group_seed(%d) called\n", k);
         exit(1);
     }
