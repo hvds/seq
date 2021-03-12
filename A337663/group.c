@@ -359,10 +359,10 @@ grouplist_t *group_place_with(group_t *g, loc_t loc, int k, int use) {
      */
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j) {
+            if (i == 1 && j == 1)
+                continue;
+            packed <<= 1;
             if (i == 1 || j == 1) {
-                if (i == 1 && j == 1)
-                    continue;
-                packed <<= 1;
                 if (loc.x + i < 0 || loc.x + i >= g->x + 2
                     || loc.y + j < 0 || loc.y + j >= g->y + 2
                     || g->avail[(loc.x + i) * (g->y + 2) + (loc.y + j)] == AVAIL
