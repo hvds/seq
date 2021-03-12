@@ -236,7 +236,7 @@ void try_board(board_t *b) {
     oh = &out_hist[k];
 
     /* try making a new group */
-    if (unused >= k && h.type <= 1) {
+    if (k <= 4 && unused >= k && h.type <= 1) {
         int next_unused = unused - k;
         grouplist_t *gl = group_seed(k);
         int start_index = (h.type == 1) ? h.index : 0;
