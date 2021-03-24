@@ -1,11 +1,8 @@
 package Constraint::Fact;
+use parent qw{ Constraint };
 use strict;
-our @ISA = qw/ Constraint /;
-
 use warnings;
-no warnings qw/ recursion /;
-
-use Math::Prime::Util qw{ is_prime next_prime factor_exp };
+use Math::Prime::Util qw{ factor_exp };
 
 =head1 Constraint::Fact
 
@@ -93,123 +90,148 @@ and m_5 and m_11 together will tell us which must include the square.
 
 sub new {
     my($class, $c) = @_;
-    my $self = $class->SUPER::new(
-        'n' => $c->n(),
-        'f' => $c->f(),
-        'tell_count' => $c->tell_count(),
-        't0' => $c->t0(),
-        'min' => $c->min(),
-        'max' => $c->max(),
-        'check' => $c->check(),
-        'tau' => $c->tau(),
-        'parent' => $c,
-    );
+    my $n = $c->n;
 
-    my @fact = factor_exp($self->n);
-    @fact == 1 && $fact[0][1] == 5 && ($fact[0][0] & 1)
-            or die "Constraint::Fact->new: expect n = p^5, odd p";
-    my $p = Math::GMP->new($fact[0][0]);
-    my $minf = $p + ($p / 2) ** 2;
-    $minf < $self->{'f'}
-            or die "Constraint::Fact->new: for n=p^5 expect f > $minf";
-    my $a = ($p + 1) / 2;
-    my $b = $a - 1;
-    my $k = $a * $a;
-    $self->{'p5'} = {
-        p => $p, p2 => $p * $p, p4 => $p * $p * $p * $p,
-        a => $a, b => $b, k => $k,
-        bp2 => $b * $p * $p,
-    };
-
-    $self->{'min'} = $self->_dtoceilr($c->min);
-    $self->{'max'} = $self->_dtoceilr($c->max);
-
-    # todo: copy over constraints
-    # todo: copy over pend list
-
-    return $self;
-}
-
-#
-# Calculate floor(r) given d
-#
-sub _dtor {
-    my($self, $d) = @_;
-    my $p5 = $self->{'p5'};
-    # d = q^2 - p^4 => q = sqrt(d + p^4)
-    my $q = ($d + $p5->{'p4'})->bsqrt;
-    # r^2 = aq +/- bp^2
-    my $sq = $p5->{'a'} * $q - $p5->{'bp2'};
-    return $sq < 0 ? Math::GMP->new(0) : $sq->bsqrt;
-}
-
-sub _dtoceilr {
-    my($self, $d) = @_;
-    my $p5 = $self->{'p5'};
-    my $q = 1 + ($d + $p5->{'p4'} - 1)->bsqrt;
-    my $sq = $p5->{'a'} * $q + $p5->{'bp2'};
-    return $sq < 1 ? Math::GMP->new(0) : 1 + ($sq - 1)->bsqrt;
-}
-
-#
-# Calculate d given r and direction (-1 or +1)
-#
-sub _rtod {
-    my($self, $r, $dir) = @_;
-    my $p5 = $self->{'p5'};
-    # r^2 = aq +/- bp^2 => q = (r^2 -/+ bp^2) / a
-    my $q = ($r * $r - $dir * ($p5->{'bp2'})) / $p5->{'a'};
-    # d = q^2 - p^4
-    return $q * $q - $p5->{'p4'};
-}
-
-sub cur {
-    my($self) = @_;
-    return $self->_rtod($self->{cur}, $self->{dir} // -1);
-}
-
-sub next {
-    my($self) = @_;
-    my($a, $bp2, $p4) = @{ $self->{'p5'} }{qw{ a bp2 p4 }};
-    my $r = $self->{'cur'};
-    my $dir = $self->{'dir'} // +1;
-    my($q, $aq, $rem, $alt);
-    my $t = 0;
-
-    while (1) {
-        ++$t;
-        if ($dir > 0) {
-            $r = next_prime($r);
-            $dir = -1;
-            return undef if $r > $self->{'max'};
-        } else {
-            $dir = +1;
-        }
-        if ($dir < 0) {
-            # (try r^2 = aq + bp^2)
-            $aq = $r * $r - $bp2;
-            ($q, $rem) = $aq->bdiv($a);
-            next if $rem != 0;
-            next unless is_prime($q);
-            $alt = $aq - $bp2;
-            next unless is_prime($alt);
-        } else {
-            # (try r^2 = aq - bp^2)
-            $aq = $r * $r + $bp2;
-            ($q, $rem) = $aq->bdiv($a);
-            next if $rem != 0;
-            next unless is_prime($q);
-            $alt = $aq + $bp2;
-            next unless is_prime($alt);
-        }
-        last;
+    my @fact = factor_exp($n);
+    if (@fact == 1 && $fact[0][1] == 5 && ($fact[0][0] & 1)) {
+        return Constraint::Fact::P5->new($c, \@fact);
     }
-    $self->{'cur'} = $r;
-    $self->{'dir'} = $dir;
-    $self->{'tests'} += $t;
-    $self->{'skipped'} += $t - 1;
-    $self->{'kept'} += 1;
-    return $q * $q - $p4;
+
+    my $f = $c->f;
+    if ($n == 198 && $f == 12) {
+        warn "Add extra constraints for 198/12 here";
+        return;
+    }
+
+    die "Constraint::Fact->new: no special factors known for f($n, $f)";
 }
+
+package Constraint::Fact::P5 {
+    use parent qw{ Constraint };
+    use strict;
+    use warnings;
+    no warnings qw/ recursion /;
+    use Math::Prime::Util qw{ is_prime next_prime };
+
+    sub new {
+        my($class, $c, $fact) = @_;
+        my $self = $class->SUPER::new(
+            'n' => $c->n(),
+            'f' => $c->f(),
+            'tell_count' => $c->tell_count(),
+            't0' => $c->t0(),
+            'min' => $c->min(),
+            'max' => $c->max(),
+            'check' => $c->check(),
+            'tau' => $c->tau(),
+            'parent' => $c,
+        );
+
+        @$fact == 1 && $fact->[0][1] == 5 && ($fact->[0][0] & 1)
+                or die "Constraint::Fact::P5->new: expect n = p^5, odd p";
+        my $p = Math::GMP->new($fact->[0][0]);
+        my $minf = $p + ($p / 2) ** 2;
+        $minf < $self->{'f'}
+                or die "Constraint::Fact->new: for n=p^5 expect f > $minf";
+        my $a = ($p + 1) / 2;
+        my $b = $a - 1;
+        my $k = $a * $a;
+        $self->{'p5'} = {
+            p => $p, p2 => $p * $p, p4 => $p * $p * $p * $p,
+            a => $a, b => $b, k => $k,
+            bp2 => $b * $p * $p,
+        };
+
+        $self->{'min'} = $self->_dtoceilr($c->min);
+        $self->{'max'} = $self->_dtoceilr($c->max);
+
+        # todo: copy over constraints
+        # todo: copy over pend list
+
+        return $self;
+    }
+
+    #
+    # Calculate floor(r) given d
+    #
+    sub _dtor {
+        my($self, $d) = @_;
+        my $p5 = $self->{'p5'};
+        # d = q^2 - p^4 => q = sqrt(d + p^4)
+        my $q = ($d + $p5->{'p4'})->bsqrt;
+        # r^2 = aq +/- bp^2
+        my $sq = $p5->{'a'} * $q - $p5->{'bp2'};
+        return $sq < 0 ? Math::GMP->new(0) : $sq->bsqrt;
+    }
+
+    sub _dtoceilr {
+        my($self, $d) = @_;
+        my $p5 = $self->{'p5'};
+        my $q = 1 + ($d + $p5->{'p4'} - 1)->bsqrt;
+        my $sq = $p5->{'a'} * $q + $p5->{'bp2'};
+        return $sq < 1 ? Math::GMP->new(0) : 1 + ($sq - 1)->bsqrt;
+    }
+
+    #
+    # Calculate d given r and direction (-1 or +1)
+    #
+    sub _rtod {
+        my($self, $r, $dir) = @_;
+        my $p5 = $self->{'p5'};
+        # r^2 = aq +/- bp^2 => q = (r^2 -/+ bp^2) / a
+        my $q = ($r * $r - $dir * ($p5->{'bp2'})) / $p5->{'a'};
+        # d = q^2 - p^4
+        return $q * $q - $p5->{'p4'};
+    }
+
+    sub cur {
+        my($self) = @_;
+        return $self->_rtod($self->{cur}, $self->{dir} // -1);
+    }
+
+    sub next {
+        my($self) = @_;
+        my($a, $bp2, $p4) = @{ $self->{'p5'} }{qw{ a bp2 p4 }};
+        my $r = $self->{'cur'};
+        my $dir = $self->{'dir'} // +1;
+        my($q, $aq, $rem, $alt);
+        my $t = 0;
+
+        while (1) {
+            ++$t;
+            if ($dir > 0) {
+                $r = next_prime($r);
+                $dir = -1;
+                return undef if $r > $self->{'max'};
+            } else {
+                $dir = +1;
+            }
+            if ($dir < 0) {
+                # (try r^2 = aq + bp^2)
+                $aq = $r * $r - $bp2;
+                ($q, $rem) = $aq->bdiv($a);
+                next if $rem != 0;
+                next unless is_prime($q);
+                $alt = $aq - $bp2;
+                next unless is_prime($alt);
+            } else {
+                # (try r^2 = aq - bp^2)
+                $aq = $r * $r + $bp2;
+                ($q, $rem) = $aq->bdiv($a);
+                next if $rem != 0;
+                next unless is_prime($q);
+                $alt = $aq + $bp2;
+                next unless is_prime($alt);
+            }
+            last;
+        }
+        $self->{'cur'} = $r;
+        $self->{'dir'} = $dir;
+        $self->{'tests'} += $t;
+        $self->{'skipped'} += $t - 1;
+        $self->{'kept'} += 1;
+        return $q * $q - $p4;
+    }
+};
 
 1;
