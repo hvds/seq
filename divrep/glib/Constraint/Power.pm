@@ -34,15 +34,35 @@ sub new {
     $_ = $self->convert_mod_override($_) for grep ref($_), @$opt_mpow;
     $self->mod_override($_) for @$opt_mpow;
 
-    # Copy over all the constraints
-    my %v;
-    for my $mod (1 .. $self->check()) {
-        for my $v (0 .. ($mod - 1) / 2) {
-            my($subv, $submod) = $self->_mod_ytod($v, $mod);
-            my $vec = $submod ? ($v{$submod} //= $c->c($submod)->[2]) : undef;
-            if (!$submod || vec($vec, $subv, 1)) {
-                $self->power_suppress($mod, $v);
-                $self->power_suppress($mod, $mod - $v) if $v;
+    # Copy over all the constraints: we need only look at "uniquely disallowed"
+    # since the rest will be duplicates.
+    # When k divides x, the _mod_ytod() call simplifies to the point we can
+    # save a bunch of time by inlining it.
+    if ($x % $k) {
+        my @v = ('', map $c->c($_)->[1], 1 .. $self->check);
+        for my $mod (1 .. $self->check()) {
+            next if $c->c($mod)->[8] == 0;
+            for my $v (0 .. ($mod - 1) / 2) {
+                my($subv, $submod) = $self->_mod_ytod($v, $mod);
+                if (!$submod || vec($v[$submod], $subv, 1)) {
+                    $self->power_suppress($mod, $v);
+                    $self->power_suppress($mod, $mod - $v) if $v;
+                }
+            }
+        }
+    } else {
+        my $n = $self->{'n'};
+        for my $mod (1 .. $self->check()) {
+            my $c = $c->c($mod);
+            next if $c->[8] == 0;
+            my $vec = $c->[1];
+            for my $v (0 .. ($mod - 1) / 2) {
+                # inlined _mod_ytod($v, $mod) for $k divides $x
+                my $converted = (($x * $v ** $z - $n) / $k) % $mod;
+                if (vec($vec, $converted, 1)) {
+                    $self->power_suppress($mod, $v);
+                    $self->power_suppress($mod, $mod - $v) if $v;
+                }
             }
         }
     }
@@ -106,11 +126,11 @@ sub _mod_ytod {
     my $base = $x * $val ** $z - $n;
     my $g = gcd($k, $x);
     my $gbase = $base / $g;
+    return ($gbase % $mod, $mod) if $k == $g;
+
     my $gk = $k / $g;
     my $g2 = gcd($gk, $mod);
-    if ($gk == 1) {
-        return ($gbase % $mod, $mod);
-    } elsif ($g2 == 1) {
+    if ($g2 == 1) {
         my $inv = $gk->bmodinv($mod);
         return (($gbase * $inv) % $mod, $mod);
     } elsif (($gbase % $g2) == 0) {
