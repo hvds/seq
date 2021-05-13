@@ -113,6 +113,8 @@ sub set_minc {
 
 sub depends {
     my($self, $db, $depend_m, $depend_n) = @_;
+# FIXME: g(depend_n).max may already be less than our k, in which case now
+# is probably our only opportunity to set g(n).max
     $self->depend(1);
     $self->depend_m($depend_m);
     $self->depend_n($depend_n);
