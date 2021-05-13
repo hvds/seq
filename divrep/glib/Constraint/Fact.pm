@@ -2,7 +2,8 @@ package Constraint::Fact;
 use parent qw{ Constraint };
 use strict;
 use warnings;
-use Math::Prime::Util qw{ factor_exp };
+use Math::Prime::Util qw{ factor_exp is_prime };
+use ModFunc qw{ gcd };
 
 =head1 Constraint::Fact
 
@@ -98,8 +99,23 @@ sub new {
     }
 
     my $f = $c->f;
-    if ($n == 198 && $f == 12) {
-        warn "Add extra constraints for 198/12 here";
+    if ($n == 198 && $f > 11) {
+        for my $m (2 .. $c->check) {
+            # We'd prefer to do this, for consistency, but we don't have
+            # $opt_cp available.
+            #next if $opt_cp && cp_skip($opt_cp, $n, \@fact);
+
+            next unless is_prime($m);
+            next if gcd($m, $n) > 1;
+
+            # n + 11d = 11/5 (2y - 3)(2y + 3) must be 11^2 pq or 11p^2 q
+            # with y^2 = (5d + 99) / 4; so we need the smaller of p and q
+            # to satisfy p^2 >= (2y - 3) / 5 => 5p^4 + 6p^2 - 18 >= d.
+            # Any smaller p, then, must not divide n + 11d.
+            my $m2 = $m * $m;
+            my $lim = $m2 * $m2 * 5 + $m2 * 6 - 18;
+            $c->suppress($m, -18 % $m, $lim);
+        }
         return;
     }
 
