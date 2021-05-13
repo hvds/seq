@@ -1,0 +1,337 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use Math::GMP;
+use Math::Prime::Util qw{ is_prime next_prime divisors factor_exp };
+use Algorithm::Loops qw{ NextPermuteNum NestedLoops };
+use POSIX qw{ :sys_wait_h };
+
+=head1 upperlim - constrain upper limit of f(n, k)
+
+Initially aimed at n divisible by a single squared factor without
+having a fix_power(). We try all permutations of nominated primes
+as the squared factor in the various spots available.
+
+=cut
+
+use lib './glib';
+use ModFunc qw/ mod_combine quadvec gcd /;
+
+sub MBI { return Math::GMP->new(@_) }
+
+my($opt_n, $opt_x, $opt_c, $opt_cr, $opt_s, $opt_f, $opt_p, $opt_t)
+        = (0, 0, 0, 0, 0, 0, 2, 100000);
+my($opt_m, $opt_q, $opt_i, $opt_z, $opt_nq) = ([], [], [], [], []);
+my($opt_ts, $opt_fact);
+my $sample = 0;
+my $LOGS = './logs/upperlim';
+my $PROG = './gtauseq';
+my $maxproc = 6;
+
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    ($sample = 1), next if $arg eq '--sample';
+    ($opt_f = 1), next if $arg eq '-f';
+    ($opt_fact = 1), next if $arg eq '-fact';
+    ($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
+    ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
+    ($opt_cr = $arg || shift(@ARGV)), next if $arg =~ s{^-cr}{};
+    ($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
+    ($opt_s = $arg || shift(@ARGV)), next if $arg =~ s{^-s}{};
+    ($opt_p = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
+    ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t(?!s)}{};
+    ($opt_ts = $arg || shift(@ARGV)), next if $arg =~ s{^-ts}{};
+    push(@$opt_m, $arg || shift(@ARGV)), next if $arg =~ s{^-m}{};
+    push(@$opt_q, $arg || shift(@ARGV)), next if $arg =~ s{^-q}{};
+    push(@$opt_i, $arg || shift(@ARGV)), next if $arg =~ s{^-i}{};
+    push(@$opt_z, $arg || shift(@ARGV)), next if $arg =~ s{^-z}{};
+    die "Unknown option '$arg'\n";
+}
+
+$| = 1;
+my($n, $f) = map MBI($_), @ARGV;
+$0 = "upperlim($n $f)";
+$_ = ston($_) for ($opt_n, $opt_x);
+
+my $zone = MBI(1);
+my @nf = factor_exp($n);
+my $tn = tau($n, \@nf);
+
+@$_ = map split(','), @$_ for ($opt_i, $opt_q);
+s/^!// && (push @$opt_nq, $_) for @$opt_q;
+@$_ = sort { $a <=> $b } @$_ for ($opt_i, $opt_q);
+my $mods = find_mods();
+
+@$opt_q = do {
+    my %disallow = map +($_ => 1), @$opt_nq;
+    grep !$disallow{$_}, @$opt_q;
+};
+my $perm = find_perms();
+printf "Found %d perms (%d .. %d)\n", 0+@$perm, (@$perm ? map($_->id, @$perm[0, -1]) : (0, -1));
+
+my $next = 0;
+++$next while $perm->[$next] && $perm->[$next]->id < $opt_s;
+
+print "kill -HUP $$\n";
+my $drain = 0;
+$SIG{'HUP'} = sub { $drain = 1 };
+my(%pid, $min, $max);
+while (1) {
+    diag(sprintf '%s: %s..%s', $opt_x, $min // 0, $max // '');
+    if ($drain) {
+        printf "\nDraining %s processes\n", 0 + keys %pid;
+        wait_for(\%pid) while keys %pid;
+        last;
+    }
+    if ($perm->[$next]) {
+        if (keys(%pid) >= $maxproc) {
+            wait_for(\%pid);
+        } else {
+            my $this = $perm->[$next++];
+            my $pid = $this->run;
+            if ($pid) {
+                $min = $this->id if !keys %pid;
+                $max = $this->id;
+                $pid{$pid} = $this;
+            }
+        }
+    } else {
+        $drain = 1;
+    }
+}
+exit 0;
+
+{
+    my $s; BEGIN { $s = '' }
+    sub diag {
+        print "\x08 \x08" x length($s);
+        ($s) = @_;
+        print $s;
+    }
+}
+sub wait_for {
+    my($pids) = @_;
+    my $pid = waitpid(-1, 0);
+    return 0 if $pid < 0;
+    my $which = delete $pids->{$pid};
+    if ($which->id == $min) {
+        $min = undef;
+        for (values %pid) {
+            my $i = $_->id;
+            $min //= $i;
+            $min = $i if $min > $i;
+        }
+    }
+    $which->finalize;
+    return 1;
+}
+
+sub find_mods {
+#   my @args = (
+#       "find_mods($n, $f)",
+#       # test just one value to ask for mod dumps
+#       '-n', $opt_n, '-x', $opt_n, '-c', $opt_c,
+#       map("-m$_", @$opt_m),
+#       map("-dm$_", map $_ ** $opt_p, @$opt_q),
+#       $n, $f,
+#   );
+
+    my %suppress;
+    for (@$opt_z) {
+        my($px, $rest) = split /=/, $_;
+        $suppress{$px}{$_} = 1 for split /,/, $rest;
+    }
+
+    my @mods;
+    for my $p (@$opt_q) {
+        my $px = $p ** $opt_p;
+        for my $i (@$opt_i) {
+            if (($i % $p) != 0) {
+                # to make a p^x factor we need d == -n/i (mod p^x)
+                my $m = (-$n * modinv($i, $px)) % $px;
+                next if $suppress{$px}{$m};
+                $mods[$i]{$p} = $m->intify;
+            }
+        }
+    }
+use Data::Dumper; warn Dumper(\@mods);
+    \@mods;
+}
+
+sub find_perms {
+    my @perms;
+    my @q = @$opt_q;
+    unshift @q, 0 while @q < @$opt_i;
+    my $i = 0;
+    my $excess = @q - @$opt_i;
+    do {
+        ++$i;
+        if ($excess > 1) {
+            # if we have more powers than locations, ignore any list in which
+            # the to-be-discarded excess is not in order, to avoid duplication
+            ($q[$_ + 1] < $q[$_]) && goto CONTINUE
+                    for 0 + @$opt_i .. $#q - 1;
+        }
+        my $perm = [];
+        my $none = [];
+        for (0 .. $#$opt_i) {
+            my $i = $opt_i->[$_];
+            my $q = $q[$_] or do {
+                push @$none, $i;
+                next;
+            };
+            my $mod = $mods->[$i]{$q} // goto CONTINUE;
+            push @$perm, sprintf "-m%d=%d", $q ** $opt_p, $mod;
+        }
+        if ($opt_f) {
+            my $mm = join ',', map s{^-m}{}r, @$perm;
+            my $count = @$perm;
+            push @perms, map Runnable->new(
+                $i++ - 1, [ sprintf "-mm%s/%s", $mm, $_ ], $none
+            ), find_mm($count, $opt_p, $sample);
+            --$i;
+        } else {
+            push @perms, Runnable->new($i - 1, $perm, $none);
+        }
+  CONTINUE:
+    } while (NextPermuteNum(@q));
+    return \@perms;
+}
+
+sub find_mm {
+    my($count, $power, $sample) = @_;
+    return +("0" x $count) if $sample;
+    return NestedLoops([ ([0 .. $power - 1]) x $count ], sub {
+        join '', @_;
+    });
+}
+
+sub modinv {
+    my($n, $m) = @_;
+    return MBI($n)->bmodinv($m);
+}
+
+sub tau {
+    my($n, $fact) = @_;
+    $fact //= [ factor_exp($n) ];
+    my $k = 1;
+    $k *= $_->[1] + 1 for @$fact;
+    return $k;
+}
+
+sub ston {
+    my($s) = @_;
+    $s =~ s{e(\d+)}{"0" x $1}ie;
+    return MBI($s);
+}
+
+sub ntos {
+    my($n) = @_;
+    $n =~ s{(0+)$}{"e" . length($1)}e;
+    return $n;
+}
+
+package Runnable {
+    sub new {
+        my($class, $id, $sqmods, $none) = @_;
+
+        # unconstrained elements should be tested first, overriding
+        # requested test order
+        my %none = map +($_ => 1), @$none;
+        my(@early, @late);
+        for (split /,/, $opt_ts // '') {
+            push @{ delete $none{$_} ? \@early : \@late }, $_;
+        }
+
+        # unconstrained elements should disallow known mods of
+        # disallowed primes
+        for my $i (@$none) {
+            for my $p (@$opt_nq) {
+                my $mod = $mods->[$i]{$p} // next;
+                push @$sqmods, sprintf '-m%s!%s', $p ** $opt_p, $mod;
+            }
+        }
+        return bless {
+            id => $id,
+            mods => $sqmods,
+            ts => join(',', @early, keys(%none), @late),
+        }, $class;
+    }
+    sub id { shift->{id} }
+    sub logpath {
+        my($self) = @_;
+        sprintf "%s/%s.%s-%s", $LOGS, $n, $f, $self->id;
+    }
+    sub command {
+        my($self) = @_;
+        return [
+            $PROG,
+            '-n', '' . $opt_n,
+            '-x', '' . $opt_x,
+            ($opt_c ? ('-c', $opt_c) : ()),
+            ($opt_cr ? ('-cr', $opt_cr) : ()),
+            ($opt_fact ? ('-fact') : ()),
+            ($opt_t ? ('-t', $opt_t) : ()),
+            ($self->{ts} ? ('-ts', $self->{ts}) : ()),
+            (map "-m$_", @$opt_m),
+            @{ $self->{mods} },
+            $n,
+            $f,
+        ];
+    }
+    sub run {
+        my($self) = @_;
+        my $cmd = $self->command;
+        my $log = $self->logpath;
+        if (my $pid = fork()) {
+            return $pid;
+        }
+        open STDOUT, '>', $log or die "Can't open $log for writing: $!";
+        print "100 @$cmd\n";
+        exec @$cmd or die "Can't exec [@$cmd]";
+    }
+    my %seen519;
+    sub finalize {
+        my($self) = @_;
+        my $log = $self->logpath;
+        my $fh;
+        open($fh, '<', $log) or die "$log: $!";
+        my %line;
+        while (<$fh>) {
+            chomp;
+            my($rc) = /^(\d{3}) / or die "Can't parse log line '$_'";
+            push @{ $line{$rc} }, $_;
+        }
+        close $fh;
+
+        for (@{ $line{402} }) {
+            # 402 Error: all values (mod 2) disallowed (1.780s)
+            return;
+        }
+        for (@{ $line{500} }) {
+            # 500 f(132, 12) > 1e20 mod(8=7, 3=2, 11=10, 25=9)  (2.290s)
+            return;
+        }
+        for (@{ $line{519} }) {
+            # 519 Found only 0 of 1 values matching 813 (mod 841)
+            unless ($seen519{$_}++) {
+                ::diag("");
+                print "$_\n";
+            }
+            return;
+        }
+        for (@{ $line{200} }) {
+            ::diag("");
+            # 200 f(132, 12) = 8077375161476199132962631959 mod(8=7, 3=2, 11=10, 25=9)  (0.120s)
+            print "@{[ $self->id ]}: @{ $self->command }\n$_\n";
+            if (/= (\d+) /) {
+                my $new = ::MBI($1);
+                $opt_x = $new if $opt_x > $new;
+            } else {
+                die "Could not parse result";
+            }
+            return;
+        }
+        die "Failed to find answer in $log\n";
+    }
+};
