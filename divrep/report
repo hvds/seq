@@ -153,10 +153,22 @@ sub chain_max {
 
 sub chain_sig {
     my($next, $sig) = @_;
-    my $vsig = join ',', sort { $b <=> $a } split /,/, $sig;
+    # Either '1,2,3' => p^1 q^2 r^3 or '12p^2q' => 12 p^2 q
+    my($k, @pow) = (1);
+    if ($sig =~ /[a-z]/i) {
+        $k = $1 if $sig =~ s/^(\d+)//;
+        @pow = map +(/\w\^(\d+)/ ? $1 : 1), split /(?=[a-z])/, $sig;
+    } else {
+        @pow = split /,/, $sig;
+    }
+    my $vsig = join ',', sort { $b <=> $a } @pow;
     return sub {
-        return 0 unless $next->($_[0]);
-        my $vn = join ',', sort { $b <=> $a } map $_->[1], factor_exp($_[0]);
+        my $n = $_[0];
+        return 0 unless $next->($n);
+        return 0 unless ($n % $k) == 0;
+        $n /= $k;
+        return 0 if gcd($n, $k) > 1;
+        my $vn = join ',', sort { $b <=> $a } map $_->[1], factor_exp($n);
         return $vn eq $vsig ? 1 : 0;
     };
 }
@@ -190,6 +202,12 @@ sub _maxf {
     my($g) = @_;
     my @f = grep $_->complete && $_->f, $g->f->all;
     return @f ? $f[-1]->f : '-';
+}
+
+sub gcd {
+    my($a, $b) = @_;
+    $a = Math::GMP->new($a) unless ref $a;
+    return $a->bgcd($b);
 }
 
 sub _comments {
