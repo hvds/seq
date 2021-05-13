@@ -175,9 +175,12 @@ WARN
         $coval = $_;
         last VAL if ++$found == $which;
     }
-    die sprintf <<DIE, $found, $which, $val, $mod unless $found == $which;
+    unless ($found == $which) {
+        printf <<DIE, $found, $which, $val, $mod;
 519 Found only %s of %s values matching %s (mod %s)
 DIE
+        exit 1;
+    }
     return "$mod=$coval";
 }
 
