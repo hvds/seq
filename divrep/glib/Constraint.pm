@@ -128,8 +128,7 @@ sub init {
     my $min = $self->min();
 
     # We may get a very large number of pending values: just recording the
-    # least (and maybe storing the rest in a different structure) may be
-    # preferable
+    # least (and maybe storing the rest in a heap) may be preferable.
     @{ $self->{pend} } = sort { $a->[0] <=> $b->[0] } @{ $self->{pend} };
 
     # apply any pending constraints that are immediately active
@@ -293,8 +292,12 @@ sub pack_sc {
     # now suppress anything insufficiently potent
     my $min = $self->min_potency;
     if ($min) {
+        # min_potency is actually expressed, confusingly, as the greatest
+        # (possible / disallowed) to bother with, we need to convert to
+        # the corresponding (possible / allowed).
+        my $actual = 1 / (1 - (1 / $min));
         for (my $i = 0; $i < @aux; ++$i) {
-            next if $aux[$i]->{'potency'} * $min >= 1;
+            next if $aux[$i]->{'potency'} > $actual;
             $debug >= 1 and warn "Splice sc[$i..$#aux] for min potency $min\n";
             splice @aux, $i;
             last;
