@@ -1,0 +1,13 @@
+#!/usr/bin/perl
+my $s = do { local $/; <> };
+my(@count, @first, @last);
+my $start = 1;
+for (0 .. 658*658*658) {
+    my $v = ord substr $s, $_, 1;
+    ++$count[$v];
+    $first[$v] //= $_;
+    $last[$v] = $_;
+}
+for (0 .. 255) {
+    printf "%s %s %s %s\n", $_, $count[$_], $first[$_] + 1, $last[$_] + 1;
+}

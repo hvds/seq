@@ -1,0 +1,13 @@
+#!/usr/bin/perl
+my $s = do { local $/; <> };
+my $max = length($s);
+my $start = 1;
+for (my $n = 1; 1; ++$n) {
+    my $cn = $n * $n * $n;
+    my $len = $cn - $start + 1;
+    my @a;
+    ++$a[ord($_)] for split //, substr($s, $start, $len);
+    print "$n: ", join(' ', map $_ // 0, @a), "\n";
+    $start = $cn + 1;
+    last if $start > $max;
+}

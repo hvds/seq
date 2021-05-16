@@ -1,0 +1,10 @@
+The program 'cs' calculates the number of representations of n as a sum of
+between 2 and 5 cubes, for n in the range 1 to max^3, where 'max' is the
+argument supplied when running the program.
+
+Results are written to the files "x2" .. "x5" as a stream of bytes such that
+the first byte is the number of representations of 1. As such, the counts
+are capped at 255.
+
+The code is designed to be easy to adapt for variations, such as to remove
+the cap, or sum different things.
