@@ -81,8 +81,8 @@ sub report_g {
         } elsif ($g->depend) {
             printf "g(%s) = g(%s)\n", $g->n, $g->depend_n;
         } else {
-            printf "g(%s) in [%s .. %s], checked to %s\n",
-                    $g->n, $g->ming, $g->maxg, $g->checked;
+            printf "g(%s) in [%s .. %s b%s], checked to %s\n",
+                    $g->n, $g->ming, $g->maxg, $g->bisected // 0, $g->checked;
         }
     }
     return;
