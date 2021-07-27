@@ -1,0 +1,98 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use Math::Prime::Util qw{ factor_exp divisors };
+use lib 'lib';
+
+my $PROG = './gtauseq';
+my $LOGS = './logs';
+
+@ARGV == 5 or die "500 Usage: $0 n f d optc shards";
+
+=head1 sharding: find suitable shards to search for f(n, f)
+
+Given inputs I<n>, I<f>, I<d>, I<optc>, I<shards>, attempts to find the
+most suitable set of modular constraints to shard the space in which to
+search for minimum f(n, f).
+
+I<d> should be the greatest difference checked to; I<optc> is the number
+of moduli to check, and I<shards> is the maximum number of shards that
+should be returned.
+
+To ensure stability as shards are increased, we only consider sharding
+moduli that are multiples of what would have been returned for (shards - 1).
+
+=cut
+
+my($n, $f, $d, $optc, $shards) = @ARGV;
+
+my $base = ask_base($n, $f, $d, $optc);
+printf <<LOG, $base->{mod}, join ' ', @{ $base->{allow} };
+200 shard %s: %s
+LOG
+exit 0;
+
+sub ask_base {
+    my($n, $f, $d, $optc) = @_;
+    my $found = parse(
+        "shard($n, $f)",
+        '-n' => $d,
+        '-x' => $d,
+        '-c' => $optc,
+        '-dx' => $shards,
+        '-D',
+        $n, $f,
+    );
+    my @candidate = sort {
+        # sort by increasing "allowed", then by decreasing "mod"
+        $a->[1] <=> $b->[1]
+        || $b->[0] <=> $a->[0]
+    } map {
+        m{
+            ^ 331 \s+ disallowed \s+ \( mod \s+ (\d+) \) \s+ \[ ([01]+) \]
+        }x or die "Could not parse 331 line: $_";
+        my($mod, $bits) = ($1, $2);
+        my $allowed = ($bits =~ tr/0//);
+        [ $mod, $allowed, $bits ];
+    } @{ $found->{331} };
+
+    my($mod, $bits) = (1, "0");
+    while (@candidate) {
+        my $cur = shift @candidate;
+        ($mod, $bits) = @$cur[0, 2];
+        @candidate = grep { ($_->[0] % $mod) == 0 } @candidate;
+    }
+
+    my @allow;
+    push @allow, $-[0] while $bits =~ /0/g;
+    return {
+        mod => $mod,
+        allow => \@allow,
+    };
+}
+
+{
+    my $i; BEGIN { $i = 0 }
+    sub parse {
+        my @args = @_;
+        warn "@args\n";
+        my $log = sprintf "%s/sh%s.%s.%s-%s", $LOGS, $n, $f, $shards, ++$i;
+        my $pid = fork();
+        unless ($pid) {
+            open STDOUT, '>', $log
+                    or die "503 Can't open $log for writing: $!";
+            exec($PROG @args) or die "505 Could not exec $PROG";
+        }
+        waitpid($pid, 0);
+        open my $f, '<', $log
+                or die "504 Can't open $log for reading: $!";
+        my %line;
+        while (<$f>) {
+            chomp;
+            my($rc) = /^(\d{3}) /
+                    or die "502 Can't parse log line '$_'";
+            push @{ $line{$rc} }, $_;
+        }
+        return \%line;
+    }
+}
