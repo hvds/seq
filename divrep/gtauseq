@@ -251,8 +251,8 @@ $c->debug && warn "apply $m\n";
                 $_ /= $g for ($a, $b, $c);
                 my $sign = '-';
                 ($sign, $b) = ('+', -$b) if $b < 0;
-                printf "317 satisfying Pell (%s x)^2 %s %s y^2 = %s\n",
-                        $a, $sign, $a * $b, $a * $c;
+                printf "317 satisfying Pell %s x^2 %s %s y^2 = %s\n",
+                        $a, $sign, $b, $c;
             }
         } else {
             $fixpow = $force;
