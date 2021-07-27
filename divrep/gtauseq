@@ -118,6 +118,7 @@ sub check_exceptions {
     my($c) = @_;
     for (
         [ 243, 4 ], # see Constraint::Fact
+        [ 2401, 3 ],
     ) {
         my($n, $f) = @$_;
         if ($c->n == $n && $c->f > $f) {

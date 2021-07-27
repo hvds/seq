@@ -87,6 +87,15 @@ s and t differ by 6, clearly they are both odd, and whichever is 1 (mod 4)
 must be the square. Again, m_5 will tell us where the factor of 5 is,
 and m_5 and m_11 together will tell us which must include the square.
 
+=head2 2401
+
+For g(2401, 3), secondary fix_power finds that we must satisfy the Pell
+equation C< 4x^2 - y^2 = 2401 >; but considering possibilities C<(mod 2)>
+shows immediately that no solution is possible.
+
+(Future handling of Pell equations may make it possible to discover this
+sort of thing automatically.)
+
 =cut
 
 sub new {
