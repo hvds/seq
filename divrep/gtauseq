@@ -154,7 +154,9 @@ sub mod_dump {
         my $cm = $c->c($mod);
         my $vm = $cm->[2];  # bit vector of all disallowed values
         if ($c->debug < 1) {
-            printf <<OUT, $legend, $mod, unpack "b$mod", $vm;
+            my $dis = unpack "b$mod", $vm;
+            $dis .= '0' x ($mod - length $dis);
+            printf <<OUT, $legend, $mod, $dis;
 331 disallowed%s (mod %s) [%s]
 OUT
         } else {
