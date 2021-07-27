@@ -9,7 +9,7 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_D, $opt_f, $opt_b, $opt_ta, $opt_fact, $opt_ix) = (0) x 6;
+my($opt_D, $opt_f, $opt_b, $opt_ta, $opt_fact, $opt_ix, $opt_dx) = (0) x 7;
 my($opt_n, $opt_x, $opt_c, $opt_t, $opt_cp, $opt_cr)
         = (0, 0, 0, 100000, 0, 0);
 my($opt_ts, $opt_m, $opt_mq, $opt_mm, $opt_dm, $opt_dmq)
@@ -30,6 +30,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_cp = $arg || shift(@ARGV)), next if $arg =~ s{^-cp}{};
     ($opt_cr = $arg || shift(@ARGV)), next if $arg =~ s{^-cr}{};
     ($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
+    ($opt_dx = $arg || shift(@ARGV)), next if $arg =~ s{^-dx}{};
     ($opt_ts = [ split /,/, $arg || shift(@ARGV) ]), next if $arg =~ s{^-ts}{};
     ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t}{};
     push(@$opt_mq, $arg || shift(@ARGV)), next if $arg =~ s{^-mq}{};
@@ -64,7 +65,7 @@ $opt_ix or check_exceptions($c);
 printf <<OUT, $c->elapsed(), 'rootseq', $n, $f, ntos($opt_n), ntos($opt_x), modfix(), $opt_c;
 300 Init %.2f: trying %s() for (%s, %s) in [%s, %s], %schecks up to mod %s
 OUT
-mod_dump($c, $opt_dm) if @$opt_dm;
+mod_dump($c, $opt_dm);
 
 my $d = rootseq($c);
 if ($d) {
@@ -150,6 +151,16 @@ sub modfix {
 sub mod_dump {
     my($c, $which, $s) = @_;
     my $legend = $s ? " [$s]" : '';
+    if ($opt_dx && !$s) {
+        my $n = $c->n;
+        my %keep = map +($_ => 1), @$which;
+        @$which = ();
+        for my $mod (2 .. $c->check) {
+            push(@$which, $mod), next if $keep{$mod};
+            next if $opt_cp && cp_skip($opt_cp, $n, [ factor_exp($mod) ]);
+            push @$which, $mod if $mod - $c->c($mod)->[8] <= $opt_dx;
+        }
+    }
     for my $mod (@$which) {
         my $cm = $c->c($mod);
         my $vm = $cm->[2];  # bit vector of all disallowed values
