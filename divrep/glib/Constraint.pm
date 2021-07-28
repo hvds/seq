@@ -209,8 +209,8 @@ sub _potency {
     # |nonuniquely allowed| / |allowed|
     #   = (n - |nonuniquely disallowed|) / (n - |disallowed|)
     #   = (n - (|[2]| - |[1]|)) / (n - |[2]|)
-    my $a = numify($_->[0]) - numify($_->[8]);
-    my $nua = $a + numify($_->[3]);
+    my $a = numify($c->[0]) - numify($c->[8]);
+    my $nua = $a + numify($c->[3]);
     return $nua / $a;
 }
 
