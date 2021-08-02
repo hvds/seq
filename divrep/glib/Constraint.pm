@@ -205,14 +205,19 @@ OUT
             $mod_mult, $mult, join ' ', map "$_->[3]/$_->[8]/$_->[0]", @sc;
 }
 
+#
+# Let n be the modulus, u the number of values (mod n) uniquely
+# disallowed, v the total number of values (mod n) non-uniquely
+# disallowed, and k the number of values available for consideration (mod n).
+# Then k = n - v.
+#
+# Using this modulus for a test will trap u / k of the inputs, and
+# we convert this into a positive "potency" of k / (k - u).
+# 
 sub _potency {
-    my($c) = @_;
-    # |nonuniquely allowed| / |allowed|
-    #   = (n - |nonuniquely disallowed|) / (n - |disallowed|)
-    #   = (n - (|[2]| - |[1]|)) / (n - |[2]|)
-    my $a = numify($c->[0]) - numify($c->[8]);
-    my $nua = $a + numify($c->[3]);
-    return $nua / $a;
+    my($n, $u, $v) = map numify($_), @_;
+    my $k = $n - $v;
+    return $k / ($k - $u);
 }
 
 #
@@ -220,56 +225,36 @@ sub _potency {
 # a value gets through to the full testers regime.
 #
 sub frequency {
-    my($self) = @_;
-    return $self->{freq} //= do {
-        $self->find_active unless $self->{sc};
-        my $f = 1;
-        for (@{ $self->{sc} }) {
-            $f *= _potency($_);
-        }
-        $f;
-    };
+    my($self, $new) = @_;
+    $self->{freq} = $new if defined $new;
+    return $self->{freq};
 }
 
 #
 # Optimise the list of active constraints: where practical, combine multiple
 # moduli into a single test; then sort the remaining list in order of potency.
 #
-# TODO: further combine active constraints into inactive moduli as long as
-# the target modulus is within range.
-#
 sub pack_sc {
     my $self = shift;
-    # Cache this before packing, since we don't maintain the unique values
-    # count in the packed list.
-    $self->frequency;
+    my $mult = $self->{'mult'};
     my @aux = map +{
         'sc' => $_,
         'n' => $_->[0],
         'nn' => numify($_->[0]),
-        'ncheck' => $_->[3],
-        'vcheck' => $_->[1],
-        'potency' => _potency($_),
+        'vunique' => $_->[1],
+        'nunique' => $_->[3],
+        'vnon' => ($_->[2] & ~$_->[1]),
+        'nnon' => ($_->[8] - $_->[3]),
+        'incl' => { $_->[0] => 1 },
     }, @{ $self->{'sc'} };
 
-    # where n_i divides n_j, merge a_i into a_j
-    # FIXME: this should be done after sorting, so we attribute potency
-    # of merged elements where they belong
-    AI: for (my $i = 0; $i < @aux; ++$i) {
-        my $ai = $aux[$i];
-        my $ni = $ai->{'nn'};
-        for my $j ($i + 1 .. $#aux) {
-            my $aj = $aux[$j];
-            next if ($aj->{'nn'} % $ni) > 0;
-            # will merge
-            splice @aux, $i, 1;
-            _aux_merge($aj, $ai);
-            redo AI;
-        }
-    }
-
     # Sort by potency
-    @aux = sort { $b->{'potency'} <=> $a->{'potency'} } @aux;
+    my $sort = sub {
+        $_->{'potency'} = _potency(@$_{qw{ nn nunique nnon }}) for @aux;
+        @aux = sort { $b->{'potency'} <=> $a->{'potency'} } @aux;
+        return;
+    };
+    $sort->();
 
     # where lcm(n_i, n_j) is within the requested range, merge a_j into a_i
     my $maxsize = $self->check;
@@ -278,17 +263,48 @@ sub pack_sc {
         my $ni = $ai->{'n'};
         for my $j ($i + 1 .. $#aux) {
             my $aj = $aux[$j];
-            my $nij = $ni->blcm($aj->{'n'});
+            my $nj = $aj->{'n'};
+            my $nij = $ni->blcm($nj);
             next if $nij > $maxsize;
+
+            # merge them
             splice(@aux, $j, 1);
-            $ai->{'sc'} = $self->c($nij);
-            _aux_merge2($ai, $aj, $nij);
+            my $gcd = $nij / $ni;
+            if ($gcd > 1) {
+                $ai->{'sc'} = $self->c($nij);
+                my $ivu = $ai->{'vunique'};
+                $ai->{'vunique'} = pack "b$nij", (unpack("b$ni", $ivu) x $gcd);
+                $ai->{'n'} = $nij;
+                $ai->{'nn'} = numify($nij);
+                $ai->{'incl'}{$nij} = 1;
+                $ni = $nij;
+            }
+            my $q = $ni / $nj;
+            my $jvu = pack "b$ni", (unpack("b$nj", $aj->{'vunique'}) x $q);
+            $ai->{'vunique'} |= $jvu;
+            @{ $ai->{'incl'} }{ keys %{ $aj->{'incl'} } }
+                    = (1) x keys %{ $aj->{'incl'} };
             redo AI2;
         }
+        # $aux[$i] is fixed, now reset non-unique list and recreate it from
+        # those divisors not explicitly included
+        my($ivu, $ivn) = ($ai->{'vunique'}, '');
+        for my $d (Math::Prime::Util::divisors($ni)) {
+            next if $ai->{incl}{$d};
+            my $cd = $self->c($d);
+            next unless $cd->[8];
+            my $v = $cd->[1];
+            $v = pack "b$ni", (unpack("b$d", $v) x ($ni / $d));
+            $ivu &= ~$v;
+            $ivn |= $v;
+        }
+        @$ai{qw{ vunique vnon }} = ($ivu, $ivn);
+        $ai->{'nunique'} = unpack "%32b$ni", $ai->{'vunique'};
+        $ai->{'nnon'} = unpack "%32b$ni", $ai->{'vnon'};
     }
 
     # Sort by potency again
-    @aux = sort { $b->{'potency'} <=> $a->{'potency'} } @aux;
+    $sort->();
 
     # now suppress anything insufficiently potent
     my $min = $self->min_potency;
@@ -306,43 +322,16 @@ sub pack_sc {
     }
 
     printf "303 packed %s(mod %s): %s\n",
-            @$self{qw/ mod_mult mult /},
-            join ' ', map "$_->{'ncheck'}/$_->{'n'}", @aux;
+            $self->{'mod_mult'}, $mult,
+            join ' ', map {
+                my $avail = $_->{'n'} - $_->{'nnon'};
+                "$_->{'nunique'}/$avail:$_->{'n'}"
+            } @aux;
     $self->{'sc'} = [ map $_->{'sc'}, @aux ];
-}
-
-sub _aux_merge {
-    my($dest, $src) = @_;
-    my($nd, $ns) = map $_->{'n'}, ($dest, $src);
-    my $q = $nd / $ns;
-    for my $x (0 .. $ns - 1) {
-        next unless vec($src->{'vcheck'}, $x, 1);
-        for my $y (0 .. $q - 1) {
-            my $z = $y * $ns + $x;
-            next if vec($dest->{'vcheck'}, $z, 1);
-            vec($dest->{'vcheck'}, $z, 1) = 1;
-            ++$dest->{'ncheck'};
-        }
-    }
-    $dest->{potency} *= $src->{potency};
+    my $f = numify($mult);
+    $f *= $_->{'potency'} for @aux;
+    $self->frequency($f);
     return;
-}
-
-sub _aux_merge2 {
-    my($dest, $src, $size) = @_;
-    my $nd = $dest->{'n'};
-    my $gcd = $size / $nd;
-    my $vd = $dest->{'vcheck'};
-    for my $x (0 .. $nd - 1) {
-        next unless vec($vd, $x, 1);
-        for my $y (1 .. $gcd - 1) {
-            vec($vd, $y * $nd + $x, 1) = 1;
-        }
-    }
-    $dest->{'n'} = $size;
-    $dest->{'ncheck'} *= $gcd;
-    $dest->{'vcheck'} = $vd;
-    _aux_merge($dest, $src);
 }
 
 sub catchup {
