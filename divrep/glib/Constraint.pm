@@ -85,10 +85,12 @@ sub c {
         my $nb = ref($n) ? $n : MBI($n);
         my $ni = ref($n) ? 0 + "$n" : $n;
         my $div = _highfactors($nb);    # x: x>1, px=n
+        my $vn = '';
+        vec($vn, $n - 1, 1) = 0;
         my $c = [
             $nb,    # [0] the modulus
-            '',     # [1] bit vector of uniquely disallowed values
-            '',     # [2] bit vector of disallowed values
+            $vn,    # [1] bit vector of uniquely disallowed values
+            $vn,    # [2] bit vector of disallowed values
             0,      # [3] count of uniquely disallowed values
             0,      # [4] TRUE when incorporated in mult/mod_mult
             0,      # [5] TRUE if new disallowed since last recalc
@@ -96,7 +98,6 @@ sub c {
             [],     # [7] d: p | d
             0,      # [8] count of disallowed values
         ];
-        my $vn = '';
         my $new = 0;
         my $dis = 0;
         # apply dependencies for my divisors
