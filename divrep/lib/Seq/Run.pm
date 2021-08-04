@@ -190,7 +190,13 @@ sub finalize {
         $n == $self->n && $k == $self->k
                 or return $self->failed("(n, k) mismatch in '$_'");
         $last_fail = $d;
-        $test_order = $self->parse_ta($ta) if $self->optimizing;
+        if ($self->optimizing) {
+            my $order = $self->parse_ta($ta);
+            # If no tests were found, it implies all the time is going
+            # on modular tests. Set a simple test order in that case,
+            # so we don't try to calculate it again.
+            $test_order = @$order ? $order : [ 1 .. $self->k ];
+        }
     }
     for (@{ $line{500} // [] }) {
         my($n, $k, $d, $t) = m{
