@@ -853,9 +853,11 @@ sub prepare_tester {
         $v
     } @$opt_ts;
     push @order, sort { $pref{$b} <=> $pref{$a} || $a <=> $b } keys %pref;
-    printf "320 Testers: %s\n",
-        ($all_prime && !$fixed) ? 'all prime, ascending order'
-        : join ', ', map $_->[0], @t{@order};
+    printf "320 Testers: %s%s\n",
+        (($all_prime && !$fixed)
+            ? 'all prime, ascending order'
+            : join ', ', map $_->[0], @t{@order}),
+        $opt_ts ? ' (test all)' : '';
     return [ map $_->[1], @t{@order} ];
 }
 
