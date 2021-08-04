@@ -54,7 +54,7 @@ sub gen {
         k => $tauf->k,
         %$args{qw{ optn optx optc optcp optm priority }},
     });
-    $self->optimizing(1) if $args->{optimize} && !@{ $tauf->test_order };
+    $self->optimizing(1) if $args->{optimize};
     $self->insert;
     return $self;
 }

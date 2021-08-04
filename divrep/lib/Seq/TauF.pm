@@ -13,6 +13,7 @@ my $SIMPLE = Math::GMP->new(1 << 20);
 my $FAST = 10;
 my $SLOW = 600;
 my $USE_TS = 1200;
+my $EXPECT_TS = 1200;
 
 =head1 NAME
 
@@ -231,12 +232,61 @@ sub _strategy {
     $optx = _muld($optx, $factor);
     # don't increase priority just because we're reducing the range
     # $expect *= $factor;
+
+    # we want a special run to optimize test order if:
+    # a) we're slow enough (USE_TS)
+    # b) it would be useful (n is not prime)
+    # c) we haven't already done so ($self->test_order)
+    # and d) we have at least one run with this k
+    if ($expect > $USE_TS
+        && !$g->prime
+        && !@{ $self->test_order }
+        && $r->k == $self->k
+    ) {
+        # test order runs are slow, we need to scale our range down
+        my $log = $r->logpath;
+        my $fh;
+        open($fh, '<', $log)
+                or return $self->failed("Can't open $log for optimizing: $!");
+        my $last;
+        while (<$fh>) {
+            chomp;
+            my($rc) = /^(\d{3}) /
+                    or return $self->failed("Can't parse log line '$_'");
+            $last = $_ if $rc == 301;
+        }
+        close $fh;
+        defined($last) or die "$log: no 301 line found";
+        my($keep, $test) = $last =~ m{
+            ^ 301 \s+ .*?
+            keep \s+ (\d+) .*?
+            seen \s+ \[ (.*?) \] \z
+        }x or die "Can't parse 301 result: '$last'";
+        my($sum, $i) = (0, 1);
+        $sum += $_ * $i++ for split /\s+/, $test;
+
+        # a normal run took $sum tests for $keep values; an optimizing
+        # run will take $self->k * $keep tests, so scale it down,
+        # with care to avoid mixing bigints and floats
+        $optx = $optn + int(('' . ($optx - $optn)) * ($sum / $self->k / $keep)
+                * ($EXPECT_TS / $SLOW));
+        return (Seq::Run->gen(
+            $self, $db, {
+                optn => $optn,
+                optx => $optx,
+                optc => $optc,
+                optimize => 1,
+                priority => $g->priority + min(0, -log($expect) / log(2)),
+            },
+        ), ($bisect // ()));
+    }
+
     return (Seq::Run->gen(
         $self, $db, {
             optn => $optn,
             optx => $optx,
             optc => $optc,
-            optimize => ($expect > $USE_TS && !$g->prime),
+            optimize => 0,
             priority => $g->priority + min(0, -log($expect) / log(2)),
         },
     ), ($bisect // ()));
