@@ -16,7 +16,7 @@ Usage:
   my $c = Constraint->new(
     'n' => $n, 'f' => $f,            # we are searching for A165500(n)==f
     'min' => $min, 'max' => $max,    # setting d in [min, max]
-    'tell_count' => $tell_count, 't0' => $t0, 'tau' => $tau,
+    'tell_count' => $tell_count, 't0' => $t0,
   );
 
   # first apply all constraints
@@ -54,9 +54,9 @@ sub new {
         kept => 0,
         max => undef,       # set in init()
         cur => undef,       # set in init()
-        @_,                 # n, f, tell_count, t0, min, max, check, tau
+        @_,                 # n, f, tell_count, t0, min, max, check
     }, $class;
-    $_ = MBI($_ || 0) for @$self{qw/ n f min max tau /};
+    $_ = MBI($_ || 0) for @$self{qw/ n f min max /};
     return $self;
 }
 
@@ -66,7 +66,7 @@ sub parent {
 }
 
 for my $method (qw/
-    cur n f tell_count t0 min max check tau min_potency mult mod_mult
+    cur n f tell_count t0 min max check min_potency mult mod_mult
 /) {
     my $sub = sub { shift->{$method} };
     no strict 'refs';
@@ -350,7 +350,7 @@ sub Dump {
     defined($self->{$_}) && ($self->{$_} =
         "$self->{$_}"
     ) for qw/
-        mult mod_mult tests skipped kept max cur check f min n tau tell_count
+        mult mod_mult tests skipped kept max cur check f min n tell_count
     /;
     defined($self->{$_}) && ($self->{$_} = [
         map "c_$_->[0]", @{ $self->{$_} }

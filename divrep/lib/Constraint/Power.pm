@@ -22,7 +22,6 @@ sub new {
         'min' => $c->min(),
         'max' => $c->max(),
         'check' => $c->check(),
-        'tau' => $c->tau(),
         'parent' => $c,
     );
 
