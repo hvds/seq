@@ -3,7 +3,7 @@ use strict;
 use Math::GMP;
 use Math::Prime::Util qw{ is_prime next_prime divisors factor_exp };
 
-use lib './glib';
+use lib './lib';
 use Constraint;
 use ModFunc qw/ mod_combine quadvec gcd /;
 
