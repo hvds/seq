@@ -27,7 +27,7 @@ sub new {
     );
 
     ($z & 1) == 0 or die "Constraint::Power->new: \$z must be even (not $z)";
-    @$self{qw{ pow_k pow_x pow_z }} = ($k, $x, $z);
+    @$self{qw{ pow_k pow_x pow_z pow_g }} = ($k, $x, $z, gcd($k, $x));
     $self->{'min'} = $self->_dtoceily($c->min());
     $self->{'max'} = $self->_dtoceily($c->max());
 
@@ -91,7 +91,8 @@ sub _dtoy {
 
 sub _dtoceily {
     my($self, $val) = @_;
-    return 1 + $self->_dtoy($val - 1);
+    my $g = $self->{pow_g};
+    return $g + $self->_dtoy($val - $g);
 }
 
 #
@@ -122,9 +123,8 @@ sub _ytod {
 #
 sub _mod_ytod {
     my($self, $val, $mod) = @_;
-    my($n, $k, $x, $z) = @$self{qw{ n pow_k pow_x pow_z }};
+    my($n, $k, $x, $z, $g) = @$self{qw{ n pow_k pow_x pow_z pow_g }};
     my $base = $x * $val ** $z - $n;
-    my $g = gcd($k, $x);
     my $gbase = $base / $g;
     return ($gbase % $mod, $mod) if $k == $g;
 
