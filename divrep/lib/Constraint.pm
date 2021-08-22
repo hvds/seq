@@ -676,7 +676,7 @@ sub suppress {
     ($debug > 3) && warn "s: [ $p, $v, $min, $depend ]\n";
 
     my $c = $self->c($p);
-    if ($min > $self->{'min'}) {
+    if ($min >= $self->{'min'}) {
         (($debug > 2) && warn "suppress @{[ $depend ? '' : 'in' ]}dependent $v(mod $p): ignore pend\n"),
                 return 0 if vec($c->[2], $v, 1);
         ($debug > 1) && warn "suppress (pend) $v(mod $p), d>$min\n";
