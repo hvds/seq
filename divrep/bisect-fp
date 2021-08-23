@@ -3,11 +3,18 @@ use strict;
 use warnings;
 use lib 'lib';
 use List::Util qw{ sum };
+use Type;
 
-my $PROG = './gtauseq';
-my $LOGS = './logs';
-
+my $typename = 't';
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    $typename = $1, next if $arg =~ /^-y(.*)/;
+    die "Unknown option '$arg'";
+}
 @ARGV == 4 or die "500 Usage: $0 n k d maxc";
+
+my $type = Type->new($typename);
 
 =head1 bisect-fp: find minimum check for fix_power
 
@@ -28,7 +35,7 @@ my($n, $k, $d, $maxc) = @ARGV;
 my($bad, $good) = (0, $maxc);
 while ($bad + 1 < $good) {
     my $mid = ($good + $bad) >> 1;
-    if (good($mid)) {
+    if (good($type, $mid)) {
         $good = $mid;
     } else {
         $bad = $mid;
@@ -40,36 +47,18 @@ printf "200 f(%s, %s) needs -c %s to find fix_power (%.2fs)\n",
 exit 0;
 
 sub good {
-    my($c) = @_;
-    my $log = sprintf "%s/bfp%s.%s-%s", $LOGS, $n, $c, $$;
-    my $pid = fork();
-    my @args = (
-        "bfp($n, $k)",
+    my($type, $c) = @_;
+    my $log = sprintf "%s/bfp%s.%s-%s", $type->logpath, $n, $c, $$;
+    my $lines = $type->invoked('gtauseq', "bfp($n, $k)", [
         '-n', $d, '-x', $d, '-c', $c, '-D',
         $n, $k,
-    );
-    unless ($pid) {
-        open STDOUT, '>', $log
-                or die "503 Can't open $log for writing: $!";
-        exec($PROG @args) or die "505 Could not exec $PROG";
-    }
-
-    waitpid($pid, 0);
-    open my $f, '<', $log
-            or die "504 Can't open $log for reading: $!";
-    my %line;
-    while (<$f>) {
-        chomp;
-        my($rc) = /^(\d{3}) /
-                or die "502 Can't parse log line '$_'";
-        push @{ $line{$rc} }, $_;
-    }
-    my $good = $line{311} ? 1 : 0;
-    if ($line{309}) {
+    ], $log);
+    my $good = $lines->{311} ? 1 : 0;
+    if ($lines->{309}) {
         # Prep finished, frequency 36.91 (184.980s)
         return $good;
     }
-    if ($line{402}) {
+    if ($lines->{402}) {
         # The bisect is irrelevant, because a suitable opt_c shows
         # the target is impossible.
         printf "402 f(%s, %s) all values disallowed with -c %s (%.2fs)\n",
