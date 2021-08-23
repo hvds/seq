@@ -2,9 +2,6 @@ package Seq::Run::BisectFP;
 use strict;
 use warnings;
 
-my $BISECTFP = './bisect-fp';
-my $LOGS = './logs';
-
 =head1 NAME
 
 Seq::Run::BisectFP
@@ -14,14 +11,16 @@ Seq::Run::BisectFP
 =cut
 
 sub new {
-    my($class, $g, $f, $c) = @_;
+    my($class, $type, $g, $f, $c) = @_;
     return bless {
+        type => $type,
         g => $g,
         f => $f,
         c => $c,
     }, $class;
 }
 
+sub type { shift->{type} }
 sub g { shift->{g} }
 sub n { shift->g->n }
 sub f { shift->{f} }
@@ -31,12 +30,12 @@ sub logpath {
     my($self) = @_;
     my $f = $self->f;
     return sprintf '%s/rbfp%s.%s-%s',
-            $LOGS, $f->n, $f->k, $self->c;
+            $self->type->logpath, $f->n, $f->k, $self->c;
 }
 
-sub priority {
-    my($self) = @_;
-    return $self->f->priority + 1;
+sub rprio {
+    my($self, $type) = @_;
+    return $type->gprio($self->n) + 1;
 }
 
 sub prep { () }
@@ -54,22 +53,15 @@ sub command {
     my($self) = @_;
     my $g = $self->g;
     my $f = $self->f;
-    return [
-        $BISECTFP, $f->n, $f->k, $g->checked, $self->c,
-    ];
+    return [ $f->n, $f->k, $g->checked, $self->c ];
 }
 
 sub run {
     my($self, $db) = @_;
     my $cmd = $self->command;
+    my $named = sprintf 'bfp(%s, %s)', $self->n, $self->f->k;
     my $log = $self->logpath;
-    if (my $pid = fork()) {
-        return $pid;
-    }
-    open STDOUT, '>', $log
-            or die "Can't open $log for writing: $!";
-    exec @$cmd
-            or die "Can't exec [@$cmd]";
+    return $self->type->invoke('bisect_fp', $named, $cmd, $log);
 }
 
 sub failed {

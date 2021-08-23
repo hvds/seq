@@ -6,11 +6,13 @@ use Seq::Db;
 use H::Heap;
 use Math::GMP;
 use POSIX qw{ :sys_wait_h };
+use Type;
 
 print "kill -HUP $$\n";
 
 my($opt_recreate, $debug, $opt_strategy, $opt_gain) = (0, 0, 0, 0);
 my($maxproc, $maxrun, $maxload, $drain) = (10, 100, 0, 0);
+my $typename = 't';
 my %override;
 $SIG{'HUP'} = sub { $drain = 1 };
 while (@ARGV && $ARGV[0] =~ /^-/) {
@@ -22,26 +24,24 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     $debug = 1, next if $arg eq '-d';
     $override{$1} = $2, next if $arg =~ /^-p(-?\d+)=(-?\d+(?:\.\d+)?)$/;
     $opt_gain = $1, next if $arg =~ /^-g(-?\d+(?:\.\d+)?)$/;
+    $typename = $1, next if $arg =~ /^-y(.*)$/;
     die "Unknown option '$arg'";
 }
 $maxproc = shift(@ARGV) if @ARGV;
 $maxrun = shift(@ARGV) if @ARGV;
 $maxload ||= $maxproc;
 
+my $type = Type->new($typename);
+
 local @ENV{qw{ DBI_TRACE DBIC_TRACE }} = (1, 1) if $debug;
-my $db = Seq::Db->new({
-    db => 'tauseq',
-    user => 'hv',
-    passwd => 'hv',
-    recreate => $opt_recreate,
-});
+my $db = Seq::Db->new($type, $opt_recreate);
 
 use Data::Dumper;
 local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
 
 Seq::Run->restrategise($db) if $opt_strategy;
 my $prio = H::Heap->new(q{ ::prio($b) <=> ::prio($a) });
-$prio->insert(Seq::Starter->new(0, $maxload));
+$prio->insert(Seq::Starter->new($type, 0, $maxload));
 my(%pid, @runnable);
 
 while (1) {
@@ -57,7 +57,7 @@ while (1) {
         } else {
             my $r = shift @runnable;
             $override{$r->n} -= $opt_gain;
-            my $pid = $r->run;
+            my $pid = $r->run($db);
             if ($pid) {
                 $pid{$pid} = $r;
                 $drain = 1, next if --$maxrun <= 0;
@@ -73,7 +73,7 @@ exit 0;
 
 sub prio {
     my($obj) = @_;
-    return $obj->priority + ($override{$obj->n} // 0);
+    return $obj->rprio($type) + ($override{$obj->n} // 0);
 }
 
 sub waitFor {
@@ -92,24 +92,26 @@ sub waitFor {
 package Seq::Starter {
     use List::Util qw{ max };
     sub new {
-        my($class, $start, $count) = @_;
+        my($class, $type, $start, $count) = @_;
         my $self = bless {
+            type => $type,
             start => $start,
             count => $count,
         }, $class;
         warn sprintf "new starter: from %s for %s prio %.2f\n",
-                $start, $count, $self->priority;
+                $start, $count, $self->rprio($type);
         return $self;
     }
-    sub n { return -$_[0]->{start} }
-    sub priority {
-        my($self) = @_;
+    sub n { -$_[0]->{start} }
+    sub type { $_[0]->{type} }
+    sub rprio {
+        my($self, $type) = @_;
         my $start = $self->{start};
         my $count = $self->{count};
         # We don't want to block fetching of later entries just because
         # there are low priority ones in the way.
-        return $self->{priority} //= max(
-            map Seq::TauG->priority($_), grep $_ > 1, $start .. $start + $count
+        return $self->{rprio} //= max(
+            map $type->gprio($_), grep $_ > 1, $start .. $start + $count
         );
     }
     sub prep {
@@ -122,7 +124,7 @@ package Seq::Starter {
             Seq::TauG->genTo($db, $end);
         }
         return (
-            Seq::Starter->new($end + 1, $count),
+            Seq::Starter->new($self->type, $end + 1, $count),
             Seq::TauG->range($db, $start, $end),
         );
     }

@@ -56,24 +56,9 @@ $taug->define($TABLE, 'taug', [
 $taug->has_many(f => 'Seq::TauF', 'n', { order_by => 'k' });
 $taug->might_have(depended => 'Seq::TauG', { 'foreign.n' => 'self.depend_n' });
 
-memoize('_priority');
-sub _priority {
-    my($n) = @_;
-    my @f = factor_exp($n);
-    my $highest = $f[-1][0] // 1;
-    my $prime = (@f == 1) && ($f[0][1] == 1);
-    return - (
-        log($n) / log(2)
-        + ($prime ? 10 : 0)
-        + 10 * log($highest) / log(2)
-#       + 10 * int(log($n) / log(10))
-#       - sum map $_->[1], @f
-    ) / 2;
-}
-
-sub priority {
-    my($class, $n) = @_;
-    return _priority(ref($class) ? $class->n : $n);
+sub rprio {
+    my($self, $type) = @_;
+    return $type->gprio($self->n);
 }
 
 sub max_known {
@@ -104,11 +89,12 @@ sub generate {
     my($class, $db, $count) = @_;
     my $max = $class->max_known($db);
     my $table = $db->resultset($TABLE);
+    my $type = $db->type;
     for my $n ($max + 1 .. $max + $count) {
         my $self = $table->new({
             n => $n,
             ming => 1,
-            maxg => $n,
+            maxg => $type->maxg($n),
             status => (is_prime($n) ? [ 'prime' ] : 0),
             checked => $zero,
         });

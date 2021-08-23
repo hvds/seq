@@ -2,9 +2,6 @@ package Seq::Run::BisectG;
 use strict;
 use warnings;
 
-my $BISECTG = './bisect-g';
-my $LOGS = './logs';
-
 =head1 NAME
 
 Seq::Run::BisectG
@@ -14,14 +11,16 @@ Seq::Run::BisectG
 =cut
 
 sub new {
-    my($class, $g, $f, $c) = @_;
+    my($class, $type, $g, $f, $c) = @_;
     return bless {
+        type => $type,
         g => $g,
         f => $f,
         c => $c,
     }, $class;
 }
 
+sub type { shift->{type} }
 sub g { shift->{g} }
 sub n { shift->g->n }
 sub f { shift->{f} }
@@ -30,12 +29,12 @@ sub c { shift->{c} }
 sub logpath {
     my($self) = @_;
     return sprintf '%s/rbg%s-%s',
-            $LOGS, $self->n, $self->c;
+            $self->type->logpath, $self->n, $self->c;
 }
 
-sub priority {
-    my($self) = @_;
-    return $self->f->priority + 1;
+sub rprio {
+    my($self, $type) = @_;
+    return $type->gprio($self->n) + 1;
 }
 
 sub prep { () }
@@ -51,22 +50,15 @@ sub runnable {
 sub command {
     my($self) = @_;
     my $g = $self->g;
-    return [
-        $BISECTG, $g->n, $g->ming, $g->maxg, $g->checked, $self->c,
-    ];
+    return [ $g->n, $g->ming, $g->maxg, $g->checked, $self->c ];
 }
 
 sub run {
     my($self, $db) = @_;
     my $cmd = $self->command;
+    my $named = sprintf 'bg(%s,%s)', $self->n, $self->c;
     my $log = $self->logpath;
-    if (my $pid = fork()) {
-        return $pid;
-    }
-    open STDOUT, '>', $log
-            or die "Can't open $log for writing: $!";
-    exec @$cmd
-            or die "Can't exec [@$cmd]";
+    return $self->type->invoke('bisect_g', $named, $cmd, $log);
 }
 
 sub failed {
