@@ -1,13 +1,15 @@
 #!/opt/maths/bin/perl
 use strict;
 use warnings;
-use lib ('../lib', 'lib');
-use Seq::Db;
 use Math::GMP;
 use Math::Prime::Util qw{ factor_exp };
 use List::Util qw{ first };
+use lib ('./lib');
+use Seq::Db;
+use Type;
 
 my($debug, $opt_composite, $opt_table) = (0, 0, 0);
+my $typename = 't';
 my $filter = sub { 1 };
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift(@ARGV);
@@ -15,6 +17,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     $debug = 1, next if $arg eq '-d';
     $opt_composite = 1, next if $arg eq '-c';
     $opt_table = 1, next if $arg eq '-t';
+    $typename = $1, next if $arg =~ /^-y(.*)/;
     $filter = chain_sig($filter, $1 || shift(@ARGV)), next
             if $arg =~ /^-s(.*)/;
     $filter = chain_min($filter, $1 || shift(@ARGV)), next
@@ -34,13 +37,10 @@ if ($n) {
     $filter = chain_min($filter, $n);
     $filter = chain_max($filter, $n);
 }
+my $type = Type->new($typename);
 
 local @ENV{qw{ DBI_TRACE DBIC_TRACE }} = (1, 1) if $debug;
-my $db = Seq::Db->new({
-    db => 'tauseq',
-    user => 'hv',
-    passwd => 'hv',
-});
+my $db = Seq::Db->new($type, 0);
 
 use Data::Dumper;
 local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
