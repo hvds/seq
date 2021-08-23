@@ -220,7 +220,8 @@ sub apply {
     #
     my $fixpow = $type->check_fixed;
 
-    if ($opt_fact) {
+    # fix_fact only for tauseq right now
+    if ($opt_fact && $type->name eq 'tauseq') {
         my $fixed = $c->fix_fact;
         # It may do nothing, add some constraints (and return nothing)
         # or return a new object. Only in the last case do we want to
