@@ -3,9 +3,15 @@ use strict;
 use warnings;
 use Math::Prime::Util qw{ factor_exp divisors };
 use lib 'lib';
+use Type;
 
-my $PROG = './gtauseq';
-my $LOGS = './logs';
+my $typename = 't';
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    $typename = $1, next if $arg =~ /^-y(.*)/;
+    die "Unknown option '$arg'";
+}
 
 @ARGV == 5 or die "500 Usage: $0 n f d optc shards";
 
@@ -25,17 +31,18 @@ moduli that are multiples of what would have been returned for (shards - 1).
 =cut
 
 my($n, $f, $d, $optc, $shards) = @ARGV;
+my $type = Type->new($typename);
 
-my $base = ask_base($n, $f, $d, $optc);
+my $base = ask_base($type, $n, $f, $d, $optc);
 printf <<LOG, $base->{mod}, join ' ', @{ $base->{allow} };
 200 shard %s: %s
 LOG
 exit 0;
 
 sub ask_base {
-    my($n, $f, $d, $optc) = @_;
-    my $found = parse(
-        "shard($n, $f)",
+    my($type, $n, $f, $d, $optc) = @_;
+    my $log = sprintf "%s/sh%s.%s.%s-%s", $type->logpath, $n, $f, $shards, $$;
+    my @args = (
         '-n' => $d,
         '-x' => $d,
         '-c' => $optc,
@@ -43,6 +50,7 @@ sub ask_base {
         '-D',
         $n, $f,
     );
+    my $found = $type->invoked('gtauseq', "shard($n, $f)", \@args, $log);
     my @candidate = sort {
         # sort by increasing "allowed", then by decreasing "mod"
         $a->[1] <=> $b->[1]
@@ -69,30 +77,4 @@ sub ask_base {
         mod => $mod,
         allow => \@allow,
     };
-}
-
-{
-    my $i; BEGIN { $i = 0 }
-    sub parse {
-        my @args = @_;
-        warn "@args\n";
-        my $log = sprintf "%s/sh%s.%s.%s-%s", $LOGS, $n, $f, $shards, ++$i;
-        my $pid = fork();
-        unless ($pid) {
-            open STDOUT, '>', $log
-                    or die "503 Can't open $log for writing: $!";
-            exec($PROG @args) or die "505 Could not exec $PROG";
-        }
-        waitpid($pid, 0);
-        open my $f, '<', $log
-                or die "504 Can't open $log for reading: $!";
-        my %line;
-        while (<$f>) {
-            chomp;
-            my($rc) = /^(\d{3}) /
-                    or die "502 Can't parse log line '$_'";
-            push @{ $line{$rc} }, $_;
-        }
-        return \%line;
-    }
 }
