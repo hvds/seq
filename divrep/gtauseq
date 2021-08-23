@@ -50,6 +50,11 @@ my($n, $f) = map MBI($_), @ARGV;
 $0 = "gt($n $f)";
 $_ = ston($_) for ($opt_n, $opt_x);
 
+printf "100 ./gtauseq -y%s -n%s -x%s %s%s%s-c%s -t%s %s %s\n",
+        $typename, $opt_n, $opt_x,
+        _opta('m', $opt_m), _opta('mq', $opt_mq), _opta('mm', $opt_mm),
+        $opt_c, $opt_t, $n, $f;
+
 my $zone = MBI(1);
 my $c = Constraint->new(
     'n' => $n,
@@ -458,4 +463,9 @@ sub ntos {
     my($n) = @_;
     $n =~ s{(0+)$}{"e" . length($1)}e;
     return $n;
+}
+
+sub _opta {
+    my($name, $a) = @_;
+    return join '', map "-$name$_ ", @$a;
 }
