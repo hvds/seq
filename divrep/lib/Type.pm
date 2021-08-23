@@ -94,6 +94,7 @@ sub dbuser { 'hv' }
 sub dbpass { 'hv' }
 
 sub c { $_[0]->{c} }
+sub debug { $_[0]->{debug} }
 
 sub to_test {
     my($self) = @_;
