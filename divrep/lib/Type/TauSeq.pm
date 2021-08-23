@@ -5,39 +5,39 @@ use warnings;
 use parent qw{ Type };
 use Math::GMP;
 use Math::Prime::Util qw{ is_prime next_prime divisors factor_exp };
+use Memoize;
 
 use ModFunc qw/ mod_combine quadvec gcd /;
 
 my $zone = Math::GMP->new(1);
 
-#
-# For certain individual cases we have proven limits that we cannot easily
-# derive generically here. Avoid wasting time attempting to discover those
-# unless the user asks to ignore exceptions (-ix).
-#
-sub check_exceptions {
-    my($self) = @_;
-    for (
-        [ 243, 4 ], # see Constraint::Fact
-        [ 2401, 3 ],
-    ) {
-        my($n, $f) = @$_;
-        if ($self->n == $n && $self->f > $f) {
-            printf <<OUT, $n, $f, $self->c->elapsed;
-403 Error: f(%s) > %s known impossible by exception (%.2fs)
-OUT
-            exit 1;
-        }
-    }
-}
-
 sub init {
     my($self) = @_;
-    $self->{target} = tau($self->n);
+    my $n = $self->n;
+    $self->{target} = tau($n) if defined $n;
     return;
 }
 
 sub name { 'tauseq' }
+sub dbname { 'tauseq' }
+
+memoize('gprio', NORMALIZER => sub { "$_[1]" });
+sub gprio {
+    my($self, $n) = @_;
+    my @f = factor_exp($n);
+    my $highest = $f[-1][0] // 1;
+    my $prime = (@f == 1) && ($f[0][1] == 1);
+    return - (
+        log($n) / log(2)
+        + ($prime ? 10 : 0)
+        + 10 * log($highest) / log(2)
+    ) / 2;
+}
+
+sub maxg {
+    my($self, $n) = @_;
+    return $n;
+}
 
 sub func_value {
     my($self, $n, $k, $d) = @_;
@@ -50,9 +50,9 @@ sub func { tau($_[1]) }
 
 sub func_target { $_[0]->{target} }
 
-sub to_test {
-    my($self) = @_;
-    return [ 1 .. $self->f - 1 ];
+sub to_testf {
+    my($self, $f) = @_;
+    return [ 1 .. $f - 1 ];
 }
 
 sub test_target {
@@ -340,6 +340,27 @@ sub test_m_rad_m {
         next if gcd($u, $r) > 1;
         $c->debug && warn "m rad m: suppress $m * $u mod $pmr\n";
         $self->series($m * $u, $pmr, 0);
+    }
+}
+
+#
+# For certain individual cases we have proven limits that we cannot easily
+# derive generically here. Avoid wasting time attempting to discover those
+# unless the user asks to ignore exceptions (-ix).
+#
+sub check_exceptions {
+    my($self) = @_;
+    for (
+        [ 243, 4 ], # see Constraint::Fact
+        [ 2401, 3 ],
+    ) {
+        my($n, $f) = @$_;
+        if ($self->n == $n && $self->f > $f) {
+            printf <<OUT, $n, $f, $self->c->elapsed;
+403 Error: f(%s) > %s known impossible by exception (%.2fs)
+OUT
+            exit 1;
+        }
     }
 }
 

@@ -4,7 +4,9 @@ use warnings;
 
 use parent qw{ Type };
 use Math::GMP;
-use Math::Prime::Util qw{ factor_exp };
+use Math::Prime::Util qw{ factor_exp is_prime next_prime };
+use Memoize;
+
 use ModFunc qw{ quadvec gcd };
 
 =head1 Type::AddSeq
@@ -16,6 +18,7 @@ starting point of such an AP for each possible length?
 =cut
 
 my $zone = Math::GMP->new(1);
+my $INF = 1_000_000;
 
 sub init {
     my($self) = @_;
@@ -24,6 +27,36 @@ sub init {
 }
 
 sub name { 'addseq' }
+sub dbname { 'addseq' }
+
+memoize('gprio', NORMALIZER => sub { "$_[1]" });
+sub gprio {
+    my($self, $n) = @_;
+    return -$INF if $n & 1;
+    my @f = factor_exp($n);
+    my $highest = $f[-1][0] // 1;
+    return -(
+        (log($n) / log(2)) ** 2
+        + (log($highest) / log(2)) ** 3.5
+    );
+}
+
+sub maxg {
+    my($type, $n) = @_;
+    die "can't maxg(0)" unless $n;
+    return 1 if $n & 1;
+
+    my $basep = 2;
+    while (0 == ($n % $basep)) {
+        $basep = next_prime($basep);
+    }
+    for (my $pow = 2; 1; ++$pow) {
+        next if 0 == ($n % ($pow + 1));
+        # if pow < n, we can have basep^pow appear once (actually as a
+        # higher power), else we can't have it at all
+        return +($pow < $n) ? 2 * ($basep ** $pow) : $basep ** $pow;
+    }
+}
 
 sub func_value {
     my($self, $n, $k, $d) = @_;
@@ -66,9 +99,9 @@ sub apply_m {
     return;
 }
 
-sub to_test {
-my($self) = @_;
-return [ 0 .. $self->f - 1 ];
+sub to_testf {
+    my($self, $f) = @_;
+    return [ 0 .. $f - 1 ];
 }
 
 sub test_target {
