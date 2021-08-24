@@ -9,6 +9,7 @@ sub MBI { return Math::GMP->new(@_) }
 
 my $debug = 0;
 my $BIT32 = 2 * (1 << 31);
+my $LARGE = 524288; # bits in 64K vector
 
 =head
 
@@ -672,9 +673,47 @@ sub disallowed {
 
 sub require {
     my($self, $p, $v, $min) = @_;
-    for (grep $_ != $v, 0 .. $p - 1) {
-        $self->suppress($p, $_, $min);
+    $min //= 0;
+    my($check, $cmin) = @$self{qw{check min}};
+    # Do the full monty if immediate and small, or deferred and medium size.
+    if ($p <= $check || ($check < $LARGE && $min >= $cmin)) {
+        for (grep $_ != $v, 0 .. $p - 1) {
+            $self->suppress($p, $_, $min);
+        }
+        return;
     }
+
+    # If we try to fix a very large modulus, we don't want to create
+    # unnecessarily large bit vectors - the information will eventually
+    # be used only for mult/mod_mult or to refine other, smaller vectors.
+    $_ = Math::GMP->new($_) for ($p, $v);
+    for my $d (Math::Prime::Util::divisors($p)) {
+        last if $d > $check;
+        $self->require($d, $v % $d, $min);
+    }
+
+    my($mod_mult, $mult) = @$self{qw{mod_mult mult}};
+    my($newmod, $newmult) = eval { mod_combine($mod_mult, $mult, $v, $p) };
+    my $error = $@;
+    if ($min >= $cmin) {
+        # we don't have deferred mult other than via the bitvectors
+        if ($@) {
+            printf <<LOG, $mod_mult, $mult, $v, $p, $min;
+307 Discarding deferred inconsistent moduli: (%s %% %s) v. (%s %% %s) at %s
+LOG
+        } else {
+            printf <<LOG, $mod_mult, $mult, $v, $p, $min;
+307 Discarding deferred modular fix: (%s %% %s) with (%s %% %s) at %s
+LOG
+        }
+    } else {
+        die $@ if $@;
+        ($debug > 2)
+                && warn "fix $v(mod $p) in $mod_mult(mod $mult)\n";
+        @$self{qw{ mod_mult mult }} = ($newmod, $newmult);
+        ($debug > 1) && warn "now fixed: $newmod(mod $newmult)\n";
+    }
+    return;
 }
 
 sub suppress {
