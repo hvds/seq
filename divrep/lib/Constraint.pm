@@ -640,7 +640,8 @@ sub next {
 }
 
 #
-# If n+kd = xy^z for fixed x and z, we can just search for appropriate y.
+# If k'th target is xy^z for fixed x and z, it is fastest to search only
+# for appropriate y.
 #
 sub fix_power {
     my($self, $k, $x, $z, $opt_mq) = @_;

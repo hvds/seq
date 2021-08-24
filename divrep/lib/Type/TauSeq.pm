@@ -138,4 +138,70 @@ sub suppress_k {
     return;
 }
 
+#
+# Calculate floor(y) given d: floor(y) = floor(((n + kd) / x) ^ (1/z))
+#
+sub dtoy {
+    my($self, $c, $val) = @_;
+    my $base = $c->n + $c->pow_k * $val;
+    return +($base / $c->pow_x)->broot($c->pow_z);
+}
+
+sub dtoceily {
+    my($self, $c, $val) = @_;
+    my $g = $c->pow_g;
+    return $g + $self->dtoy($c, $val - $g);
+}
+
+#
+# Calculate d given y: d = (xy^z - n) / k
+# We expect k should always divide the expression exactly, or raise an error;
+# however in rare cases that's ok, these are marked by setting $::LOOSE_CUR.
+#
+sub ytod {
+    my($self, $c, $val) = @_;
+    my $base = $c->pow_x * $val ** $c->pow_z - $c->n;
+    my($div, $rem) = $base->bdiv($c->pow_k);
+    if ($rem != 0) {
+        use Carp;
+        confess sprintf(
+            "_ytod(k = %s, x = %s, z = %s => %s) not divisible by k",
+            $c->pow_k, $c->pow_x, $c->pow_z, $val,
+        ) unless $::LOOSE_CUR;
+        # if loose is good enough, return the floor but mark it
+        $div .= ':LOOSE';
+    }
+    return $div;
+}
+
+#
+# Given y == y_m (mod m) and d = (xy^z - n) / k, return (d_s, s) as the
+# value and modulus of the corresponding constraint on d, d == d_s (mod s).
+# If no valid d is possible, returns s == 0.
+#
+sub mod_ytod {
+    my($self, $c, $val, $mod) = @_;
+    my($n, $k, $x, $z, $g)
+            = ($c->n, $c->pow_k, $c->pow_x, $c->pow_z, $c->pow_g);
+    my $base = $x * $val ** $z - $n;
+    my $gbase = $base / $g;
+# CHECKME: should we increase $mod if gcd($mod, $z) > 1?
+    return ($gbase % $mod, $mod) if $k == $g;
+
+    my $gk = $k / $g;
+    my $g2 = gcd($gk, $mod);
+    if ($g2 == 1) {
+        my $inv = $gk->bmodinv($mod);
+        return (($gbase * $inv) % $mod, $mod);
+    } elsif (($gbase % $g2) == 0) {
+        my $gmod = $mod / $g2;
+        my $g2base = $gbase / $g2;
+        my $g2k = $gk / $g2;
+        my $inv = $g2k->bmodinv($gmod);
+        return (($g2base * $inv) % $gmod, $gmod);
+    } else {
+        return (1, 0);
+    }
+}
+
 1;

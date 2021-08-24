@@ -111,4 +111,40 @@ sub suppress_k {
     return;
 }
 
+#
+# Calculate floor(y) given d: floor(y) = floor(((d + kn) / x) ^ (1/z))
+#
+sub dtoy {
+    my($self, $c, $val) = @_;
+    my $base = $val + $c->n * $c->pow_k;
+    return +($base / $c->pow_x)->broot($c->pow_z);
+}
+
+sub dtoceily {
+    my($self, $c, $val) = @_;
+    my $g = $c->pow_g;
+    return $g + $self->dtoy($c, $val - $g);
+}
+
+#
+# Calculate d given y: d = xy^z - kn
+#
+sub ytod {
+    my($self, $c, $val) = @_;
+    return $c->pow_x * $val ** $c->pow_z - $c->n * $c->pow_k;
+}
+
+#
+# Given y == y_m (mod m) and d = xy^z - kn, return (d_s, s) as the
+# value and modulus of the corresponding constraint on d, d == d_s (mod s).
+# If no valid d is possible, returns s == 0.
+#
+sub mod_ytod {
+    my($self, $c, $val, $mod) = @_;
+    my($n, $k, $x, $z) = ($c->n, $c->pow_k, $c->pow_x, $c->pow_z);
+    my $base = $x * $val ** $z - $n * $k;
+# CHECKME: should we increase $mod if gcd($mod, $z) > 1?
+    return ($base % $mod, $mod);
+}
+
 1;

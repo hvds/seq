@@ -10,7 +10,9 @@ no warnings qw/ recursion /;
 # Constraint::Power->new($c, $k, $x, $z, $opt_mpow)
 # - specialization of Constraint, to find values matching the constraints
 #   specified for the Constraint object $c with the additional requirement
-#   that n + kd = xy^z, so for a given y we have d = (xy^z - n) / k.
+#   that the k'th target is xy^z, so far a given y we have:
+#     d = (xy^z - n) / k    (tauseq)
+#     d = xy^z - kn         (addseq)
 #
 sub new {
     my($class, $c, $k, $x, $z, $opt_mpow) = @_;
@@ -29,41 +31,24 @@ sub new {
 
     ($z & 1) == 0 or die "Constraint::Power->new: \$z must be even (not $z)";
     @$self{qw{ pow_k pow_x pow_z pow_g }} = ($k, $x, $z, gcd($k, $x));
-    $self->{'min'} = $self->_dtoceily($c->min());
-    $self->{'max'} = $self->_dtoceily($c->max());
+    $self->{'min'} = $type->dtoceily($self, $c->min);
+    $self->{'max'} = $type->dtoceily($self, $c->max);
 
     $_ = $self->convert_mod_override($_) for grep ref($_), @$opt_mpow;
     $self->mod_override($_) for @$opt_mpow;
 
     # Copy over all the constraints: we need only look at "uniquely disallowed"
     # since the rest will be duplicates.
-    # When k divides x, the _mod_ytod() call simplifies to the point we can
-    # save a bunch of time by inlining it.
-    if ($x % $k) {
-        my @v = ('', map $c->c($_)->[1], 1 .. $self->check);
-        for my $mod (1 .. $self->check()) {
-            next if $c->c($mod)->[8] == 0;
-            for my $v (0 .. ($mod - 1) / 2) {
-                my($subv, $submod) = $self->_mod_ytod($v, $mod);
-                if (!$submod || vec($v[$submod], $subv, 1)) {
-                    $self->power_suppress($mod, $v);
-                    $self->power_suppress($mod, $mod - $v) if $v;
-                }
-            }
-        }
-    } else {
-        my $n = $self->{'n'};
-        for my $mod (1 .. $self->check()) {
-            my $c = $c->c($mod);
-            next if $c->[8] == 0;
-            my $vec = $c->[1];
-            for my $v (0 .. ($mod - 1) / 2) {
-                # inlined _mod_ytod($v, $mod) for $k divides $x
-                my $converted = (($x * $v ** $z - $n) / $k) % $mod;
-                if (vec($vec, $converted, 1)) {
-                    $self->power_suppress($mod, $v);
-                    $self->power_suppress($mod, $mod - $v) if $v;
-                }
+    # FIXME: the mod_ytod calls can be really slow; consider moving the loop
+    # body to a $type method to allow inlining.
+    my @v = ('', map $c->c($_)->[1], 1 .. $self->check);
+    for my $mod (1 .. $self->check()) {
+        next if $c->c($mod)->[8] == 0;
+        for my $v (0 .. ($mod - 1) / 2) {
+            my($subv, $submod) = $type->mod_ytod($self, $v, $mod);
+            if (!$submod || vec($v[$submod], $subv, 1)) {
+                $self->power_suppress($mod, $v);
+                $self->power_suppress($mod, $mod - $v) if $v;
             }
         }
     }
@@ -81,73 +66,14 @@ sub new {
     return $self;
 }
 
-#
-# Calculate floor(y) given d: floor(y) = floor(((n + kd) / x) ^ (1/z))
-#
-sub _dtoy {
-    my($self, $val) = @_;
-    my $base = $self->{n} + $self->{pow_k} * $val;
-    return +($base / $self->{pow_x})->broot($self->{pow_z});
-}
-
-sub _dtoceily {
-    my($self, $val) = @_;
-    my $g = $self->{pow_g};
-    return $g + $self->_dtoy($val - $g);
-}
-
-#
-# Calculate d given y: d = (xy^z - n) / k
-# We expect k should always divide the expression exactly, or raise an error;
-# however in rare cases that's ok, these are marked by setting $::LOOSE_CUR.
-#
-sub _ytod {
-    my($self, $val) = @_;
-    my $base = $self->{pow_x} * $val ** $self->{pow_z} - $self->{n};
-    my($div, $rem) = $base->bdiv($self->{pow_k});
-    if ($rem != 0) {
-        use Carp;
-        confess sprintf(
-            "_ytod(k = %s, x = %s, z = %s => %s) not divisible by k",
-            @$self{qw{ pow_k pow_x pow_z }}, $val,
-        ) unless $::LOOSE_CUR;
-        # if loose is good enough, return the floor but mark it
-        $div .= ':LOOSE';
-    }
-    return $div;
-}
-
-#
-# Given y == y_m (mod m) and d = (xy^z - n) / k, return (d_s, s) as the
-# value and modulus of the corresponding constraint on d, d == d_s (mod s).
-# If no valid d is possible, returns s == 0.
-#
-sub _mod_ytod {
-    my($self, $val, $mod) = @_;
-    my($n, $k, $x, $z, $g) = @$self{qw{ n pow_k pow_x pow_z pow_g }};
-    my $base = $x * $val ** $z - $n;
-    my $gbase = $base / $g;
-    return ($gbase % $mod, $mod) if $k == $g;
-
-    my $gk = $k / $g;
-    my $g2 = gcd($gk, $mod);
-    if ($g2 == 1) {
-        my $inv = $gk->bmodinv($mod);
-        return (($gbase * $inv) % $mod, $mod);
-    } elsif (($gbase % $g2) == 0) {
-        my $gmod = $mod / $g2;
-        my $g2base = $gbase / $g2;
-        my $g2k = $gk / $g2;
-        my $inv = $g2k->bmodinv($gmod);
-        return (($g2base * $inv) % $gmod, $gmod);
-    } else {
-        return (1, 0);
-    }
-}
+sub pow_k { shift->{pow_k} }
+sub pow_x { shift->{pow_x} }
+sub pow_z { shift->{pow_z} }
+sub pow_g { shift->{pow_g} }
 
 sub cur {
     my $self = shift;
-    return $self->_ytod($self->{cur});
+    return $self->type->ytod($self, $self->{cur});
 }
 
 sub next {
@@ -171,7 +97,7 @@ sub next {
     $self->{'skipped'} += $u;
     $self->{'kept'} += 1;
     return undef if $cur > $self->{'max'};
-    return $self->_ytod($cur);
+    return $self->type->ytod($self, $cur);
 }
 
 sub convert_mod_override {
@@ -181,8 +107,9 @@ sub convert_mod_override {
     my($mod, $op, $val) = ($override =~ m{ ^ (\d+) (=) (\d+) \z }x)
             or die "Invalid power mod override '$override'";
     my($found, $coval) = (0, undef);
+    my $type = $self->type;
     VAL: for (0 .. $mod - 1) {
-        my($subval, $submod) = $self->_mod_ytod($_, $mod);
+        my($subval, $submod) = $type->mod_ytod($self, $_, $mod);
         next VAL unless $submod;
         if ($mod != $submod) {
             my $cosubval = ($val % $submod);
@@ -232,9 +159,10 @@ sub power_suppress {
 
 sub suppress {
     my($self, $p, $v, $min, $depend) = @_;
+    my $type = $self->type;
     # we require pow_z even
     for my $w (0 .. ($p - 1) / 2) {
-        my $subw = $self->_ytod($w) % $p;
+        my $subw = $type->ytod($self, $w) % $p;
         next if $subw != $v;
         $self->power_suppress($p, $w, $min, $depend);
         $self->power_suppress($p, $p - $w, $min, $depend) if $w;
