@@ -2,6 +2,7 @@ package Type;
 use strict;
 use warnings;
 use List::Util ();
+use Scalar::Util qw{ weaken };
 
 my %types = (
     t => 'Type::TauSeq',
@@ -27,7 +28,9 @@ sub new {
         n => $c ? $c->n : undef,
         f => $c ? $c->f : undef,
         min => $c ? $c->min : undef,
+        debug => $c ? $c->debug : 0,
     }, $type;
+    weaken($self->{c}) if $c;
     $self->init;
     return $self;
 }

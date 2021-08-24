@@ -66,11 +66,17 @@ sub parent {
 }
 
 for my $method (qw/
-    cur n f tell_count t0 min max check min_potency mult mod_mult
+    cur n f tell_count t0 min max check min_potency mult mod_mult type
 /) {
     my $sub = sub { shift->{$method} };
     no strict 'refs';
     *$method = $sub;
+}
+
+sub set_type {
+    my($self, $type) = @_;
+    $self->{type} = $type;
+    return;
 }
 
 sub elapsed {

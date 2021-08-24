@@ -150,6 +150,7 @@ package Constraint::Fact::P5 {
             'check' => $c->check(),
             'parent' => $c,
         );
+        $self->set_type($c->type);
 
         @$fact == 1 && $fact->[0][1] == 5 && ($fact->[0][0] & 1)
                 or die "Constraint::Fact::P5->new: expect n = p^5, odd p";

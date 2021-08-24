@@ -67,6 +67,7 @@ my $c = Constraint->new(
     'min_potency' => $opt_cr,
 );
 my $type = Type->new($typename, $c);
+$c->set_type($type);
 
 $c = apply($c) or exit 0;
 $opt_ix or $type->check_exceptions;

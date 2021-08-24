@@ -24,6 +24,8 @@ sub new {
         'check' => $c->check(),
         'parent' => $c,
     );
+    my $type = $c->type;
+    $self->set_type($type);
 
     ($z & 1) == 0 or die "Constraint::Power->new: \$z must be even (not $z)";
     @$self{qw{ pow_k pow_x pow_z pow_g }} = ($k, $x, $z, gcd($k, $x));
