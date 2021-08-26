@@ -238,6 +238,7 @@ OUT
 
 sub is_fixed {
     my($p, $x, $c, $n, $fixp) = @_;
+    $p = Math::GMP->new($p) unless ref $p;
     if (($fixp % $p) == 0) {
         return 1;
     }

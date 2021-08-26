@@ -64,6 +64,7 @@ my $tn = tau($n, \@nf);
 @$_ = map split(','), @$_ for ($opt_i, $opt_q);
 s/^!// && (push @$opt_nq, $_) for @$opt_q;
 @$_ = sort { $a <=> $b } @$_ for ($opt_i, $opt_q);
+$_ = MBI($_) for @$opt_q;
 my $mods = find_mods($type);
 
 @$opt_q = do {
@@ -147,7 +148,7 @@ sub find_mods {
                     # to make a p^x factor we need d == -n/i (mod p^x)
                     my $m = (-$n * modinv($i, $px)) % $px;
                     next if $suppress{$px}{$m};
-                    $mods[$i]{$p} = $m->intify;
+                    $mods[$i]{$p} = "$m";
                 }
             }
         } elsif ($type->name eq 'addseq') {
@@ -155,7 +156,7 @@ sub find_mods {
                 # to make a p^x factor we need d == -ni (mod p^x)
                 my $m = (-$n * $i) % $px;
                 next if $suppress{$px}{$m};
-                $mods[$i]{$p} = $m->intify;
+                $mods[$i]{$p} = "$m";
             }
         } else {
             # There are no forced squares for semip()
@@ -190,7 +191,7 @@ sub find_perms {
                 next;
             };
             my $mod = $mods->[$i]{$q} // goto CONTINUE;
-            push @$perm, sprintf "-m%d=%d", $q ** $opt_p, $mod;
+            push @$perm, sprintf "-m%s=%s", $q ** $opt_p, $mod;
         }
         if ($opt_fq) {
             my $mm = join ',', map s{^-m}{}r, @$perm;

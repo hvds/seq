@@ -108,7 +108,7 @@ sub check_mult {
         my($p, $k) = @$_;   # p^k is fixed by constraints
         next if $k < 2;
         next unless 0 == ($n % $p);
-        my $pk = $p ** $k;
+        my $pk = MBI($p) ** $k;
         next if 0 == ($n % $pk);
         next unless 0 == ($mod_mult % $pk);
         do { $pk /= $p } while 0 != ($n % $pk);
