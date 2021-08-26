@@ -321,6 +321,10 @@ package Runnable {
             # 500 f(132, 12) > 1e20 mod(8=7, 3=2, 11=10, 25=9)  (2.290s)
             return;
         }
+        for (@{ $line{502} }) {
+            # 502 Error: fixed 4 not available in tau 38
+            return;
+        }
         for (@{ $line{519} }) {
             # 519 Found only 0 of 1 values matching 813 (mod 841)
             unless ($seen519{$_}++) {
