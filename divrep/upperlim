@@ -167,46 +167,59 @@ use Data::Dumper; warn Dumper(\@mods);
     \@mods;
 }
 
+sub fill_perms_r {
+    my($perms, $avail, $cur, $i, $seen, $spare) = @_;
+    if ($i == @$avail) {
+        push @$perms, $cur;
+        return;
+    }
+    if ($spare) {
+        fill_perms_r($perms, $avail, [ @$cur, 0 ], $i + 1, $seen, $spare - 1);
+        return if @$avail - $i == $spare;
+    }
+    for my $mod (@{ $avail->[$i] }) {
+        next if $seen->{$mod};
+        local $seen->{$mod} = 1;
+        fill_perms_r($perms, $avail, [ @$cur, $mod ], $i + 1, $seen, $spare);
+    }
+    return;
+}
+    
 sub find_perms {
     my($type) = @_;
     my @perms;
-    my @q = @$opt_q;
-    unshift @q, 0 while @q < @$opt_i;
+
+    my $target = @$opt_i;
+    my $source = @$opt_q;
+    my $spare = ($target > $source) ? $target - $source : 0;
+    my @iorder = sort {
+        keys %{ $mods->[$a] } <=> keys %{ $mods->[$b] }
+    } @$opt_i;
+    my @avail = map [ sort { $a <=> $b } keys %{ $mods->[$_] } ], @iorder;
+    fill_perms_r(\@perms, \@avail, [], 0, {}, $spare);
     my $i = 0;
-    my $excess = @q - @$opt_i;
-    do {
-        ++$i;
-        if ($excess > 1) {
-            # if we have more powers than locations, ignore any list in which
-            # the to-be-discarded excess is not in order, to avoid duplication
-            ($q[$_ + 1] < $q[$_]) && goto CONTINUE
-                    for 0 + @$opt_i .. $#q - 1;
-        }
-        my $perm = [];
-        my $none = [];
-        for (0 .. $#$opt_i) {
-            my $i = $opt_i->[$_];
-            my $q = $q[$_] or do {
-                push @$none, $i;
-                next;
-            };
-            my $mod = $mods->[$i]{$q} // goto CONTINUE;
-            push @$perm, sprintf "-m%s=%s", $q ** $opt_p, $mod;
-        }
-        if ($opt_fq) {
-            my $mm = join ',', map s{^-m}{}r, @$perm;
-            my $count = @$perm;
-            push @perms, map Runnable->new(
-                $type,
-                $i++ - 1, [ sprintf "-mm%s/%s", $mm, $_ ], $none
-            ), find_mm($count, $opt_p, $sample);
-            --$i;
-        } else {
-            push @perms, Runnable->new($type, $i - 1, $perm, $none);
-        }
-  CONTINUE:
-    } while (NextPermuteNum(@q));
-    return \@perms;
+    return [ map {
+        my $p = $_;
+        my @none;
+        my @mods = map {
+            my $q = $p->[$_];
+            $q
+                ? [ MBI($q), $mods->[$_]{$q} ]
+                : do { push @none, $iorder[$_]; () }
+        } 0 .. $target - 1;
+        $opt_fq ? do {
+            my $mm = sprintf '-mm%s/', join ',',
+                    map sprintf('%s=%s', $_->[0] ** $opt_p, $_->[1]), @mods;
+            map Runnable->new(
+                $type, $i++, [ $mm . $_ ], \@none
+            ), find_mm(scalar(@mods), $opt_p, $sample);
+        } : Runnable->new(
+            $type,
+            $i++,
+            [ map sprintf('-m%s=%s', $_->[0] ** $opt_p, $_->[1]), @mods ],
+            \@none,
+        );
+    } @perms ];
 }
 
 sub find_mm {
