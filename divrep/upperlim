@@ -20,8 +20,8 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_n, $opt_x, $opt_c, $opt_cr, $opt_s, $opt_f, $opt_p, $opt_t)
-        = (0, 0, 0, 0, 0, 0, 2, 100000);
+my($opt_n, $opt_x, $opt_c, $opt_cr, $opt_s, $opt_f, $opt_fq, $opt_p, $opt_t)
+        = (0, 0, 0, 0, 0, 0, 0, 2, 100000);
 my($opt_m, $opt_q, $opt_i, $opt_z, $opt_nq) = ([], [], [], [], []);
 my($opt_ts, $opt_fact);
 my $sample = 0;
@@ -33,6 +33,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     last if $arg eq '--';
     ($sample = 1), next if $arg eq '--sample';
     ($opt_f = 1), next if $arg eq '-f';
+    ($opt_fq = 1), next if $arg eq '-fq';
     ($opt_fact = 1), next if $arg eq '-fact';
     ($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
     ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
@@ -191,7 +192,7 @@ sub find_perms {
             my $mod = $mods->[$i]{$q} // goto CONTINUE;
             push @$perm, sprintf "-m%d=%d", $q ** $opt_p, $mod;
         }
-        if ($opt_f) {
+        if ($opt_fq) {
             my $mm = join ',', map s{^-m}{}r, @$perm;
             my $count = @$perm;
             push @perms, map Runnable->new(
@@ -281,6 +282,7 @@ package Runnable {
             ($opt_c ? ('-c', $opt_c) : ()),
             ($opt_cr ? ('-cr', $opt_cr) : ()),
             ($opt_fact ? ('-fact') : ()),
+            ($opt_f ? ('-f') : ()),
             ($opt_t ? ('-t', $opt_t) : ()),
             ($self->{ts} ? ('-ts', $self->{ts}) : ()),
             (map "-m$_", @$opt_m),
