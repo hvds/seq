@@ -6,10 +6,13 @@ use List::Util qw{ sum };
 use Type;
 
 my $typename = 't';
+my @opt_m;
+
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
     $typename = $1, next if $arg =~ /^-y(.*)/;
+    push(@opt_m, $arg), next if $arg =~ /^-m/;
     die "Unknown option '$arg'";
 }
 @ARGV == 5 or die "500 Usage: $0 n ming maxg d optc";
@@ -50,7 +53,7 @@ sub bad {
     my($type, $k) = @_;
     my $log = sprintf "%s/bg%s.%s-%s", $type->logpath, $n, $k, $$;
     my @args = (
-        '-n', $d, '-x', $d, '-c', $optc, '-cp', 20, '-D',
+        '-n', $d, '-x', $d, '-c', $optc, '-cp', 20, @opt_m, '-D',
         # force to avoid premature exit when dependent
         '-f',
         $n, $k,
