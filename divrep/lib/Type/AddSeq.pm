@@ -37,7 +37,7 @@ sub gprio {
     my $highest = $f[-1][0] // 1;
     return -(
         (log($n) / log(2)) ** 2
-        + (log($highest) / log(2)) ** 3.5
+        + (log($highest) / log(2)) ** 3
     );
 }
 
