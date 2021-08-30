@@ -27,6 +27,8 @@ sub gprio {
     );
 }
 
+sub ming { 1 }
+
 sub maxg {
     my($self, $n) = @_;
     die "cannot maxg(0)" unless $n;

@@ -41,6 +41,8 @@ sub gprio {
     ) / 2;
 }
 
+sub ming { 1 }
+
 sub maxg {
     my($self, $n) = @_;
     return $n;

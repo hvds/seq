@@ -333,7 +333,7 @@ sub nextFor {
     my $self = first { !$_->complete } @$coll;
     if (!$self) {
         my $last = $coll->[-1];
-        my $nextk = $last ? $last->k + 1 : 2;
+        my $nextk = ($last ? $last->k : $taug->ming) + 1;
         $self = $db->resultset($TABLE)->new({
             n => $taug->n,
             k => $nextk,

@@ -41,6 +41,8 @@ sub gprio {
     );
 }
 
+sub ming { 0 }
+
 sub maxg {
     my($type, $n) = @_;
     die "can't maxg(0)" unless $n;

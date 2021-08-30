@@ -93,7 +93,7 @@ sub generate {
     for my $n ($max + 1 .. $max + $count) {
         my $self = $table->new({
             n => $n,
-            ming => 1,
+            ming => $type->ming($n),
             maxg => $type->maxg($n),
             status => (is_prime($n) ? [ 'prime' ] : 0),
             checked => $zero,

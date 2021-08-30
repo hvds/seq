@@ -87,7 +87,7 @@ sub check_fixed {
 for my $method (qw{
     name dbname func_value func_name func func_target
     apply_m to_testf test_target
-    gprio maxg
+    gprio ming maxg
 }) {
     no strict 'refs';
     *$method = sub { die "$_[0] must provide implementation of sub $method" };
