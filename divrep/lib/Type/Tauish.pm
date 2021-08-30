@@ -98,7 +98,11 @@ sub test_m_rad_m {
         return;
     }
 
-    $quad_series->($r) if divides_oddly($tn, $tm);
+    if (divides_oddly($tn, $tm)) {
+        $quad_series->($r);
+        # We may know more for addseq in this case
+        $self->more_m_rad_m($qm, $qr, $tm);
+    }
 
     if ($mf->[0][0] == 2) {
         # p=2 uniquely introduce new non-residues at higher powers; eg
@@ -149,6 +153,8 @@ sub test_m_rad_m {
         $self->series($m * $u, $pmr, 0);
     }
 }
+
+sub more_m_rad_m { return }
 
 sub check_fixed {
     my($self) = @_;

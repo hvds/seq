@@ -88,6 +88,33 @@ sub float_spare {
     return ($float, $spare);
 }
 
+#
+# If d + kn = um (mod m rad m) and tau(m) divides tau(n) oddly, then
+# d + (k + m)n does the same, so of u and u + n, either both are
+# squares or one must share a factor with m.
+#
+sub more_m_rad_m {
+    my($self, $m, $r, $tm) = @_;
+    my $f = $self->f;
+    return unless $f > $m;
+    my $n = $self->n;
+    return unless gcd($r, $n) == 1;
+
+    my $mr = $m * $r;
+    # We know n is even, so greatest squares with difference n must have
+    # u = x^2, u + n = (x + 2)^2 => n = 4x + 4
+    my $lim = ((($n + 4) >> 2) ** 2) * $m;
+    for my $u (1 .. $r - 1) {
+        next if gcd($u, $r) > 1 || gcd($u + $n, $r) > 1;
+        for my $k (0 .. $f - $m) {
+            $self->suppress_k($k, $u * $m, $mr, $lim);
+            # or equivalently:
+            #$self->suppress_k($k + $m, (($u + $n) % $r) * $m, $mr, $lim);
+        }
+    }
+    return;
+}
+
 sub fix_pell {
     my($self, $n, $fix1, $fix2) = @_;
     my($k1, $x1, $z1) = @$fix1;
