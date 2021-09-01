@@ -65,7 +65,10 @@ $tauf->has_many(
     },
 );
 
-sub priority { shift->g->priority }
+sub rprio {
+    my($self, $type) = @_;
+    return $type->gprio($self->n);
+}
 
 sub good {
     my($self, $db, $run, $good, $best) = @_;
@@ -163,6 +166,7 @@ sub update_depends {
 
 sub _strategy {
     my($self, $db) = @_;
+    my $type = $db->type;
     my $g = $self->g;
 
     if ($g->checked < $SIMPLE) {
@@ -171,7 +175,7 @@ sub _strategy {
                 optn => $g->checked || 1,
                 optx => $SIMPLE,
                 optc => 100,
-                priority => $g->priority,
+                priority => $type->fprio($self->n, $self->k, 0),
             },
         );
     }
@@ -182,7 +186,7 @@ sub _strategy {
     # If we've seen a fix_power once, make sure we set a min value for -c
     # so we don't lose it again.
     if ($r->fix_power && ! $self->minc) {
-        return Seq::Run::BisectFP->new($g, $self, $r->optc);
+        return Seq::Run::BisectFP->new($db->type, $g, $self, $r->optc);
     }
 
     my $optn = $g->checked + 1;
@@ -220,12 +224,12 @@ sub _strategy {
                 optn => $optn,
                 optx => $optx,
                 optc => $optc,
-                priority => $g->priority + min(0, -log($expect) / log(2)),
+                priority => $type->fprio($self->n, $self->k, $expect),
             },
         );
     }
 
-    my $bisect = $self->maybe_bisectg($expect);
+    my $bisect = $self->maybe_bisectg($db->type, $expect);
 
     # If it's slow we could try sharding, but for now just reduce the range
     my $factor = (1 + $SLOW / $expect) / 2;
@@ -244,7 +248,7 @@ sub _strategy {
         && $r->k == $self->k
     ) {
         # test order runs are slow, we need to scale our range down
-        my $log = $r->logpath;
+        my $log = $r->logpath($type);
         my $fh;
         open($fh, '<', $log)
                 or return $self->failed("Can't open $log for optimizing: $!");
@@ -276,7 +280,7 @@ sub _strategy {
                 optx => $optx,
                 optc => $optc,
                 optimize => 1,
-                priority => $g->priority + min(0, -log($expect) / log(2)),
+                priority => $type->fprio($self->n, $self->k, $expect),
             },
         ), ($bisect // ()));
     }
@@ -287,17 +291,17 @@ sub _strategy {
             optx => $optx,
             optc => $optc,
             optimize => 0,
-            priority => $g->priority + min(0, -log($expect) / log(2)),
+            priority => $type->fprio($self->n, $self->k, $expect),
         },
     ), ($bisect // ()));
 }
 
 sub maybe_bisectg {
-    my($self, $expect) = @_;
+    my($self, $type, $expect) = @_;
     my $depth = 1000 * (1 + int(log($expect / $SLOW) / log(10)));
     my $g = $self->g;
     return undef if $depth <= ($g->bisected // 0);
-    return Seq::Run::BisectG->new($g, $self, $depth);
+    return Seq::Run::BisectG->new($type, $g, $self, $depth);
 }
 
 sub lastRun {
@@ -329,7 +333,7 @@ sub nextFor {
     my $self = first { !$_->complete } @$coll;
     if (!$self) {
         my $last = $coll->[-1];
-        my $nextk = $last ? $last->k + 1 : 2;
+        my $nextk = ($last ? $last->k : $taug->ming) + 1;
         $self = $db->resultset($TABLE)->new({
             n => $taug->n,
             k => $nextk,

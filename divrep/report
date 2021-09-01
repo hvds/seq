@@ -1,13 +1,15 @@
 #!/opt/maths/bin/perl
 use strict;
 use warnings;
-use lib ('../lib', 'lib');
-use Seq::Db;
 use Math::GMP;
 use Math::Prime::Util qw{ factor_exp };
 use List::Util qw{ first };
+use lib ('./lib');
+use Seq::Db;
+use Type;
 
 my($debug, $opt_composite, $opt_table) = (0, 0, 0);
+my $typename = 't';
 my $filter = sub { 1 };
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift(@ARGV);
@@ -15,6 +17,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     $debug = 1, next if $arg eq '-d';
     $opt_composite = 1, next if $arg eq '-c';
     $opt_table = 1, next if $arg eq '-t';
+    $typename = $1, next if $arg =~ /^-y(.*)/;
     $filter = chain_sig($filter, $1 || shift(@ARGV)), next
             if $arg =~ /^-s(.*)/;
     $filter = chain_min($filter, $1 || shift(@ARGV)), next
@@ -25,6 +28,8 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
             if $arg =~ /^-mp(.*)/;
     $filter = chain_topprime($filter, $1 || shift(@ARGV)), next
             if $arg =~ /^-tp(.*)/;
+    $filter = chain_mod($filter, $1, $2), next
+            if $arg =~ /^-m(\d+)=([0-9,]+)$/;
     die "Unknown option '$arg'";
 }
 my($n, $k) = @ARGV;
@@ -32,13 +37,10 @@ if ($n) {
     $filter = chain_min($filter, $n);
     $filter = chain_max($filter, $n);
 }
+my $type = Type->new($typename);
 
 local @ENV{qw{ DBI_TRACE DBIC_TRACE }} = (1, 1) if $debug;
-my $db = Seq::Db->new({
-    db => 'tauseq',
-    user => 'hv',
-    passwd => 'hv',
-});
+my $db = Seq::Db->new($type, 0);
 
 use Data::Dumper;
 local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
@@ -188,6 +190,15 @@ sub chain_topprime {
         return 0 unless $next->($_[0]);
         my $tp = (factor_exp($_[0]))[-1][0];
         return $p == $tp ? 1 : 0;
+    };
+}
+
+sub chain_mod {
+    my($next, $m, $v) = @_;
+    my %v = map +($_ => 1), split /,/, $v;
+    return sub {
+        return 0 unless $next->($_[0]);
+        return $v{$_[0] % $m} ? 1 : 0;
     };
 }
 

@@ -3,10 +3,18 @@ use strict;
 use warnings;
 use lib 'lib';
 use List::Util qw{ sum };
+use Type;
 
-my $PROG = './gtauseq';
-my $LOGS = './logs';
+my $typename = 't';
+my @opt_m;
 
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    $typename = $1, next if $arg =~ /^-y(.*)/;
+    push(@opt_m, $arg), next if $arg =~ /^-m/;
+    die "Unknown option '$arg'";
+}
 @ARGV == 5 or die "500 Usage: $0 n ming maxg d optc";
 
 =head1 bisect-g: find upper bound for g(n)
@@ -19,17 +27,18 @@ be the current best known upper bound for C<g(n)>; I<d> should be the
 greatest difference checked to; and I<optc> is the requested number of
 values to check.
 
-The program will invoke C<$PROG> to perform a binary chop, using options
+The program will invoke C<gtauseq> to perform a binary chop, using options
 C<< -c I<optc> -cp 20 -D >>, and report the new best upper bound.
 
 =cut
 
 my($n, $ming, $maxg, $d, $optc) = @ARGV;
+my $type = Type->new($typename);
 
 my($good, $bad) = ($ming, $maxg + 1);
 while ($good + 1 < $bad) {
     my $mid = ($good + $bad) >> 1;
-    if (bad($mid)) {
+    if (bad($type, $mid)) {
         $bad = $mid;
     } else {
         $good = $mid;
@@ -41,50 +50,33 @@ printf "200 g(%s) <= %s (%.2fs)\n",
 exit 0;
 
 sub bad {
-    my($k) = @_;
-    my $log = sprintf "%s/bg%s.%s-%s", $LOGS, $n, $k, $$;
+    my($type, $k) = @_;
+    my $log = sprintf "%s/bg%s.%s-%s", $type->logpath, $n, $k, $$;
     my @args = (
-        "bgt($n, $k)",
-        '-n', $d, '-x', $d, '-c', $optc, '-cp', 20, '-D',
+        '-n', $d, '-x', $d, '-c', $optc, '-cp', 20, @opt_m, '-D',
         # force to avoid premature exit when dependent
         '-f',
         $n, $k,
     );
-    my $pid = fork();
-    unless ($pid) {
-        open STDOUT, '>', $log
-                or die "503 Can't open $log for writing: $!";
-        exec($PROG @args) or die "505 Could not exec $PROG";
-    }
-
-    waitpid($pid, 0);
-    open my $f, '<', $log
-            or die "504 Can't open $log for reading: $!";
-    my %line;
-    while (<$f>) {
-        chomp;
-        my($rc) = /^(\d{3}) /
-                or die "502 Can't parse log line '$_'";
-        push @{ $line{$rc} }, $_;
-    }
+    my $lines = $type->invoked('gtauseq', "bgt($n, $k)", \@args, $log);
     # optionally parse '302' and/or '303' lines to refine -cp value
-    if ($line{402}) {
+    if ($lines->{402}) {
         # 402 Error: all values (mod 2) disallowed (4.680s)
         return 1;
     }
-    if ($line{403}) {
+    if ($lines->{403}) {
         # 403 Error: f(243) > 4 known impossible by exception (4.680s)
         return 1;
     }
-    if ($line{404}) {
+    if ($lines->{404}) {
         # 404 Error: n + ${k}d must be divisible by n
         return 1;
     }
-    if ($line{502}) {
+    if ($lines->{502}) {
         # Error: fixed 18 not available in tau 48
         return 1;
     }
-    if ($line{309}) {
+    if ($lines->{309}) {
         # Prep finished, frequency 36.91 (184.980s)
         return 0;
     }

@@ -69,7 +69,7 @@ a contradiction:
   so q == 2 mod 3;
   now n + d = (q + 9 - 3r)(q + 9 + 3r); since both factors are == 2 mod 3,
   neither can be a square, so we cannot have tau(n + d) = 6.
-This gives us the C<[243, 4]> exception in gtauseq:check_exceptions.
+This gives us the C<[243, 4]> exception in Type::TauSeq::check_exceptions.
 
 =head2 198
 
@@ -148,9 +148,9 @@ package Constraint::Fact::P5 {
             'min' => $c->min(),
             'max' => $c->max(),
             'check' => $c->check(),
-            'tau' => $c->tau(),
             'parent' => $c,
         );
+        $self->set_type($c->type);
 
         @$fact == 1 && $fact->[0][1] == 5 && ($fact->[0][0] & 1)
                 or die "Constraint::Fact::P5->new: expect n = p^5, odd p";

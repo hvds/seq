@@ -6,10 +6,6 @@ use Seq::Run::BisectG;
 use Seq::Run::BisectFP;
 use List::Util qw{ max };
 
-my $PROG = './gtauseq';
-my $BISECTG = './bisect-g';
-my $LOGS = './logs';
-
 =head1 NAME
 
 Seq::Run
@@ -41,10 +37,15 @@ __PACKAGE__->belongs_to(
     },
 );
 
+sub rprio {
+    my($self, $type) = @_;
+    return $self->priority;
+}
+
 sub logpath {
-    my($self) = @_;
+    my($self, $type) = @_;
     return sprintf '%s/%s.%s-%s',
-            $LOGS, $self->n, $self->k, $self->runid;
+            $type->logpath, $self->n, $self->k, $self->runid;
 }
 
 sub gen {
@@ -64,7 +65,7 @@ sub restrategise {
     for my $self ($db->resultset($TABLE)->search_bitfield(
         { complete => 0 },
     )->all) {
-        unlink $self->logpath if $self->running;
+        unlink $self->logpath($db->type) if $self->running;
         $self->delete;
     }
 }
@@ -83,7 +84,6 @@ sub command {
     my($self) = @_;
     my $ts = join ',', @{ $self->f->test_order };
     return [
-        $PROG,
         '-n', '' . $self->optn,
         '-x', '' . $self->optx,
 # FIXME: we want them deflated
@@ -112,23 +112,20 @@ sub runnable {
 
 sub run {
     my($self, $db) = @_;
+    my $type = $db->type;
     my $cmd = $self->command;
-    my $log = $self->logpath;
+    my $named = sprintf 'gt(%s,%s)', $self->n, $self->k;
+    my $log = $self->logpath($type);
     if ($self->running || -e $log) {
         use Carp;
         warn Carp::longmess(sprintf"already running: %s for %s %s\n",
                 $self->runid, $self->n, $self->k);
         return undef;
     }
-    if (my $pid = fork()) {
-        $self->running(1);
-        $self->update;
-        return $pid;
-    }
-    open STDOUT, '>', $log
-            or die "Can't open $log for writing: $!";
-    exec @$cmd
-            or die "Can't exec [@$cmd]";
+    my $pid = $type->invoke('gtauseq', $named, $cmd, $log);
+    $self->running(1);
+    $self->update;
+    return $pid;
 }
 
 sub failed {
@@ -140,15 +137,18 @@ sub failed {
 }
 
 sub parse_ta {
-    my($self, $ta) = @_;
+    my($self, $type, $ta) = @_;
     my($base, @num) = split /\s+/, $ta;
+    my $which = $type->to_testf($self->k);
     # higher numbers are better at rejecting candidates, so should come first
-    return [ sort { $num[$b - 1] <=> $num[$a - 1] } 1 .. @num ];
+    return [ sort { $num[$b - 1] <=> $num[$a - 1] } @$which ];
 }
 
 sub finalize {
     my($self, $db) = @_;
-    my $log = $self->logpath;
+    my $type = $db->type;
+    my $funcname = $type->func_name;
+    my $log = $self->logpath($type);
     my $fh;
     open($fh, '<', $log)
             or return $self->failed("Can't open $log for reading: $!");
@@ -191,11 +191,11 @@ sub finalize {
                 or return $self->failed("(n, k) mismatch in '$_'");
         $last_fail = $d;
         if ($self->optimizing) {
-            my $order = $self->parse_ta($ta);
+            my $order = $self->parse_ta($type, $ta);
             # If no tests were found, it implies all the time is going
             # on modular tests. Set a simple test order in that case,
             # so we don't try to calculate it again.
-            $test_order = @$order ? $order : [ 1 .. $self->k ];
+            $test_order = @$order ? $order : $type->to_testf($self->k);
         }
     }
     for (@{ $line{500} // [] }) {
@@ -246,7 +246,7 @@ sub finalize {
     for (@{ $line{211} // [] }) {
         my($s, $t) = m{
             ^ 211 \s+ Sequence \s+ (\d+) :
-            \s+ (\d+) \s+ = \s+ tau
+            \s+ (\d+) \s+ = \s+ \Q$funcname\E
         }x or return $self->failed("Can't parse 211 result: '$_'");
         if ($s == 0) {
             $best = 1;

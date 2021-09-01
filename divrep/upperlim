@@ -4,6 +4,8 @@ use Math::GMP;
 use Math::Prime::Util qw{ is_prime next_prime divisors factor_exp };
 use Algorithm::Loops qw{ NextPermuteNum NestedLoops };
 use POSIX qw{ :sys_wait_h };
+use lib 'lib';
+use Type;
 
 =head1 upperlim - constrain upper limit of f(n, k)
 
@@ -13,18 +15,17 @@ as the squared factor in the various spots available.
 
 =cut
 
-use lib './glib';
+use lib './lib';
 use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_n, $opt_x, $opt_c, $opt_cr, $opt_s, $opt_f, $opt_p, $opt_t)
-        = (0, 0, 0, 0, 0, 0, 2, 100000);
+my($opt_n, $opt_x, $opt_c, $opt_cr, $opt_s, $opt_f, $opt_fq, $opt_p, $opt_t)
+        = (0, 0, 0, 0, 0, 0, 0, 2, 100000);
 my($opt_m, $opt_q, $opt_i, $opt_z, $opt_nq) = ([], [], [], [], []);
 my($opt_ts, $opt_fact);
 my $sample = 0;
-my $LOGS = './logs/upperlim';
-my $PROG = './gtauseq';
+my $typename = 't';
 my $maxproc = 6;
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
@@ -32,6 +33,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     last if $arg eq '--';
     ($sample = 1), next if $arg eq '--sample';
     ($opt_f = 1), next if $arg eq '-f';
+    ($opt_fq = 1), next if $arg eq '-fq';
     ($opt_fact = 1), next if $arg eq '-fact';
     ($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
     ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
@@ -41,6 +43,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_p = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
     ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t(?!s)}{};
     ($opt_ts = $arg || shift(@ARGV)), next if $arg =~ s{^-ts}{};
+    ($typename = $arg || shift(@ARGV)), next if $arg =~ s{^-y}{};
     push(@$opt_m, $arg || shift(@ARGV)), next if $arg =~ s{^-m}{};
     push(@$opt_q, $arg || shift(@ARGV)), next if $arg =~ s{^-q}{};
     push(@$opt_i, $arg || shift(@ARGV)), next if $arg =~ s{^-i}{};
@@ -52,6 +55,7 @@ $| = 1;
 my($n, $f) = map MBI($_), @ARGV;
 $0 = "upperlim($n $f)";
 $_ = ston($_) for ($opt_n, $opt_x);
+my $type = Type->new($typename);
 
 my $zone = MBI(1);
 my @nf = factor_exp($n);
@@ -60,13 +64,14 @@ my $tn = tau($n, \@nf);
 @$_ = map split(','), @$_ for ($opt_i, $opt_q);
 s/^!// && (push @$opt_nq, $_) for @$opt_q;
 @$_ = sort { $a <=> $b } @$_ for ($opt_i, $opt_q);
-my $mods = find_mods();
+$_ = MBI($_) for @$opt_q;
+my $mods = find_mods($type);
 
 @$opt_q = do {
     my %disallow = map +($_ => 1), @$opt_nq;
     grep !$disallow{$_}, @$opt_q;
 };
-my $perm = find_perms();
+my $perm = find_perms($type);
 printf "Found %d perms (%d .. %d)\n", 0+@$perm, (@$perm ? map($_->id, @$perm[0, -1]) : (0, -1));
 
 my $next = 0;
@@ -127,15 +132,7 @@ sub wait_for {
 }
 
 sub find_mods {
-#   my @args = (
-#       "find_mods($n, $f)",
-#       # test just one value to ask for mod dumps
-#       '-n', $opt_n, '-x', $opt_n, '-c', $opt_c,
-#       map("-m$_", @$opt_m),
-#       map("-dm$_", map $_ ** $opt_p, @$opt_q),
-#       $n, $f,
-#   );
-
+    my($type) = @_;
     my %suppress;
     for (@$opt_z) {
         my($px, $rest) = split /=/, $_;
@@ -145,57 +142,84 @@ sub find_mods {
     my @mods;
     for my $p (@$opt_q) {
         my $px = $p ** $opt_p;
-        for my $i (@$opt_i) {
-            if (($i % $p) != 0) {
-                # to make a p^x factor we need d == -n/i (mod p^x)
-                my $m = (-$n * modinv($i, $px)) % $px;
-                next if $suppress{$px}{$m};
-                $mods[$i]{$p} = $m->intify;
+        if ($type->name eq 'tauseq') {
+            for my $i (@$opt_i) {
+                if (($i % $p) != 0) {
+                    # to make a p^x factor we need d == -n/i (mod p^x)
+                    my $m = (-$n * modinv($i, $px)) % $px;
+                    next if $suppress{$px}{$m};
+                    $mods[$i]{$p} = "$m";
+                }
             }
+        } elsif ($type->name eq 'addseq') {
+            for my $i (@$opt_i) {
+                # to make a p^x factor we need d == -ni (mod p^x)
+                my $m = (-$n * $i) % $px;
+                next if $suppress{$px}{$m};
+                $mods[$i]{$p} = "$m";
+            }
+        } else {
+            # There are no forced squares for semip()
+            die "No upperlim strategy for type @{[ $type->name ]}\n";
         }
     }
 use Data::Dumper; warn Dumper(\@mods);
     \@mods;
 }
 
+sub fill_perms_r {
+    my($perms, $avail, $cur, $i, $seen, $spare) = @_;
+    if ($i == @$avail) {
+        push @$perms, $cur;
+        return;
+    }
+    if ($spare) {
+        fill_perms_r($perms, $avail, [ @$cur, 0 ], $i + 1, $seen, $spare - 1);
+        return if @$avail - $i == $spare;
+    }
+    for my $mod (@{ $avail->[$i] }) {
+        next if $seen->{$mod};
+        local $seen->{$mod} = 1;
+        fill_perms_r($perms, $avail, [ @$cur, $mod ], $i + 1, $seen, $spare);
+    }
+    return;
+}
+    
 sub find_perms {
+    my($type) = @_;
     my @perms;
-    my @q = @$opt_q;
-    unshift @q, 0 while @q < @$opt_i;
+
+    my $target = @$opt_i;
+    my $source = @$opt_q;
+    my $spare = ($target > $source) ? $target - $source : 0;
+    my @iorder = sort {
+        keys %{ $mods->[$a] } <=> keys %{ $mods->[$b] }
+    } @$opt_i;
+    my @avail = map [ sort { $a <=> $b } keys %{ $mods->[$_] } ], @iorder;
+    fill_perms_r(\@perms, \@avail, [], 0, {}, $spare);
     my $i = 0;
-    my $excess = @q - @$opt_i;
-    do {
-        ++$i;
-        if ($excess > 1) {
-            # if we have more powers than locations, ignore any list in which
-            # the to-be-discarded excess is not in order, to avoid duplication
-            ($q[$_ + 1] < $q[$_]) && goto CONTINUE
-                    for 0 + @$opt_i .. $#q - 1;
-        }
-        my $perm = [];
-        my $none = [];
-        for (0 .. $#$opt_i) {
-            my $i = $opt_i->[$_];
-            my $q = $q[$_] or do {
-                push @$none, $i;
-                next;
-            };
-            my $mod = $mods->[$i]{$q} // goto CONTINUE;
-            push @$perm, sprintf "-m%d=%d", $q ** $opt_p, $mod;
-        }
-        if ($opt_f) {
-            my $mm = join ',', map s{^-m}{}r, @$perm;
-            my $count = @$perm;
-            push @perms, map Runnable->new(
-                $i++ - 1, [ sprintf "-mm%s/%s", $mm, $_ ], $none
-            ), find_mm($count, $opt_p, $sample);
-            --$i;
-        } else {
-            push @perms, Runnable->new($i - 1, $perm, $none);
-        }
-  CONTINUE:
-    } while (NextPermuteNum(@q));
-    return \@perms;
+    return [ map {
+        my $p = $_;
+        my @none;
+        my @mods = map {
+            my $q = $p->[$_];
+            $q
+                ? [ MBI($q), $mods->[$_]{$q} ]
+                : do { push @none, $iorder[$_]; () }
+        } 0 .. $target - 1;
+        $opt_fq ? do {
+            my $mm = sprintf '-mm%s/', join ',',
+                    map sprintf('%s=%s', $_->[0] ** $opt_p, $_->[1]), @mods;
+            map Runnable->new(
+                $type, $i++, [ $mm . $_ ], \@none
+            ), find_mm(scalar(@mods), $opt_p, $sample);
+        } : Runnable->new(
+            $type,
+            $i++,
+            [ map sprintf('-m%s=%s', $_->[0] ** $opt_p, $_->[1]), @mods ],
+            \@none,
+        );
+    } @perms ];
 }
 
 sub find_mm {
@@ -233,7 +257,7 @@ sub ntos {
 
 package Runnable {
     sub new {
-        my($class, $id, $sqmods, $none) = @_;
+        my($class, $type, $id, $sqmods, $none) = @_;
 
         # unconstrained elements should be tested first, overriding
         # requested test order
@@ -252,25 +276,27 @@ package Runnable {
             }
         }
         return bless {
+            type => $type,
             id => $id,
             mods => $sqmods,
             ts => join(',', @early, keys(%none), @late),
         }, $class;
     }
     sub id { shift->{id} }
+    sub type { shift->{type} }
     sub logpath {
         my($self) = @_;
-        sprintf "%s/%s.%s-%s", $LOGS, $n, $f, $self->id;
+        sprintf '%s/upperlim/%s.%s-%s', $self->type->logpath, $n, $f, $self->id;
     }
     sub command {
         my($self) = @_;
         return [
-            $PROG,
             '-n', '' . $opt_n,
             '-x', '' . $opt_x,
             ($opt_c ? ('-c', $opt_c) : ()),
             ($opt_cr ? ('-cr', $opt_cr) : ()),
             ($opt_fact ? ('-fact') : ()),
+            ($opt_f ? ('-f') : ()),
             ($opt_t ? ('-t', $opt_t) : ()),
             ($self->{ts} ? ('-ts', $self->{ts}) : ()),
             (map "-m$_", @$opt_m),
@@ -281,14 +307,11 @@ package Runnable {
     }
     sub run {
         my($self) = @_;
+        my $type = $self->type;
+        my $named = sprintf 'u(%s,%s:%s)', $n, $f, $self->id;
         my $cmd = $self->command;
         my $log = $self->logpath;
-        if (my $pid = fork()) {
-            return $pid;
-        }
-        open STDOUT, '>', $log or die "Can't open $log for writing: $!";
-        print "100 @$cmd\n";
-        exec @$cmd or die "Can't exec [@$cmd]";
+        return $type->invoke('gtauseq', $named, $cmd, $log);
     }
     my %seen519;
     sub finalize {
@@ -312,6 +335,10 @@ package Runnable {
             # 500 f(132, 12) > 1e20 mod(8=7, 3=2, 11=10, 25=9)  (2.290s)
             return;
         }
+        for (@{ $line{502} }) {
+            # 502 Error: fixed 4 not available in tau 38
+            return;
+        }
         for (@{ $line{519} }) {
             # 519 Found only 0 of 1 values matching 813 (mod 841)
             unless ($seen519{$_}++) {
@@ -323,7 +350,7 @@ package Runnable {
         for (@{ $line{200} }) {
             ::diag("");
             # 200 f(132, 12) = 8077375161476199132962631959 mod(8=7, 3=2, 11=10, 25=9)  (0.120s)
-            print "@{[ $self->id ]}: @{ $self->command }\n$_\n";
+            print "@{[ $self->id ]}: gtauseq @{ $self->command }\n$_\n";
             if (/= (\d+) /) {
                 my $new = ::MBI($1);
                 $opt_x = $new if $opt_x > $new;

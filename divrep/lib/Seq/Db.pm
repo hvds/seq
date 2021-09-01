@@ -8,26 +8,25 @@ BEGIN {
 }
 
 sub new {
-    my($class, $args) = @_;
+    my($class, $type, $recreate) = @_;
+    my($dbname, $dbuser, $dbpass)
+            = ($type->dbname, $type->dbuser, $type->dbpass);
     my $dsn = sprintf(
         'DBI:%s:database=%s;host=%s',
-        'mysql', $args->{db} // die("No db specified"), 'localhost',
+        'mysql', $dbname // die("No db specified"), 'localhost',
     );
-    my $db = Seq::Db::Schema->connect($dsn, @$args{qw{ user passwd }})
+    my $db = Seq::Db::Schema->connect($dsn, $dbuser, $dbpass)
             // die "Schema failed: $DBI::errstr";
-    $db->deploy($args->{recreate} ? { add_drop_table => 1 } : ());
+    $db->deploy($recreate ? { add_drop_table => 1 } : ());
     return bless {
-        args => $args,
+        type => $type,
         db => $db,
     }, $class;
 }
 
 sub db { shift->{db} }
 sub resultset { shift->db->resultset(@_) }
-sub gprio {
-    my($self, $count) = @_;
-    return Seq::TauG->prio($self, $count);
-}
+sub type { shift->{type} }
 
 package Seq::Db::Schema {
     use Seq::TauG;
