@@ -123,6 +123,37 @@ OUT
 }
 
 #
+# If the order of p in n is k and p^{k+1} divides the diff, we must have
+# g(n, f) = p^k g(n / p^k, f). If constraints force the diff to be so
+# divisible, g(n) = p^k g(n / p^k) for the rest of the sequence, and there's
+# no point recalculating them. (The -f flag forces the calculation.)
+#
+# FIXME: we should report this only if g(n / p^k) would fix p, else not
+# all solutions for g(n / p^k) would generate solutions for g(n), and in
+# particular the minimum solution may not.
+#
+sub check_mult {
+    my($self) = @_;
+    my($c, $n, $f) = ($self->c, $self->n, $self->f);
+    my($mult, $mod_mult) = ($c->parent->mult, $c->parent->mod_mult);
+    my $mf = [ factor_exp($mult) ];
+    for (@$mf) {
+        my($p, $k) = @$_;   # p^k is fixed by constraints
+        next if $k < 2;
+        next unless 0 == ($n % $p);
+        my $pk = Math::GMP->new($p) ** $k;
+        next if 0 == ($n % $pk);
+        next unless 0 == ($mod_mult % $pk);
+        do { $pk /= $p } while 0 != ($n % $pk);
+        my $nd = $n / $pk;
+        printf <<OUT, $f, $pk, $nd, $pk;
+201 Dependent - %s:%s f(%s) # fix %s
+OUT
+        exit 0;
+    }
+}
+
+#
 # suppress the possibility that the k'th target is v (mod m) for target > max
 #
 sub suppress_k {

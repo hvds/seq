@@ -84,6 +84,10 @@ sub check_fixed {
     return;
 }
 
+sub check_mult {
+    return;
+}
+
 for my $method (qw{
     name dbname func_value func_name func func_target
     apply_m to_testf test_target
