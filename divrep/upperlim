@@ -20,8 +20,8 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 
-my($opt_n, $opt_x, $opt_c, $opt_cr, $opt_s, $opt_f, $opt_fq, $opt_p, $opt_t)
-        = (0, 0, 0, 0, 0, 0, 0, 2, 100000);
+my($opt_n, $opt_x, $opt_c, $opt_cr, $opt_s, $opt_f, $opt_fq, $opt_e) = (0) x 8;
+my($opt_p, $opt_t) = (2, 100000);
 my($opt_m, $opt_q, $opt_i, $opt_z, $opt_nq) = ([], [], [], [], []);
 my($opt_ts, $opt_fact);
 my $sample = 0;
@@ -39,6 +39,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
     ($opt_cr = $arg || shift(@ARGV)), next if $arg =~ s{^-cr}{};
     ($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
+    ($opt_e = $arg || shift(@ARGV)), next if $arg =~ s{^-e}{};
     ($opt_s = $arg || shift(@ARGV)), next if $arg =~ s{^-s}{};
     ($opt_p = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
     ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t(?!s)}{};
@@ -192,6 +193,7 @@ sub find_perms {
     my $target = @$opt_i;
     my $source = @$opt_q;
     my $spare = ($target > $source) ? $target - $source : 0;
+    $spare = $opt_e if $spare < $opt_e;
     my @iorder = sort {
         keys %{ $mods->[$a] } <=> keys %{ $mods->[$b] }
     } @$opt_i;
