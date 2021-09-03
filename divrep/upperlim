@@ -4,6 +4,7 @@ use Math::GMP;
 use Math::Prime::Util qw{ is_prime next_prime divisors factor_exp };
 use Algorithm::Loops qw{ NextPermuteNum NestedLoops };
 use POSIX qw{ :sys_wait_h };
+use Memoize;
 use lib 'lib';
 use Type;
 
@@ -56,6 +57,7 @@ $| = 1;
 my($n, $f) = map MBI($_), @ARGV;
 $0 = "upperlim($n $f)";
 $_ = ston($_) for ($opt_n, $opt_x);
+$opt_p = [ split /,/, $opt_p ];
 my $type = Type->new($typename);
 
 my $zone = MBI(1);
@@ -139,25 +141,35 @@ sub find_mods {
         my($px, $rest) = split /=/, $_;
         $suppress{$px}{$_} = 1 for split /,/, $rest;
     }
+    my @power = do {
+        my %power = map +($_ => 1), @$opt_p;
+        sort { $a <=> $b } keys %power;
+    };
 
     my @mods;
     for my $p (@$opt_q) {
-        my $px = $p ** $opt_p;
+        my @px = map $p ** $_, @power;
         if ($type->name eq 'tauseq') {
             for my $i (@$opt_i) {
                 if (($i % $p) != 0) {
                     # to make a p^x factor we need d == -n/i (mod p^x)
-                    my $m = (-$n * modinv($i, $px)) % $px;
-                    next if $suppress{$px}{$m};
-                    $mods[$i]{$p} = "$m";
+                    for (0 .. $#power) {
+                        my($x, $px) = ($power[$_], $px[$_]);
+                        my $m = (-$n * modinv($i, $px)) % $px;
+                        last if $suppress{$px}{$m};
+                        $mods[$i]{$x}{$p} = "$m";
+                    }
                 }
             }
         } elsif ($type->name eq 'addseq') {
             for my $i (@$opt_i) {
                 # to make a p^x factor we need d == -ni (mod p^x)
-                my $m = (-$n * $i) % $px;
-                next if $suppress{$px}{$m};
-                $mods[$i]{$p} = "$m";
+                for (0 .. $#power) {
+                    my($x, $px) = ($power[$_], $px[$_]);
+                    my $m = (-$n * $i) % $px;
+                    last if $suppress{$px}{$m};
+                    $mods[$i]{$x}{$p} = "$m";
+                }
             }
         } else {
             # There are no forced squares for semip()
@@ -169,19 +181,32 @@ use Data::Dumper; warn Dumper(\@mods);
 }
 
 sub fill_perms_r {
-    my($perms, $avail, $cur, $i, $seen, $spare) = @_;
-    if ($i == @$avail) {
-        push @$perms, $cur;
+    my($perms, $order, $cur, $i, $offset, $seen, $spare) = @_;
+    if ($offset == $order->[$i][2]) {
+        ++$i;
+        $offset = 0;
+    }
+    my @copy = @$cur;
+    my($prev, @last);
+    if ($offset) {
+        @last = @{ pop @copy };
+        $prev = $last[-1];
+    }
+
+    if ($i == @$order) {
+        push @$perms, $cur unless $spare;
         return;
     }
-    if ($spare) {
-        fill_perms_r($perms, $avail, [ @$cur, 0 ], $i + 1, $seen, $spare - 1);
-        return if @$avail - $i == $spare;
+    if ($spare && (!$offset || $prev == 0)) {
+        fill_perms_r($perms, $order, [ @copy, [ @last, 0 ] ],
+                $i, $offset + 1, $seen, $spare - 1);
     }
-    for my $mod (@{ $avail->[$i] }) {
+    for my $mod (@{ $order->[$i][3] }) {
         next if $seen->{$mod};
+        next if $offset && $prev > $mod;
         local $seen->{$mod} = 1;
-        fill_perms_r($perms, $avail, [ @$cur, $mod ], $i + 1, $seen, $spare);
+        fill_perms_r($perms, $order, [ @copy, [ @last, $mod ] ],
+                $i, $offset + 1, $seen, $spare);
     }
     return;
 }
@@ -190,35 +215,49 @@ sub find_perms {
     my($type) = @_;
     my @perms;
 
-    my $target = @$opt_i;
+    my $target = @$opt_i * @$opt_p;
     my $source = @$opt_q;
+    my $powers = _group($opt_p);
+    my @order = sort {
+        comb(scalar @{ $a->[3] }, $a->[2])
+        <=>
+        comb(scalar @{ $b->[3] }, $b->[2])
+    } map {
+        my $i = $_;
+        map {
+            my($power, $count) = ($_, $powers->{$_});
+            [ $i, $power, $count, [ sort keys %{ $mods->[$i]{$power} } ] ];
+        } keys %$powers;
+    } @$opt_i;
+
     my $spare = ($target > $source) ? $target - $source : 0;
     $spare = $opt_e if $spare < $opt_e;
-    my @iorder = sort {
-        keys %{ $mods->[$a] } <=> keys %{ $mods->[$b] }
-    } @$opt_i;
-    my @avail = map [ sort { $a <=> $b } keys %{ $mods->[$_] } ], @iorder;
-    fill_perms_r(\@perms, \@avail, [], 0, {}, $spare);
+    fill_perms_r(\@perms, \@order, [], 0, 0, {}, $spare);
     my $i = 0;
     return [ map {
         my $p = $_;
-        my @none;
-        my @mods = map {
-            my $q = $p->[$_];
-            $q
-                ? [ MBI($q), $mods->[$_]{$q} ]
-                : do { push @none, $iorder[$_]; () }
-        } 0 .. $target - 1;
+        my(%none, @mods);
+        for (0 .. $#order) {
+            my($i, $x, $count) = @{ $order[$_] };
+            for my $mod (@{ $p->[$_] }) {
+                if ($mod) {
+                    push @mods, [ MBI($mod), $x, $mods->[$i]{$x}{$mod} ];
+                } else {
+                    ++$none{$i};
+                }
+            }
+        }
+        my @none = sort { $none{$b} <=> $none{$a} } keys %none;
         $opt_fq ? do {
             my $mm = sprintf '-mm%s/', join ',',
-                    map sprintf('%s=%s', $_->[0] ** $opt_p, $_->[1]), @mods;
+                    map sprintf('%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods;
             map Runnable->new(
                 $type, $i++, [ $mm . $_ ], \@none
             ), find_mm(scalar(@mods), $opt_p, $sample);
         } : Runnable->new(
             $type,
             $i++,
-            [ map sprintf('-m%s=%s', $_->[0] ** $opt_p, $_->[1]), @mods ],
+            [ map sprintf('-m%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods ],
             \@none,
         );
     } @perms ];
@@ -226,6 +265,7 @@ sub find_perms {
 
 sub find_mm {
     my($count, $power, $sample) = @_;
+    die "FIXME: find_mm needs to cope with an array of powers";
     return +("0" x $count) if $sample;
     return NestedLoops([ ([0 .. $power - 1]) x $count ], sub {
         join '', @_;
@@ -257,6 +297,25 @@ sub ntos {
     return $n;
 }
 
+sub _group {
+    my($array) = @_;
+    my %result;
+    ++$result{$_} for @$array;
+    return \%result;
+}
+
+BEGIN {
+    memoize('comb');
+    sub comb {
+        my($n, $k) = @_;
+        return ($k == 0) ? 1
+                : ($k < 0 || $k > $n) ? 0
+                : ($k == 1) ? $n
+                : ($k + $k > $n) ? comb($n, $n - $k)
+                : comb($n - 1, $k - 1) + comb($n - 1, $k);
+    }
+}
+
 package Runnable {
     sub new {
         my($class, $type, $id, $sqmods, $none) = @_;
@@ -273,6 +332,7 @@ package Runnable {
         # disallowed primes
         for my $i (@$none) {
             for my $p (@$opt_nq) {
+# FIXME: $mods no longer looks like this
                 my $mod = $mods->[$i]{$p} // next;
                 push @$sqmods, sprintf '-m%s!%s', $p ** $opt_p, $mod;
             }
@@ -281,7 +341,9 @@ package Runnable {
             type => $type,
             id => $id,
             mods => $sqmods,
-            ts => join(',', @early, keys(%none), @late),
+# FIXME: we must retain @$none order
+            #ts => join(',', @early, keys(%none), @late),
+            ts => join(',', @early, @$none, @late),
         }, $class;
     }
     sub id { shift->{id} }
