@@ -8,6 +8,7 @@ my %types = (
     t => 'Type::TauSeq',
     a => 'Type::AddSeq',
     s => 'Type::Semip',
+    o => 'Type::OneSeq',
 );
 my %typename = reverse %types;
 

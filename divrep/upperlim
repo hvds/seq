@@ -171,6 +171,16 @@ sub find_mods {
                     $mods[$i]{$x}{$p} = "$m";
                 }
             }
+        } elsif ($type->name eq 'oneseq') {
+            for my $i (@$opt_i) {
+                # to make a p^x factor we need d == -i (mod p^x)
+                for (0 .. $#power) {
+                    my($x, $px) = ($power[$_], $px[$_]);
+                    my $m = (-$i) % $px;
+                    last if $suppress{$px}{$m};
+                    $mods[$i]{$x}{$p} = "$m";
+                }
+            }
         } else {
             # There are no forced squares for semip()
             die "No upperlim strategy for type @{[ $type->name ]}\n";
