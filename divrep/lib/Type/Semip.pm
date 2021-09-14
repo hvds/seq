@@ -3,18 +3,10 @@ use strict;
 use warnings;
 
 use parent qw{ Type };
-use Math::Prime::Util qw{ factor_exp next_prime };
+use Math::Prime::Util qw{ factor_exp next_prime is_semiprime };
 use Memoize;
 
 sub init { return }
-
-# Count number of primes dividing n (with multiplicity), given factorization
-sub nprimes {
-    my($px) = @_;
-    my $sum = 0;
-    $sum += $_->[1] for @$px;
-    return $sum;
-}
 
 sub name { 'semip' }
 sub dbname { 'semip' }
@@ -46,16 +38,16 @@ sub func_value {
     return $d + $k * $n;
 }
 
-sub func_name { 'nprimes' }
+sub func_name { 'is_semiprime' }
 
-sub func { nprimes([ factor_exp($_[1]) ]) }
+sub func { is_semiprime($_[1]) }
 
-sub func_target { 2 }
+sub func_target { 1 }
 
 # No result > m can be divisible by m if m is a semiprime
 sub apply_m {
     my($self, $m, $fm) = @_;
-    if (nprimes($fm) == 2) {
+    if (is_semiprime($m)) {
         my $c = $self->c;
         my $n = $self->n;
         for (0 .. $self->f - 1) {
@@ -74,7 +66,7 @@ sub to_testf {
 sub test_target {
     my($self, $k) = @_;
     my $n = $self->n;
-    return [ "$k", sub { nprimes([ factor_exp($_[0] + $n * $k) ]) == 2 } ];
+    return [ "$k", sub { is_semiprime($_[0] + $n * $k) } ];
 }
 
 1;
