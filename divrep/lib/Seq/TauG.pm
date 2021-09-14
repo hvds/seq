@@ -65,7 +65,7 @@ sub max_known {
     my($class, $db) = @_;
     # Note, we start with n=2
     return $db->resultset($TABLE)->get_column('n')->max
-            || 1;
+            || ($db->type->smallest - 1);
 }
 
 sub range {

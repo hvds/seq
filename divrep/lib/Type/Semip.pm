@@ -19,6 +19,8 @@ sub nprimes {
 sub name { 'semip' }
 sub dbname { 'semip' }
 
+sub smallest { 1 }
+
 memoize('gprio', NORMALIZER => sub { "$_[1]" });
 sub gprio {
     my($self, $n) = @_;

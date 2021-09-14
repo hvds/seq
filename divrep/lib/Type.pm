@@ -92,7 +92,7 @@ sub check_mult {
 for my $method (qw{
     name dbname func_value func_name func func_target
     apply_m to_testf test_target
-    gprio ming maxg
+    gprio ming maxg smallest
 }) {
     no strict 'refs';
     *$method = sub { die "$_[0] must provide implementation of sub $method" };

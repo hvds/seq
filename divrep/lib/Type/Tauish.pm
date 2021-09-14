@@ -15,6 +15,12 @@ sub func_name { 'tau' }
 sub func { tau($_[1]) }
 sub func_target { $_[0]->{target} }
 
+sub smallest {
+    # For TauSeq, we disallow 1 since it is not well defined; for AddSeq
+    # and OneSeq we disallow it since we only want even n.
+    return 2;
+}
+
 sub apply_m {
     my($self, $m, $fm) = @_;
     my $c = $self->c;
