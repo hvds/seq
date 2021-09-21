@@ -248,12 +248,7 @@ sub finalize {
             ^ 211 \s+ Sequence \s+ (\d+) :
             \s+ (\d+) \s+ = \s+ \Q$funcname\E
         }x or return $self->failed("Can't parse 211 result: '$_'");
-        if ($s == 0) {
-            $best = 1;
-            $tau = $t;
-        } else {
-            ++$best if $best == $s && $tau == $t;
-        }
+        $best = $s + 1 if $type->func_matches($s, $t);
     }
     for (@{ $line{311} // [] }) {
         $fix_power = 1;

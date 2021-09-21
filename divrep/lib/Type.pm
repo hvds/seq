@@ -123,4 +123,10 @@ sub fprio {
     return $prio;
 }
 
+# Most types have constant func_target, but not all
+sub func_matches {
+    my($self, $k, $result) = @_;
+    $self->func_target($k) == $result;
+}
+
 1;

@@ -385,12 +385,11 @@ sub report_seq {
     my($n, $f, $d, $first) = @_;
 
     my $good = 1;
-    my $target = $type->func_target;
     my @result;
     for (my $i = 0; ($i <= $f) || $good; ++$i) {
         my $v = $type->func_value($n, $i, $d);
         my $result = [ $i, $type->func($v), $v, pf($v) ];
-        $good = 0 unless $result->[1] == $target;
+        $good = 0 unless $type->func_matches($i, $result->[1]);
         push @result, $result;
     }
 
