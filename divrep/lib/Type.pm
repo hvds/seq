@@ -9,6 +9,8 @@ my %types = (
     a => 'Type::AddSeq',
     s => 'Type::Semip',
     o => 'Type::OneSeq',
+    d => 'Type::AscDPrime',
+    n => 'Type::AscNPrime',
 );
 my %typename = reverse %types;
 
