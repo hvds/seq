@@ -48,6 +48,7 @@ void report(int i) {
 
 void init(void) {
     clock_tick = sysconf(_SC_CLK_TCK);
+    setvbuf(stdout, (char*)NULL, _IONBF, 0);
 
     point = new_loclist(MAXN);
     list_set(point, 0, (loc_t){ 0, 0 });
