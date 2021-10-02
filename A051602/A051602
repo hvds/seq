@@ -44,7 +44,8 @@ my $minspan = [ 1, 1 ];
 my $maxspan = [ 1, 1 ];
 my $visit = 0;
 try_next($n, \%start);
-print "$n $start{best} [ @$minspan ] [ @$maxspan ] ($visit)\n";
+printf "%s %s %sx%s %sx%s (%s)\n",
+    $n, $start{best}, (map $_ + 1, @$minspan, @$maxspan), $visit;
 exit;
 
 sub _loc {
@@ -97,7 +98,7 @@ die("clash on $loc") if defined($grid{$loc}) || defined($gridp{$loc});
         if ($squares > $parent->{best}) {
             $minspan = [ $spanx, $spany ];
             $maxspan = [ $spanx, $spany ];
-            print "[ $spanx $spany ] ";
+            print "${spanx}x$spany ";
             _report($i, $squares);
         } else {
             my $new = 0;
@@ -105,7 +106,7 @@ die("clash on $loc") if defined($grid{$loc}) || defined($gridp{$loc});
             ++$new, $minspan->[1] = $spany if $minspan->[1] > $spany;
             ++$new, $maxspan->[0] = $spanx if $maxspan->[0] < $spanx;
             ++$new, $maxspan->[1] = $spany if $maxspan->[1] < $spany;
-            print("[ $spanx $spany ] "), _report($i, $squares) if $new;
+            print("${spanx}x$spany "), _report($i, $squares) if $new;
         }
         $parent->{best} = $squares;
     }

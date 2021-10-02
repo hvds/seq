@@ -37,7 +37,7 @@ void report(int i) {
     cx_t *cx = &context[i];
     loc_t span = loc_diff(cx->span[0], cx->span[1]);
 
-    printf("[ %d %d ] ", span.x + 1, span.y + 1);
+    printf("%dx%d ", span.x + 1, span.y + 1);
     printf("%d:", cx->squares);
     for (int j = 0; j < i; ++j) {
         loc_t p = list_get(point, j);
@@ -47,9 +47,6 @@ void report(int i) {
 }
 
 void init(void) {
-    clock_tick = sysconf(_SC_CLK_TCK);
-    setvbuf(stdout, (char*)NULL, _IONBF, 0);
-
     point = new_loclist(MAXN);
     list_set(point, 0, (loc_t){ 0, 0 });
     list_set(point, 1, (loc_t){ 0, 1 });
@@ -267,6 +264,9 @@ void try_next(int points) {
 }
 
 int main(int argc, char** argv) {
+    clock_tick = sysconf(_SC_CLK_TCK);
+    setvbuf(stdout, (char*)NULL, _IONBF, 0);
+
     if (argc != 2) {
         fprintf(stderr, "Usage: try <n>\n");
         return 1;
@@ -277,17 +277,17 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (n < 4) {
-        printf("%d 0 (0)\n", n);
+        printf("%d 0 (0) %.2fs\n", n, timing());
         return 0;
     }
     if (n == 4) {
-        printf("4 1 [ 2 2 ] [ 2 2 ] (0)\n");
+        printf("4 1 2x2 2x2 (0) %.2fs\n", timing());
         return 0;
     }
 
     init();
     try_next(4);
-    printf("%d %d [ %d %d ] [ %d %d ] (%lu) %.2fs\n",
+    printf("%d %d %dx%d %dx%d (%lu) %.2fs\n",
         n, context[4].best, minspan.x + 1, minspan.y + 1,
         maxspan.x + 1, maxspan.y + 1, visit, timing()
     );
