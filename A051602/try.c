@@ -179,6 +179,8 @@ void try_with(int points, int new) {
         free_grid(ng);
     ng = grid[points + new] = dup_grid(og);
 
+    ncx->span[0] = ocx->span[0];
+    ncx->span[1] = ocx->span[1];
     for (int i = points; i < points + new; ++i) {
         loc_t pi = point[i];
         set_grid(ng, pi.x, pi.y, i + 1);
