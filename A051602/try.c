@@ -57,8 +57,7 @@ void init(void) {
         1, 1,
         { { 0, 0 }, { 1, 1 } },
         { 4, 1, 0 },
-        /* FIXME: try2[] needs to start [1, 0, 0] but use symmetries */
-        { 3, 2, 0 }
+        { 1, 0, 0 }
     };
 
     minspan = (loc_t){ 1, 1 };
