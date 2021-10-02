@@ -7,7 +7,6 @@
 #include <unistd.h>
 
 #include "loc.h"
-#include "grid.h"
 
 #define MAXN 64
 
@@ -22,8 +21,7 @@ typedef struct {
 } cx_t;
 
 int n;
-loc_t point[MAXN];
-grid_t *grid[MAXN];
+loclist_t *point;
 cx_t context[MAXN];
 loc_t minspan;
 loc_t maxspan;
@@ -41,101 +39,113 @@ void report(int i) {
 
     printf("[ %d %d ] ", span.x + 1, span.y + 1);
     printf("%d:", cx->squares);
-    for (int j = 0; j < i; ++j)
-        printf(" %d:%d", point[j].x, point[j].y);
+    for (int j = 0; j < i; ++j) {
+        loc_t p = list_get(point, j);
+        printf(" %d:%d", p.x, p.y);
+    }
     printf("\n");
 }
 
 void init(void) {
     clock_tick = sysconf(_SC_CLK_TCK);
 
-    /* FIXME: try2[] needs to start [1, 0, 0] but use symmetries */
-    cx_t start = { 1, 1, { { 0, 0 }, { 1, 1 } }, { 4, 1, 0 }, { 3, 2, 0 } };
-    point[0].x = 0; point[0].y = 0;
-    point[1].x = 0; point[1].y = 1;
-    point[2].x = 1; point[2].y = 0;
-    point[3].x = 1; point[3].y = 1;
-    grid[4] = new_grid(0, 1, 0, 1);
-    for (int i = 0; i < 4; ++i)
-        set_grid(grid[4], point[i].x, point[i].y, i + 1);
-    memcpy(&context[4], &start, sizeof(cx_t));
-    minspan.x = 1; minspan.y = 1;
-    maxspan.x = 1; maxspan.y = 1;
+    point = new_loclist(MAXN);
+    list_set(point, 0, (loc_t){ 0, 0 });
+    list_set(point, 1, (loc_t){ 0, 1 });
+    list_set(point, 2, (loc_t){ 1, 0 });
+    list_set(point, 3, (loc_t){ 1, 1 });
+
+    context[4] = (cx_t){
+        1, 1,
+        { { 0, 0 }, { 1, 1 } },
+        { 4, 1, 0 },
+        /* FIXME: try2[] needs to start [1, 0, 0] but use symmetries */
+        { 3, 2, 0 }
+    };
+
+    minspan = (loc_t){ 1, 1 };
+    maxspan = (loc_t){ 1, 1 };
     visit = 0UL;
+}
+
+void finish(void) {
+    free_loclist(point);
 }
 
 void try_next(int depth);
 
 int try_test2(int points, int try2[3]) {
-    loc_t pi = point[try2[0]];
-    loc_t pj = point[try2[1]];
+    loc_t pi = list_get(point, try2[0]);
+    loc_t pj = list_get(point, try2[1]);
     int dir = try2[2];
-    loc_t *pk = &point[points];
-    loc_t *pl = &point[points + 1];
-    loc_t diff;
+    loc_t pk, pl, diff;
 
     diff = loc_diff(pi, pj);
     if (dir) {
-        *pk = loc_rot90(pi, diff);
-        *pl = loc_rot90(pj, diff);
+        pk = loc_rot90(pi, diff);
+        pl = loc_rot90(pj, diff);
     } else {
-        *pk = loc_rot270(pi, diff);
-        *pl = loc_rot270(pj, diff);
+        pk = loc_rot270(pi, diff);
+        pl = loc_rot270(pj, diff);
     }
-    if (get_grid(grid[points], pk->x, pk->y) || get_grid(grid[points], pl->x, pl->y))
+    if (list_exists_lim(point, points, pk)
+        || list_exists_lim(point, points, pl)
+    )
         return 0;
+    list_set(point, points, pk);
+    list_set(point, points + 1, pl);
     return 1;
 }
 
 int try_test3(int points, int try3[3]) {
-    loc_t pi = point[try3[0]];
-    loc_t pj = point[try3[1]];
-    loc_t pk = point[try3[2]];
-    loc_t *pl = &point[points];
-    loc_t diff;
+    loc_t pi = list_get(point, try3[0]);
+    loc_t pj = list_get(point, try3[1]);
+    loc_t pk = list_get(point, try3[2]);
+    loc_t pl, diff;
 
     diff = loc_diff(pi, pj);
     if (loc_eq(pk, loc_rot90(pi, diff))) {
-        *pl = loc_rot90(pj, diff);
+        pl = loc_rot90(pj, diff);
     } else if (loc_eq(pk, loc_rot90(pj, diff))) {
-        *pl = loc_rot90(pi, diff);
+        pl = loc_rot90(pi, diff);
     } else if (loc_eq(pk, loc_rot270(pi, diff))) {
-        *pl = loc_rot270(pj, diff);
+        pl = loc_rot270(pj, diff);
     } else if (loc_eq(pk, loc_rot270(pj, diff))) {
-        *pl = loc_rot270(pi, diff);
+        pl = loc_rot270(pi, diff);
     } else {
         diff = loc_diff(pi, pk);
         if (loc_eq(pj, loc_rot90(pk, diff))) {
-            *pl = loc_rot90(pi, diff);
+            pl = loc_rot90(pi, diff);
         } else if (loc_eq(pj, loc_rot270(pk, diff))) {
-            *pl = loc_rot270(pi, diff);
+            pl = loc_rot270(pi, diff);
         } else {
             return 0;
         }
     }
-    if (get_grid(grid[points], pl->x, pl->y))
+    if (list_exists_lim(point, points, pl))
         return 0;
+    list_set(point, points, pl);
     return 1;
 }
 
-int find_squares(grid_t *g, int i) {
-    loc_t pi = point[i];
+int find_squares(int i) {
+    loc_t pi = list_get(point, i);
     int count = 0;
 
     for (int j = 0; j < i; ++j) {
-        loc_t pj = point[j];
+        loc_t pj = list_get(point, j);
         loc_t diff = loc_diff(pi, pj);
         loc_t pk = loc_rot90(pi, diff);
         loc_t pl = loc_rot90(pj, diff);
-        if (get_grid(g, pk.x, pk.y) > j
-            && get_grid(g, pl.x, pl.y)
+        if (list_find_lim(point, i, pk) > j
+           && list_exists_lim(point, i, pl)
         )
             ++count;
 
         pk = loc_rot270(pi, diff);
         pl = loc_rot270(pj, diff);
-        if (get_grid(g, pk.x, pk.y) > j
-            && get_grid(g, pl.x, pl.y)
+        if (list_find_lim(point, i, pk) > j
+           && list_exists_lim(point, i, pl)
         )
             ++count;
     }
@@ -145,19 +155,12 @@ int find_squares(grid_t *g, int i) {
 void try_with(int points, int new) {
     cx_t *ocx = &context[points];
     cx_t *ncx = &context[points + new];
-    grid_t *og = grid[points];
-    grid_t *ng = grid[points + new];
-
-    if (ng)
-        free_grid(ng);
-    ng = grid[points + new] = dup_grid(og);
 
     ncx->span[0] = ocx->span[0];
     ncx->span[1] = ocx->span[1];
     for (int i = points; i < points + new; ++i) {
-        loc_t pi = point[i];
-        set_grid(ng, pi.x, pi.y, i + 1);
-        ncx->squares += find_squares(ng, i);
+        loc_t pi = list_get(point, i);
+        ncx->squares += find_squares(i);
         if (ncx->span[0].x > pi.x) ncx->span[0].x = pi.x;
         if (ncx->span[0].y > pi.y) ncx->span[0].y = pi.y;
         if (ncx->span[1].x < pi.x) ncx->span[1].x = pi.x;
@@ -192,8 +195,7 @@ void try_next(int points) {
     cx_t *cx = &context[points];
     cx_t *cx1 = &context[points + 1];
     cx_t *cx2 = &context[points + 2];
-    grid_t *og = grid[points];
-    grid_t *seen = new_grid(og->xmin, og->xmax, og->ymin, og->ymax);
+    loclist_t *seen = new_loclist(10); /* will grow as needed */
 
     ++visit;
 
@@ -207,8 +209,9 @@ void try_next(int points) {
         while (cx2->try2[0] < points) {
             if (try_test2(points, cx2->try2)) {
                 try_with(points, 2);
-                set_grid(seen, point[points].x, point[points].y, 1);
-                set_grid(seen, point[points + 1].x, point[points + 1].y, 1);
+                /* FIXME: do we need to deduplicate here? */
+                list_append(seen, list_get(point, points));
+                list_append(seen, list_get(point, points + 1));
                 cx2->squares = cx->squares;
             }
             if (cx2->try2[2] == 0) {
@@ -237,10 +240,10 @@ void try_next(int points) {
         }
         while (cx1->try3[0] < points) {
             if (try_test3(points, cx1->try3)
-                && !get_grid(seen, point[points].x, point[points].y)
+                && !list_exists(seen, list_get(point, points))
             ) {
                 try_with(points, 1);
-                set_grid(seen, point[points].x, point[points].y, 1);
+                list_append(seen, list_get(point, points));
                 cx1->squares = cx->squares;
             }
             ++cx1->try3[2];
@@ -258,6 +261,7 @@ void try_next(int points) {
             cx->best = cx1->best;
         }
     }
+    free_loclist(seen);
     return;
 }
 
@@ -286,5 +290,6 @@ int main(int argc, char** argv) {
         n, context[4].best, minspan.x + 1, minspan.y + 1,
         maxspan.x + 1, maxspan.y + 1, visit, timing()
     );
+    finish();
     return 0;
 }
