@@ -197,50 +197,15 @@ void try_next(int points) {
 
     ++visit;
 
-    /* FIXME: we must try3() first, and can suppress try2() attempts for
-     * any point seen during that phase */
-    if (points + 2 <= n) {
-        /* Try to extend 2 points into a square, two ways. Any of the points
-         * tried here need not be re-tried in the following section.
-         */
-        memcpy(cx2, cx, sizeof(cx_t));
-        while (cx2->try2[0] < points) {
-            if (try_test2(points, cx2->try2)) {
-                try_with(points, 2);
-                /* FIXME: do we need to deduplicate here? */
-                list_append(seen, list_get(point, points));
-                list_append(seen, list_get(point, points + 1));
-                cx2->squares = cx->squares;
-            }
-            if (cx2->try2[2] == 0) {
-                cx2->try2[2] = 1;
-            } else {
-                cx2->try2[2] = 0;
-                ++cx2->try2[1];
-                if (cx2->try2[1] == cx2->try2[0]) {
-                    cx2->try2[1] = 0;
-                    ++cx2->try2[0];
-                }
-            }
-        }
-
-        if (cx->best < cx2->best) {
-            cx->best = cx2->best;
-        }
-    }
-
     if (points + 1 <= n) {
         /* Try to extend 3 points into a square. */
         memcpy(cx1, cx, sizeof(cx_t));
-        if (points + 2 <= n) {
-            /* propagate progress made */
-            memcpy(&cx1->try2, &cx2->try2, sizeof(cx1->try2));
-        }
         while (cx1->try3[0] < points) {
             if (try_test3(points, cx1->try3)
                 && !list_exists(seen, list_get(point, points))
             ) {
                 try_with(points, 1);
+                /* FIXME: do we need to deduplicate here? */
                 list_append(seen, list_get(point, points));
                 cx1->squares = cx->squares;
             }
@@ -257,6 +222,40 @@ void try_next(int points) {
 
         if (cx->best < cx1->best) {
             cx->best = cx1->best;
+        }
+    }
+
+    if (points + 2 <= n) {
+        /* Try to extend 2 points into a square, two ways. Any point
+         * already tried on its own in the previous section need not
+         * be tried again.
+         */
+        memcpy(cx2, cx, sizeof(cx_t));
+        /* propagate progress made */
+        memcpy(&cx2->try3, &cx1->try3, sizeof(cx2->try3));
+
+        while (cx2->try2[0] < points) {
+            if (try_test2(points, cx2->try2)
+                && !list_exists(seen, list_get(point, points))
+                && !list_exists(seen, list_get(point, points + 1))
+            ) {
+                try_with(points, 2);
+                cx2->squares = cx->squares;
+            }
+            if (cx2->try2[2] == 0) {
+                cx2->try2[2] = 1;
+            } else {
+                cx2->try2[2] = 0;
+                ++cx2->try2[1];
+                if (cx2->try2[1] == cx2->try2[0]) {
+                    cx2->try2[1] = 0;
+                    ++cx2->try2[0];
+                }
+            }
+        }
+
+        if (cx->best < cx2->best) {
+            cx->best = cx2->best;
         }
     }
     free_loclist(seen);

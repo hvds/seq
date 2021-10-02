@@ -122,25 +122,6 @@ sub try_next {
     my $points = $child->{points};
     my %seen;
 
-    if ($points + 2 <= $max) {
-        # try to extend 2 points into a square, two ways
-        my $try2 = $child->{try2};
-        while ($try2->[0] < $points) {
-            my $pair = try2(@point[@$try2[0, 1]], $try2->[2]);
-#use Data::Dumper; warn Dumper({ t2 => $try2, r => $pair });
-            if ($pair) {
-                try_with($max, $child, $pair);
-                $seen{_loc($_)} = 1 for @$pair;
-            }
-            $try2->[2] = 1, next if $try2->[2] == 0;
-            $try2->[2] = 0;
-            ++$try2->[1];
-            next if $try2->[1] < $try2->[0];
-            $try2->[1] = 0;
-            ++$try2->[0];
-        }
-    }
-
     if ($points + 1 <= $max) {
         # try to extend 3 points into a square
         my $try3 = $child->{try3};
@@ -157,6 +138,24 @@ sub try_next {
             next if $try3->[1] < $try3->[0];
             $try3->[1] = 1;
             ++$try3->[0];
+        }
+    }
+
+    if ($points + 2 <= $max) {
+        # try to extend 2 points into a square, two ways
+        my $try2 = $child->{try2};
+        while ($try2->[0] < $points) {
+            my $pair = try2(@point[@$try2[0, 1]], $try2->[2]);
+#use Data::Dumper; warn Dumper({ t2 => $try2, r => $pair });
+            if ($pair && !$seen{_loc($pair->[0])} && !$seen{_loc($pair->[1])}) {
+                try_with($max, $child, $pair);
+            }
+            $try2->[2] = 1, next if $try2->[2] == 0;
+            $try2->[2] = 0;
+            ++$try2->[1];
+            next if $try2->[1] < $try2->[0];
+            $try2->[1] = 0;
+            ++$try2->[0];
         }
     }
 
