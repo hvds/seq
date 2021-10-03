@@ -6,11 +6,11 @@
 /* FIXME: move to a header */
 #define MAXN 64
 
-/* We're not handling order-4 symmetries for now
+/* We're not handling order-4 symmetries for now (rot90/rot270) */
 /*
-    #define ORDER 7
-    sym_t order[ORDER] = { xY, Xy, XY, yx, yX, Yx, YX };
-*/
+ *  #define ORDER 7
+ *  sym_t order[ORDER] = { xY, Xy, XY, yx, yX, Yx, YX };
+ */
 #define ORDER 5
 sym_t order[ORDER] = { xY, Xy, XY, yx, YX };
 
@@ -19,13 +19,6 @@ sym_t order[ORDER] = { xY, Xy, XY, yx, YX };
 */
 static bool is_transpose(sym_t s) {
     return (s & 4) ? 1 : 0;
-}
-
-/*
-    Return true if this symmetry is a reflection.
-*/
-static bool is_reflect(sym_t s) {
-    return (s == xY || s == Xy || s == yx || s == YX);
 }
 
 /*
@@ -71,6 +64,10 @@ sym_t sym_check(loclist_t *ll, loc_t span, int size) {
         for (int j = 0; j < remain; ++j) {
             loc_t this = copy[j];
             loc_t that = sym_transloc(si, span, this);
+
+            /* We only deal with order-2 symmetries here, so each point
+             * is either its own pair, or has a partner that we match up
+             */
             if (loc_eq(this, that))
                 continue;
             for (int k = j + 1; k < remain; ++k) {
@@ -110,7 +107,9 @@ bool sym_best(sym_t s, loc_t span, loc_t p1) {
 
 /*
     Return TRUE if this pair of points is canonical under the known
-    symmetries
+    symmetries.
+    We first order them so that p1 < p2, then (assuming p1' < p2') require
+    that p1' < p1 || (p1' == p1 && p2' <= p2).
 */
 bool sym_best2(sym_t s, loc_t span, loc_t p1, loc_t p2) {
     loc_t t;

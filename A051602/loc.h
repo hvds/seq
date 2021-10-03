@@ -8,6 +8,16 @@ typedef struct {
     int y;
 } loc_t;
 
+/* We use two different loclists: the global point[], which is initialized
+ * to be big enough for all points, and the per-context seen[], which
+ * grows as needed.
+ * For point[], knowledge of the recursion level is used to determine
+ * which entries are relevant; this is mostly captured in the variable
+ * 'points', so the *_lim() functions below are used to interrogate it.
+ * For seen[], new points are appended, and seen->used tracks how many
+ * entries it currently has. The bare (not *_lim()) functions are used
+ * to interrogate them.
+ */
 typedef struct {
     int size;
     int used;
@@ -51,6 +61,7 @@ static int loc_eq(loc_t s1, loc_t s2) {
     return s1.x == s2.x && s1.y == s2.y;
 }
 
+/* Primarily used for choosing one of a symmetric pair as canonical */
 static int loc_lt(loc_t s1, loc_t s2) {
     return s1.x < s2.x || (s1.x == s2.x && s1.y < s2.y);
 }
@@ -72,6 +83,7 @@ static loc_t list_get(loclist_t *ll, int i) {
     return ll->list[i];
 }
 
+/* Return the index of this point in the loclist, or -1 */
 static int list_find_lim(loclist_t *ll, int lim, loc_t val) {
     for (int i = 0; i < lim; ++i)
         if (loc_eq(ll->list[i], val))
@@ -83,6 +95,7 @@ static int list_find(loclist_t *ll, loc_t val) {
     return list_find_lim(ll, ll->used, val);
 }
 
+/* Return TRUE if this point is in the loclist, else FALSE */
 static int list_exists_lim(loclist_t *ll, int lim, loc_t val) {
     for (int i = 0; i < lim; ++i)
         if (loc_eq(ll->list[i], val))
