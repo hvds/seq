@@ -19,6 +19,7 @@ typedef struct {
     loc_t span[2];
     int try3[3];
     int try2[3];
+    loclist_t *seen;
 } cx_t;
 
 int n;
@@ -48,6 +49,8 @@ void report(int i) {
 }
 
 void init(void) {
+    loclist_t *first_seen = new_loclist(10);
+
     point = new_loclist(MAXN);
     list_set(point, 0, (loc_t){ 0, 0 });
     list_set(point, 1, (loc_t){ 0, 1 });
@@ -58,7 +61,8 @@ void init(void) {
         1, 1,
         { { 0, 0 }, { 1, 1 } },
         { 4, 1, 0 },
-        { 1, 0, 0 }
+        { 1, 0, 0 },
+        first_seen
     };
 
     minspan = (loc_t){ 1, 1 };
@@ -68,6 +72,7 @@ void init(void) {
 
 void finish(void) {
     free_loclist(point);
+    free_loclist(context[4].seen);
 }
 
 void try_next(int depth);
@@ -193,7 +198,7 @@ void try_next(int points) {
     cx_t *cx = &context[points];
     cx_t *cx1 = &context[points + 1];
     cx_t *cx2 = &context[points + 2];
-    loclist_t *seen = new_loclist(10); /* will grow as needed */
+    loclist_t *seen = dup_loclist(cx->seen);
     loc_t span = loc_sum(cx->span[0], cx->span[1]);
     sym_t sym = sym_check(point, span, points);
 
@@ -202,6 +207,7 @@ void try_next(int points) {
     if (points + 1 <= n) {
         /* Try to extend 3 points into a square. */
         memcpy(cx1, cx, sizeof(cx_t));
+        cx1->seen = seen;
         while (cx1->try3[0] < points) {
             if (try_test3(points, cx1->try3)
                 && !list_exists(seen, list_get(point, points))
@@ -237,6 +243,7 @@ void try_next(int points) {
         memcpy(cx2, cx, sizeof(cx_t));
         /* propagate progress made */
         memcpy(&cx2->try3, &cx1->try3, sizeof(cx2->try3));
+        cx2->seen = seen;
 
         while (cx2->try2[0] < points) {
             if (try_test2(points, cx2->try2)

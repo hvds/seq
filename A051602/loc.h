@@ -17,6 +17,7 @@ typedef struct {
 loclist_t *new_loclist(int size);
 void free_loclist(loclist_t *ll);
 void resize_loclist(loclist_t *ll, int size);
+loclist_t *dup_loclist(loclist_t *ll);
 
 static loc_t loc_diff(loc_t s1, loc_t s2) {
     loc_t d;
