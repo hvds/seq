@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include "loc.h"
+#include "sym.h"
 
 #define MAXN 64
 
@@ -193,6 +194,8 @@ void try_next(int points) {
     cx_t *cx1 = &context[points + 1];
     cx_t *cx2 = &context[points + 2];
     loclist_t *seen = new_loclist(10); /* will grow as needed */
+    loc_t span = loc_sum(cx->span[0], cx->span[1]);
+    sym_t sym = sym_check(point, span, points);
 
     ++visit;
 
@@ -202,9 +205,11 @@ void try_next(int points) {
         while (cx1->try3[0] < points) {
             if (try_test3(points, cx1->try3)
                 && !list_exists(seen, list_get(point, points))
+                && sym_best(sym, span, list_get(point, points))
             ) {
                 try_with(points, 1);
                 /* FIXME: do we need to deduplicate here? */
+                /* FIXME: do we need to add multiple entries for syms? */
                 list_append(seen, list_get(point, points));
                 cx1->squares = cx->squares;
             }
@@ -237,6 +242,8 @@ void try_next(int points) {
             if (try_test2(points, cx2->try2)
                 && !list_exists(seen, list_get(point, points))
                 && !list_exists(seen, list_get(point, points + 1))
+                && sym_best2(sym, span, list_get(point, points),
+                        list_get(point, points + 1))
             ) {
                 try_with(points, 2);
                 cx2->squares = cx->squares;

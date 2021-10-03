@@ -3,9 +3,9 @@ CC_ALL_OPT=-fwhole-program
 
 all: try gtry
 
-try: try.c loc.c loc.h Makefile
-	cat try.c loc.c >.whole.c
+try: try.c loc.c loc.h sym.c sym.c Makefile
+	cat try.c loc.c sym.c >.whole.c
 	gcc -o try ${CC_OPT} ${CC_ALL_OPT} -g .whole.c
 
-gtry: try.c loc.c loc.h Makefile
-	gcc -o gtry -O0 -g try.c loc.c
+gtry: try.c loc.c loc.h sym.c sym.c Makefile
+	gcc -o gtry -O0 -g try.c loc.c sym.c

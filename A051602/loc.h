@@ -25,6 +25,13 @@ static loc_t loc_diff(loc_t s1, loc_t s2) {
     return d;
 }
 
+static loc_t loc_sum(loc_t s1, loc_t s2) {
+    loc_t d;
+    d.x = s1.x + s2.x;
+    d.y = s1.y + s2.y;
+    return d;
+}
+
 static loc_t loc_rot90(loc_t src, loc_t diff) {
     loc_t d;
     d.x = src.x - diff.y;
@@ -41,6 +48,10 @@ static loc_t loc_rot270(loc_t src, loc_t diff) {
 
 static int loc_eq(loc_t s1, loc_t s2) {
     return s1.x == s2.x && s1.y == s2.y;
+}
+
+static int loc_lt(loc_t s1, loc_t s2) {
+    return s1.x < s2.x || (s1.x == s2.x && s1.y < s2.y);
 }
 
 static void list_set(loclist_t *ll, int i, loc_t val) {
