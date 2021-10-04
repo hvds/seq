@@ -20,7 +20,6 @@ long clock_tick;
  */
 typedef struct {
     int squares;    /* Number of squares in this arrangement */
-    int best;       /* Greatest number of squares seen in any arrangement */
     loc_t span[2];  /* { xmin, ymin }, { xmax, ymax } of this arrangement */
     int try3[3];    /* The next triple to try (list of 3 point indices) */
     int try2[3];    /* The next pair to try, plus direction */
@@ -28,6 +27,7 @@ typedef struct {
 } cx_t;
 
 int n;              /* We're trying to find A051602(n) */
+int best;           /* Greatest number of squares seen in any arrangement */
 loclist_t *point;   /* List of points in the current arrangement */
 cx_t context[MAXN]; /* List of context objects */
 loc_t minspan;      /* { x, y } size of smallest maximal solution */
@@ -66,7 +66,6 @@ void init(void) {
 
     context[4] = (cx_t){
         1,                      /* squares */
-        1,                      /* best */
         { { 0, 0 }, { 1, 1 } }, /* span */
         /* We know that no three of our first four points will form an
          * empty triple, so we'll start looking for triples only from
@@ -78,6 +77,7 @@ void init(void) {
         first_seen      /* Seed with an empty list */
     };
 
+    best = 1;
     minspan = (loc_t){ 1, 1 };
     maxspan = (loc_t){ 1, 1 };
     visit = 0UL;
@@ -227,7 +227,7 @@ void try_with(int points, int new) {
         if (ncx->span[1].y < pi.y) ncx->span[1].y = pi.y;
     }
 
-    if (ncx->squares >= ncx->best) {
+    if (ncx->squares >= best) {
         loc_t span = loc_diff(ncx->span[0], ncx->span[1]);
 
         /* minspan/maxspan are canonicalized to call the larger dimension 'x' */
@@ -236,7 +236,7 @@ void try_with(int points, int new) {
             span.x = span.y;
             span.y = tmp;
         }
-        if (ncx->squares > ncx->best) {
+        if (ncx->squares > best) {
             /* New record: reset minspan/maxspan, and always report this */
             minspan = span;
             maxspan = span;
@@ -251,7 +251,7 @@ void try_with(int points, int new) {
             if (newspan)
                 report(points + new);
         }
-        ocx->best = ncx->best = ncx->squares;
+        best = ncx->squares;
     }
     try_next(points + new);
 }
@@ -301,11 +301,6 @@ void try_next(int points) {
                 }
             }
         }
-
-        /* FIXME: this should just be global */
-        if (cx->best < cx1->best) {
-            cx->best = cx1->best;
-        }
     }
 
     if (points + 2 <= n) {
@@ -347,11 +342,6 @@ void try_next(int points) {
                 }
             }
         }
-
-        /* FIXME: this should just be global */
-        if (cx->best < cx2->best) {
-            cx->best = cx2->best;
-        }
     }
     free_loclist(seen);
     return;
@@ -386,7 +376,7 @@ int main(int argc, char** argv) {
 
     /* report final results */
     printf("%d %d %dx%d %dx%d (%lu) %.2fs\n",
-        n, context[4].best, minspan.x + 1, minspan.y + 1,
+        n, best, minspan.x + 1, minspan.y + 1,
         maxspan.x + 1, maxspan.y + 1, visit, timing()
     );
     finish();
