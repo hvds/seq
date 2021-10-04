@@ -18,7 +18,7 @@ sym_t order[ORDER] = { xY, Xy, XY, yx, YX };
     Return true if the dimensions of a grid are transposed by this symmetry.
 */
 static bool is_transpose(sym_t s) {
-    return (s & 4) ? 1 : 0;
+    return (s >= yx) ? 1 : 0;
 }
 
 /*
