@@ -8,4 +8,4 @@ try: try.c loc.c loc.h sym.c sym.c Makefile
 	gcc -o try ${CC_OPT} ${CC_ALL_OPT} -g .whole.c
 
 gtry: try.c loc.c loc.h sym.c sym.c Makefile
-	gcc -o gtry -O0 -g try.c loc.c sym.c
+	gcc -DDEBUG -o gtry -O0 -g try.c loc.c sym.c

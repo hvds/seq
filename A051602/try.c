@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <assert.h>
 #include <sys/times.h>
 #include <unistd.h>
 

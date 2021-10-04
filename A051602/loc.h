@@ -1,7 +1,11 @@
 #ifndef LOC_H
 #define LOC_H
 
-#include <assert.h>
+#ifdef DEBUG
+#   include <assert.h>
+#else
+#   define assert(x) /* noop */
+#endif
 
 typedef struct {
     int x;
