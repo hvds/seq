@@ -12,6 +12,11 @@ typedef struct {
     int y;
 } loc_t;
 
+typedef struct {
+    loc_t min;
+    loc_t max;
+} span_t;
+
 /* We use two different loclists: the global point[], which is initialized
  * to be big enough for all points, and the per-context seen[], which
  * grows as needed.

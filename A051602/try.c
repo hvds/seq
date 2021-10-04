@@ -20,7 +20,7 @@ long clock_tick;
  */
 typedef struct {
     int squares;    /* Number of squares in this arrangement */
-    loc_t span[2];  /* { xmin, ymin }, { xmax, ymax } of this arrangement */
+    span_t span;    /* Min/max extent of this arrangement */
     int try3[3];    /* The next triple to try (list of 3 point indices) */
     int try2[3];    /* The next pair to try, plus direction */
     loclist_t *seen;/* List of points tried, that we don't need to try again */
@@ -43,7 +43,7 @@ double timing(void) {
 /* Show a result-so-far, consisting of i points */
 void report(int i) {
     cx_t *cx = &context[i];
-    loc_t span = loc_diff(cx->span[0], cx->span[1]);
+    loc_t span = loc_diff(cx->span.min, cx->span.max);
 
     printf("%dx%d ", span.x + 1, span.y + 1);
     printf("%d:", cx->squares);
@@ -211,8 +211,7 @@ void try_with(int points, int new) {
     /* The caller will already have filled in most of the new context,
      * but some parts may have been overwritten by subsequent work.
      */
-    ncx->span[0] = ocx->span[0];
-    ncx->span[1] = ocx->span[1];
+    ncx->span = ocx->span;
 
     for (int i = points; i < points + new; ++i) {
         loc_t pi = list_get(point, i);
@@ -221,14 +220,14 @@ void try_with(int points, int new) {
         ncx->squares += find_squares(i);
 
         /* Track the 4 limits of the arrangement */
-        if (ncx->span[0].x > pi.x) ncx->span[0].x = pi.x;
-        if (ncx->span[0].y > pi.y) ncx->span[0].y = pi.y;
-        if (ncx->span[1].x < pi.x) ncx->span[1].x = pi.x;
-        if (ncx->span[1].y < pi.y) ncx->span[1].y = pi.y;
+        if (ncx->span.min.x > pi.x) ncx->span.min.x = pi.x;
+        if (ncx->span.min.y > pi.y) ncx->span.min.y = pi.y;
+        if (ncx->span.max.x < pi.x) ncx->span.max.x = pi.x;
+        if (ncx->span.max.y < pi.y) ncx->span.max.y = pi.y;
     }
 
     if (ncx->squares >= best) {
-        loc_t span = loc_diff(ncx->span[0], ncx->span[1]);
+        loc_t span = loc_diff(ncx->span.min, ncx->span.max);
 
         /* minspan/maxspan are canonicalized to call the larger dimension 'x' */
         if (span.x < span.y) {
@@ -262,9 +261,7 @@ void try_next(int points) {
     cx_t *cx1 = &context[points + 1];
     cx_t *cx2 = &context[points + 2];
     loclist_t *seen = dup_loclist(cx->seen);
-    /* Used for symmetry checks: centre point is span/2 */
-    loc_t span = loc_sum(cx->span[0], cx->span[1]);
-    sym_t sym = sym_check(point, span, points);
+    sym_t sym = sym_check(point, cx->span, points);
 
     ++visit;
 
@@ -281,7 +278,7 @@ void try_next(int points) {
                 /* .. and that point isn't on the list to be suppressed */
                 && !list_exists(seen, list_get(point, points))
                 /* .. and it's canonical under symmetries of this arrangement */
-                && sym_best(sym, span, list_get(point, points))
+                && sym_best(sym, cx->span, list_get(point, points))
             ) {
                 /* then apply this extension (and recurse) */
                 try_with(points, 1);
@@ -322,7 +319,7 @@ void try_next(int points) {
                 && !list_exists(seen, list_get(point, points))
                 && !list_exists(seen, list_get(point, points + 1))
                 /* .. and it's canonical under symmetries of this arrangement */
-                && sym_best2(sym, span, list_get(point, points),
+                && sym_best2(sym, cx->span, list_get(point, points),
                         list_get(point, points + 1))
             ) {
                 /* then apply this extension (and recurse) */

@@ -17,8 +17,8 @@ typedef unsigned char bool;
 /* Bitwise-or of the above symmetry types */
 typedef unsigned char sym_t;
 
-extern sym_t sym_check(loclist_t *ll, loc_t span, int size);
-extern bool sym_best(sym_t s, loc_t span, loc_t p);
-extern bool sym_best2(sym_t s, loc_t span, loc_t p1, loc_t p2);
+extern sym_t sym_check(loclist_t *ll, span_t span, int size);
+extern bool sym_best(sym_t s, span_t span, loc_t p);
+extern bool sym_best2(sym_t s, span_t span, loc_t p1, loc_t p2);
 
 #endif

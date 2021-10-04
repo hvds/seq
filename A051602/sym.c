@@ -24,31 +24,37 @@ static bool is_transpose(sym_t s) {
 /*
     Apply this symmetry to the supplied location.
 */
-static loc_t sym_transloc(sym_t s, loc_t span, loc_t l) {
+static loc_t sym_transloc(sym_t s, span_t span, loc_t l) {
+#define INVx(z) (span.min.x + span.max.x - (z))
+#define INVy(z) (span.min.y + span.max.y - (z))
+#define SWAPx(z) ((z) - span.min.x + span.min.y)
+#define SWAPy(z) ((z) - span.min.y + span.min.x)
+#define INVSWAPx(z) INVy(SWAPx(z))
+#define INVSWAPy(z) INVx(SWAPy(z))
     switch (s) {
         case xy:
             return (loc_t){ l.x, l.y };
         case xY:
-            return (loc_t){ l.x, span.y - l.y };
+            return (loc_t){ l.x, INVy(l.y) };
         case Xy:
-            return (loc_t){ span.x - l.x, l.y };
+            return (loc_t){ INVx(l.x), l.y };
         case XY:
-            return (loc_t){ span.x - l.x, span.y - l.y };
+            return (loc_t){ INVx(l.x), INVy(l.y) };
         case yx:
-            return (loc_t){ l.y, l.x };
+            return (loc_t){ SWAPy(l.y), SWAPx(l.x) };
         case yX:
-            return (loc_t){ l.y, span.x - l.x };
+            return (loc_t){ SWAPy(l.y), INVSWAPx(l.x) };
         case Yx:
-            return (loc_t){ span.y - l.y, l.x };
+            return (loc_t){ INVSWAPy(l.y), SWAPx(l.x) };
         case YX:
-            return (loc_t){ span.y - l.y, span.x - l.x };
+            return (loc_t){ INVSWAPy(l.y), INVSWAPx(l.x) };
     }
 }
 
 /*
     Return the set of symmetries shown by this arrangement of points
 */
-sym_t sym_check(loclist_t *ll, loc_t span, int size) {
+sym_t sym_check(loclist_t *ll, span_t span, int size) {
     sym_t s = 0;
     loc_t copy[MAXN];
 
@@ -56,7 +62,9 @@ sym_t sym_check(loclist_t *ll, loc_t span, int size) {
         sym_t si = order[i];
         int remain;
 
-        if (span.x != span.y && is_transpose(si))
+        if (is_transpose(si)
+            && span.max.x - span.min.x != span.max.y - span.min.y
+        )
             continue;
 
         memcpy(copy, ll->list, sizeof(loc_t) * size);
@@ -91,7 +99,7 @@ sym_t sym_check(loclist_t *ll, loc_t span, int size) {
 /*
     Return TRUE if this point is canonical under the known symmetries
 */
-bool sym_best(sym_t s, loc_t span, loc_t p1) {
+bool sym_best(sym_t s, span_t span, loc_t p1) {
     if (s == 0)
         return 1;
     for (int i = 0; i < ORDER; ++i) {
@@ -111,7 +119,7 @@ bool sym_best(sym_t s, loc_t span, loc_t p1) {
     We first order them so that p1 < p2, then (assuming p1' < p2') require
     that p1' < p1 || (p1' == p1 && p2' <= p2).
 */
-bool sym_best2(sym_t s, loc_t span, loc_t p1, loc_t p2) {
+bool sym_best2(sym_t s, span_t span, loc_t p1, loc_t p2) {
     loc_t t;
 
     if (s == 0)
