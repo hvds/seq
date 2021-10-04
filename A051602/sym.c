@@ -146,3 +146,17 @@ bool sym_best2(sym_t s, span_t span, loc_t p1, loc_t p2) {
     }
     return 1;
 }
+
+/*
+    Return TRUE if the edge formed by this pair of points lies on
+    a known axis of symmetry.
+*/
+bool sym_axis(sym_t s, span_t span, loc_t p1, loc_t p2) {
+    for (int i = 0; i < ORDER; ++i) {
+        sym_t si = order[i];
+        if ((s & si) && loc_eq(p1, sym_transloc(si, span, p1))
+                && loc_eq(p2, sym_transloc(si, span, p2)))
+            return 1;
+    }
+    return 0;
+}

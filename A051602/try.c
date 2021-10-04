@@ -264,6 +264,9 @@ void try_next(int points) {
     sym_t sym = sym_check(point, cx->span, points);
 
     ++visit;
+/*
+printf("(%lu %02x) ", visit, sym); report(points);
+*/
 
     if (points + 1 <= n) {
         /* Try to extend 3 points into a square. */
@@ -313,14 +316,18 @@ void try_next(int points) {
         /* Try all pairs and directions we haven't already tried */
         while (cx2->try2[0] < points) {
             if (
-                /* If this pair/dir forms a square with two missing points */
-                try_test2(points, cx2->try2)
+                /* If this pair is canonical for symmetry of this arrangement */
+                sym_best2(sym, cx->span, list_get(point, cx2->try2[0]),
+                        list_get(point, cx2->try2[1]))
+                /* .. and it's direction is canonical */
+                && !(cx2->try2[2] == 1 && sym_axis(sym, cx->span,
+                        list_get(point, cx2->try2[0]),
+                        list_get(point, cx2->try2[1])))
+                /* .. and it forms a square with two missing points */
+                && try_test2(points, cx2->try2)
                 /* .. and neither new point is on the list to be suppressed */
                 && !list_exists(seen, list_get(point, points))
                 && !list_exists(seen, list_get(point, points + 1))
-                /* .. and it's canonical under symmetries of this arrangement */
-                && sym_best2(sym, cx->span, list_get(point, points),
-                        list_get(point, points + 1))
             ) {
                 /* then apply this extension (and recurse) */
                 try_with(points, 2);
