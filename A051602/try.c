@@ -50,7 +50,7 @@ void report(int i) {
     printf("%d:", cx->squares);
     for (int j = 0; j < i; ++j) {
         loc_t p = list_get(point, j);
-        printf(" %d:%d", p.x, p.y);
+        printf(" %d:%d", p.x - cx->span.min.x, p.y - cx->span.min.y);
     }
     printf("\n");
 }
