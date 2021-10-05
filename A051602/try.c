@@ -8,8 +8,6 @@
 #include "loc.h"
 #include "sym.h"
 
-#define MAXN 64
-
 long clock_tick;
 
 /* A structure of context used at each level of recursion, which
@@ -30,7 +28,7 @@ int n;              /* We're trying to find A051602(n) */
 int verbose = 0;    /* report every iteration */
 int best;           /* Greatest number of squares seen in any arrangement */
 loclist_t *point;   /* List of points in the current arrangement */
-cx_t context[MAXN]; /* List of context objects */
+cx_t *context;      /* List of context objects */
 loc_t minspan;      /* { x, y } size of smallest maximal solution */
 loc_t maxspan;      /* { x, y } size of greatest maximal solution */
 unsigned long visit;        /* Count of iterations */
@@ -59,6 +57,7 @@ void report(int i) {
 
 void init(void) {
     loclist_t *first_seen = new_loclist(10);
+    context = (cx_t *)malloc((n + 1) * sizeof(cx_t));
 
     /* used to calculate timings */
     clock_tick = sysconf(_SC_CLK_TCK);
@@ -68,7 +67,7 @@ void init(void) {
         setvbuf(stdout, (char*)NULL, _IONBF, 0);
 
     /* Start off with 4 points making a unit square */
-    point = new_loclist(MAXN);
+    point = new_loclist(n + 1);
     list_set(point, 0, (loc_t){ 0, 0 });
     list_set(point, 1, (loc_t){ 0, 1 });
     list_set(point, 2, (loc_t){ 1, 0 });
@@ -97,6 +96,7 @@ void init(void) {
 void finish(void) {
     free_loclist(point);
     free_loclist(context[4].seen);
+    free(context);
 }
 
 /* We have a double recursion: try_next() finds the next extension to try,
@@ -391,8 +391,8 @@ int main(int argc, char** argv) {
     }
 
     n = atoi(argv[arg]);
-    if (n < 0 || n > MAXN) {
-        fprintf(stderr, "Need 0 <= n <= %d\n", MAXN);
+    if (n < 0) {
+        fprintf(stderr, "Need n >= 0\n");
         return 1;
     }
     if (n < 4) {

@@ -3,8 +3,7 @@
 
 #include "sym.h"
 
-/* FIXME: move to a header */
-#define MAXN 64
+extern int n;
 
 /* We're not handling order-4 symmetries for now (rot90/rot270) */
 /*
@@ -56,7 +55,7 @@ static loc_t sym_transloc(sym_t s, span_t span, loc_t l) {
 */
 sym_t sym_check(loclist_t *ll, span_t span, int size) {
     sym_t s = 0;
-    loc_t copy[MAXN];
+    loc_t copy[n];
 
     for (int i = 0; i < ORDER; ++i) {
         sym_t si = order[i];
