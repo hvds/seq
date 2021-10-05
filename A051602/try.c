@@ -33,7 +33,9 @@ loclist_t *point;   /* List of points in the current arrangement */
 cx_t context[MAXN]; /* List of context objects */
 loc_t minspan;      /* { x, y } size of smallest maximal solution */
 loc_t maxspan;      /* { x, y } size of greatest maximal solution */
-unsigned long visit;/* Count of iterations */
+unsigned long visit;        /* Count of iterations */
+unsigned long lim_visit = 0;/* Stop after this many iterations */
+unsigned long last_new;     /* Iteration at which last new result found */
 
 double timing(void) {
     struct tms ttd;
@@ -89,6 +91,7 @@ void init(void) {
     minspan = (loc_t){ 1, 1 };
     maxspan = (loc_t){ 1, 1 };
     visit = 0UL;
+    last_new = 0UL;
 }
 
 void finish(void) {
@@ -258,6 +261,7 @@ void try_with(int points, int new) {
         }
         best = ncx->squares;
         if (newspan) {
+            last_new = visit;
             if (verbose) {
                 /* distinguish from the verbose report */
                 printf("* ");
@@ -276,6 +280,8 @@ void try_next(int points) {
     loclist_t *seen = dup_loclist(cx->seen);
     sym_t sym = sym_check(point, cx->span, points);
 
+    if (lim_visit && visit >= lim_visit)
+        return;
     ++visit;
     if (verbose)
         report(points);
@@ -366,12 +372,21 @@ void try_next(int points) {
 int main(int argc, char** argv) {
     int arg = 1;
 
-    if (arg < argc && strcmp("-v", argv[arg]) == 0) {
-        verbose = 1;
-        ++arg;
+    while (arg < argc && argv[arg][0] == '-') {
+        char *s = argv[arg++];
+        if (strcmp("--", s) == 0)
+            break;
+        else if (strcmp("-v", s) == 0)
+            verbose = 1;
+        else if (strcmp("-i", s) == 0)
+            lim_visit = atol(argv[arg++]);
+        else {
+            fprintf(stderr, "Unknown option '%s'\n", s);
+            exit(1);
+        }
     }
     if (arg + 1 != argc) {
-        fprintf(stderr, "Usage: try [-v] <n>\n");
+        fprintf(stderr, "Usage: try [-v] [-i maxiter] <n>\n");
         return 1;
     }
 
@@ -393,8 +408,8 @@ int main(int argc, char** argv) {
     try_next(4);
 
     /* report final results */
-    printf("%d %d %dx%d %dx%d (%lu) %.2fs\n",
-        n, best, minspan.x + 1, minspan.y + 1,
+    printf("%d %d %lu %dx%d %dx%d (%lu) %.2fs\n",
+        n, best, last_new, minspan.x + 1, minspan.y + 1,
         maxspan.x + 1, maxspan.y + 1, visit, timing()
     );
     finish();
