@@ -27,6 +27,7 @@ typedef struct {
 } cx_t;
 
 int n;              /* We're trying to find A051602(n) */
+int verbose = 0;    /* report every iteration */
 int best;           /* Greatest number of squares seen in any arrangement */
 loclist_t *point;   /* List of points in the current arrangement */
 cx_t context[MAXN]; /* List of context objects */
@@ -45,7 +46,7 @@ void report(int i) {
     cx_t *cx = &context[i];
     loc_t span = loc_diff(cx->span.min, cx->span.max);
 
-    printf("%dx%d ", span.x + 1, span.y + 1);
+    printf("(%lu) %dx%d ", visit, span.x + 1, span.y + 1);
     printf("%d:", cx->squares);
     for (int j = 0; j < i; ++j) {
         loc_t p = list_get(point, j);
@@ -56,6 +57,13 @@ void report(int i) {
 
 void init(void) {
     loclist_t *first_seen = new_loclist(10);
+
+    /* used to calculate timings */
+    clock_tick = sysconf(_SC_CLK_TCK);
+
+    /* for quite output don't buffer, even if stdout is not a tty */
+    if (!verbose)
+        setvbuf(stdout, (char*)NULL, _IONBF, 0);
 
     /* Start off with 4 points making a unit square */
     point = new_loclist(MAXN);
@@ -228,6 +236,7 @@ void try_with(int points, int new) {
 
     if (ncx->squares >= best) {
         loc_t span = loc_diff(ncx->span.min, ncx->span.max);
+        int newspan = 0;
 
         /* minspan/maxspan are canonicalized to call the larger dimension 'x' */
         if (span.x < span.y) {
@@ -239,18 +248,22 @@ void try_with(int points, int new) {
             /* New record: reset minspan/maxspan, and always report this */
             minspan = span;
             maxspan = span;
-            report(points + new);
+            newspan = 1;
         } else {
             /* Match of existing record, report it only if new gridsize */
-            int newspan = 0;
             if (minspan.x > span.x) minspan.x = span.x, newspan = 1;
             if (minspan.y > span.y) minspan.y = span.y, newspan = 1;
             if (maxspan.x < span.x) maxspan.x = span.x, newspan = 1;
             if (maxspan.y < span.y) maxspan.y = span.y, newspan = 1;
-            if (newspan)
-                report(points + new);
         }
         best = ncx->squares;
+        if (newspan) {
+            if (verbose) {
+                /* distinguish from the verbose report */
+                printf("* ");
+            }
+            report(points + new);
+        }
     }
     try_next(points + new);
 }
@@ -264,9 +277,8 @@ void try_next(int points) {
     sym_t sym = sym_check(point, cx->span, points);
 
     ++visit;
-/*
-printf("(%lu %02x) ", visit, sym); report(points);
-*/
+    if (verbose)
+        report(points);
 
     if (points + 1 <= n) {
         /* Try to extend 3 points into a square. */
@@ -352,16 +364,18 @@ printf("(%lu %02x) ", visit, sym); report(points);
 }
 
 int main(int argc, char** argv) {
-    /* used to calculate timings */
-    clock_tick = sysconf(_SC_CLK_TCK);
-    /* don't buffer output, even if stdout is not a tty */
-    setvbuf(stdout, (char*)NULL, _IONBF, 0);
+    int arg = 1;
 
-    if (argc != 2) {
-        fprintf(stderr, "Usage: try <n>\n");
+    if (arg < argc && strcmp("-v", argv[arg]) == 0) {
+        verbose = 1;
+        ++arg;
+    }
+    if (arg + 1 != argc) {
+        fprintf(stderr, "Usage: try [-v] <n>\n");
         return 1;
     }
-    n = atoi(argv[1]);
+
+    n = atoi(argv[arg]);
     if (n < 0 || n > MAXN) {
         fprintf(stderr, "Need 0 <= n <= %d\n", MAXN);
         return 1;
