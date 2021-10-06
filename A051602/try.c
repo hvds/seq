@@ -137,6 +137,40 @@ int try_test2(int points, int try2[3]) {
     return 1;
 }
 
+/* Return TRUE if the new pair just found by try_test2 would be
+ * a duplicate of a pair we've already tried.
+ */
+int duplicate_pair(int points, sym_t sym, int try2[3]) {
+    int ii = try2[0], ij = try2[1], ik = points, il = points + 1;
+    loc_t pi = list_get(point, ii), pj = list_get(point, ij);
+    loc_t pk = list_get(point, ik), pl = list_get(point, il);
+    loc_t pm = (loc_t){ pk.x * 2 - pi.x, pk.y * 2 - pi.y };
+    loc_t pn = (loc_t){ pl.x * 2 - pj.x, pl.y * 2 - pj.y };
+    int im, in;
+
+    /* if the new pair lies on an axis of symmetry, duplication has already
+     * been catered for
+     */
+    if (sym_axis(sym, context[points].span, pk, pl))
+        return 0;
+
+    /* if the opposite pair is not already in the arrangement, there's
+     * no duplication
+     */
+    if ((im = list_find_lim(point, points, pm)) < 0)
+        return 0;
+    if ((in = list_find_lim(point, points, pn)) < 0)
+        return 0;
+
+    /* if the opposite pair comes earlier in the order than the original
+     * pair, it's a duplicate, else it's not
+     */
+    return ((im > in)
+        ? (im < ii || (im == ii && in < ij))
+        : (in < ii || (in == ii && im < ij))
+    );
+}
+
 /* Attempt to find a given 1-point extension; on failure, returns FALSE;
  * on success, returns TRUE with the new points appended to point[].
  * We need to determine a way of joining the 3 input points as two edges
@@ -346,6 +380,8 @@ void try_next(int points) {
                 /* .. and neither new point is on the list to be suppressed */
                 && !list_exists(seen, list_get(point, points))
                 && !list_exists(seen, list_get(point, points + 1))
+                /* .. and it is not a duplicate */
+                && !duplicate_pair(points, sym, cx2->try2)
             ) {
                 /* then apply this extension (and recurse) */
                 try_with(points, 2);
