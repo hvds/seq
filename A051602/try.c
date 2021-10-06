@@ -316,9 +316,9 @@ void try_next(int points) {
 
     if (lim_visit && visit >= lim_visit)
         return;
-    ++visit;
     if (verbose == 2)
         report(points);
+    ++visit;
 
     if (points + 1 <= n) {
         /* Try to extend 3 points into a square. */
