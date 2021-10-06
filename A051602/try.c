@@ -25,7 +25,7 @@ typedef struct {
 } cx_t;
 
 int n;              /* We're trying to find A051602(n) */
-int verbose = 0;    /* report every iteration */
+int verbose = 0;    /* report every maximum (1) or iteration (2) */
 int best;           /* Greatest number of squares seen in any arrangement */
 loclist_t *point;   /* List of points in the current arrangement */
 cx_t *context;      /* List of context objects */
@@ -62,8 +62,8 @@ void init(void) {
     /* used to calculate timings */
     clock_tick = sysconf(_SC_CLK_TCK);
 
-    /* for quite output don't buffer, even if stdout is not a tty */
-    if (!verbose)
+    /* for less-verbose output don't buffer, even if stdout is not a tty */
+    if (verbose != 2)
         setvbuf(stdout, (char*)NULL, _IONBF, 0);
 
     /* Start off with 4 points making a unit square */
@@ -294,10 +294,10 @@ void try_with(int points, int new) {
             if (maxspan.y < span.y) maxspan.y = span.y, newspan = 1;
         }
         best = ncx->squares;
-        if (newspan) {
+        if (newspan || verbose == 1) {
             last_new = visit;
-            if (verbose) {
-                /* distinguish from the verbose report */
+            if (verbose == 2) {
+                /* distinguish from the per-iteration report */
                 printf("* ");
             }
             report(points + new);
@@ -317,7 +317,7 @@ void try_next(int points) {
     if (lim_visit && visit >= lim_visit)
         return;
     ++visit;
-    if (verbose)
+    if (verbose == 2)
         report(points);
 
     if (points + 1 <= n) {
@@ -412,8 +412,10 @@ int main(int argc, char** argv) {
         char *s = argv[arg++];
         if (strcmp("--", s) == 0)
             break;
-        else if (strcmp("-v", s) == 0)
+        else if (strcmp("-m", s) == 0)
             verbose = 1;
+        else if (strcmp("-v", s) == 0)
+            verbose = 2;
         else if (strcmp("-i", s) == 0)
             lim_visit = atol(argv[arg++]);
         else {
