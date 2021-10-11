@@ -24,10 +24,14 @@ while (<>) {
     }x or die "Parse head: '$_'\n";
     my($i, $xspan, $yspan, $squares) = ($1, $2, $3, $4);
     my @point = map [ split /:/ ], split ' ', substr($_, $+[0]);
-    ++$size[0 + @point];
-    check($i, [ $xspan - 1, $yspan - 1 ], \@point, $squares);
+    ++$size[0 + @point]{$squares}
+        if check($i, [ $xspan - 1, $yspan - 1 ], \@point, $squares);
 }
-printf "Sizes: %s\n", join ', ', map $_ || 0, @size[4 .. $#size];
+printf "Sizes:\n";
+for (0 .. $#size) {
+    my $ss = $size[$_] or next;
+    printf "%s: %s\n", $_, join ', ', map "$_=$ss->{$_}", sort { $a <=> $b } keys %$ss;
+}
 exit 0;
 
 sub _str {
@@ -59,9 +63,11 @@ sub check {
     }
     if ($seen[0 + @$p]{$s}) {
         print "$seen[0 + @$p]{$s} == $i\n" unless $uniq;
+        return 0;
     } else {
         $seen[0 + @$p]{$s} = $i;
         pretty($i, $span, $p, $squares) if $uniq;
+        return 1;
     }
 }
 
