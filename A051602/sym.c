@@ -7,11 +7,9 @@ extern int n;
 
 /* We're not handling order-4 symmetries for now (rot90/rot270) */
 /*
- *  #define ORDER 7
- *  sym_t order[ORDER] = { xY, Xy, XY, yx, yX, Yx, YX };
+ *  sym_t sym_order[SYM_ORDER] = { xY, Xy, XY, yx, yX, Yx, YX };
  */
-#define ORDER 5
-sym_t order[ORDER] = { xY, Xy, XY, yx, YX };
+sym_t sym_order[SYM_ORDER] = { xY, Xy, XY, yx, YX };
 
 /*
     Return true if the dimensions of a grid are transposed by this symmetry.
@@ -23,7 +21,7 @@ static bool is_transpose(sym_t s) {
 /*
     Apply this symmetry to the supplied location.
 */
-static loc_t sym_transloc(sym_t s, span_t span, loc_t l) {
+loc_t sym_transloc(sym_t s, span_t span, loc_t l) {
 #define INVx(z) (span.min.x + span.max.x - (z))
 #define INVy(z) (span.min.y + span.max.y - (z))
 #define SWAPx(z) ((z) - span.min.x + span.min.y)
@@ -57,8 +55,8 @@ sym_t sym_check(loclist_t *ll, span_t span, int size) {
     sym_t s = 0;
     loc_t copy[n];
 
-    for (int i = 0; i < ORDER; ++i) {
-        sym_t si = order[i];
+    for (int i = 0; i < SYM_ORDER; ++i) {
+        sym_t si = sym_order[i];
         int remain;
 
         if (is_transpose(si)
@@ -101,8 +99,8 @@ sym_t sym_check(loclist_t *ll, span_t span, int size) {
 bool sym_best(sym_t s, span_t span, loc_t p1) {
     if (s == 0)
         return 1;
-    for (int i = 0; i < ORDER; ++i) {
-        sym_t si = order[i];
+    for (int i = 0; i < SYM_ORDER; ++i) {
+        sym_t si = sym_order[i];
         if (s & si) {
             loc_t p2 = sym_transloc(si, span, p1);
             if (loc_lt(p2, p1))
@@ -129,8 +127,8 @@ bool sym_best2(sym_t s, span_t span, loc_t p1, loc_t p2) {
         p1 = p2;
         p2 = t;
     }
-    for (int i = 0; i < ORDER; ++i) {
-        sym_t si = order[i];
+    for (int i = 0; i < SYM_ORDER; ++i) {
+        sym_t si = sym_order[i];
         if (s & si) {
             loc_t p3 = sym_transloc(si, span, p1);
             loc_t p4 = sym_transloc(si, span, p2);
@@ -151,8 +149,8 @@ bool sym_best2(sym_t s, span_t span, loc_t p1, loc_t p2) {
     a known axis of symmetry.
 */
 bool sym_axis(sym_t s, span_t span, loc_t p1, loc_t p2) {
-    for (int i = 0; i < ORDER; ++i) {
-        sym_t si = order[i];
+    for (int i = 0; i < SYM_ORDER; ++i) {
+        sym_t si = sym_order[i];
         if ((s & si) && loc_eq(p1, sym_transloc(si, span, p1))
                 && loc_eq(p2, sym_transloc(si, span, p2)))
             return 1;

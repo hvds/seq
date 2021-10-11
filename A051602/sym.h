@@ -17,9 +17,17 @@ typedef unsigned char bool;
 /* Bitwise-or of the above symmetry types */
 typedef unsigned char sym_t;
 
+/* We're not handling order-4 symmetries for now (rot90/rot270) */
+/*
+ *  #define SYM_ORDER 7
+ */
+#define SYM_ORDER 5
+extern sym_t sym_order[SYM_ORDER];
+
 extern sym_t sym_check(loclist_t *ll, span_t span, int size);
 extern bool sym_best(sym_t s, span_t span, loc_t p);
 extern bool sym_best2(sym_t s, span_t span, loc_t p1, loc_t p2);
 extern bool sym_axis(sym_t s, span_t span, loc_t p1, loc_t p2);
+extern loc_t sym_transloc(sym_t s, span_t span, loc_t p);
 
 #endif
