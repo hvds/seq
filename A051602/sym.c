@@ -94,57 +94,6 @@ sym_t sym_check(loclist_t *ll, span_t span, int size) {
 }
 
 /*
-    Return TRUE if this point is canonical under the known symmetries
-*/
-bool sym_best(sym_t s, span_t span, loc_t p1) {
-    if (s == 0)
-        return 1;
-    for (int i = 0; i < SYM_ORDER; ++i) {
-        sym_t si = sym_order[i];
-        if (s & si) {
-            loc_t p2 = sym_transloc(si, span, p1);
-            if (loc_lt(p2, p1))
-                return 0;
-        }
-    }
-    return 1;
-}
-
-/*
-    Return TRUE if this pair of points is canonical under the known
-    symmetries.
-    We first order them so that p1 < p2, then (assuming p1' < p2') require
-    that p1' < p1 || (p1' == p1 && p2' <= p2).
-*/
-bool sym_best2(sym_t s, span_t span, loc_t p1, loc_t p2) {
-    loc_t t;
-
-    if (s == 0)
-        return 1;
-
-    if (loc_lt(p2, p1)) {
-        t = p1;
-        p1 = p2;
-        p2 = t;
-    }
-    for (int i = 0; i < SYM_ORDER; ++i) {
-        sym_t si = sym_order[i];
-        if (s & si) {
-            loc_t p3 = sym_transloc(si, span, p1);
-            loc_t p4 = sym_transloc(si, span, p2);
-            if (loc_lt(p3, p4)) {
-                if (loc_lt(p3, p1) || (loc_eq(p3, p1) && loc_lt(p4, p2)))
-                    return 0;
-            } else {
-                if (loc_lt(p4, p1) || (loc_eq(p4, p1) && loc_lt(p3, p2)))
-                    return 0;
-            }
-        }
-    }
-    return 1;
-}
-
-/*
     Return TRUE if the edge formed by this pair of points lies on
     a known axis of symmetry.
 */

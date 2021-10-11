@@ -306,6 +306,91 @@ void try_with(int points, int new) {
     try_next(points + new);
 }
 
+/* Return TRUE if this pair of points is canonical under the known
+ * symmetries.
+ */
+bool sym_best2(int points, sym_t s, span_t span, int i1, int i2) {
+    loc_t p1 = list_get(point, i1);
+    loc_t p2 = list_get(point, i2);
+
+    if (s == 0)
+        return 1;
+
+    for (int i = 0; i < SYM_ORDER; ++i) {
+        sym_t si = sym_order[i];
+        if (s & si) {
+            int i3 = list_find_lim(point, points, sym_transloc(si, span, p1));
+            int i4 = list_find_lim(point, points, sym_transloc(si, span, p2));
+            if (i3 < i4) {
+                if (i4 < i1 || (i4 == i1 && i3 < i2))
+                    return 0;
+            } else {
+                if (i3 < i1 || (i3 == i1 && i4 < i2))
+                    return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+/* Return TRUE if this triplet of points is canonical under the known
+ * symmetries: ie if its highest-indexed point is less than the highest
+ * indexed point of a given transform, or it is equal and the next-highest
+ * is less, etc. The input indices are given in descending order.
+ */
+bool sym_best3(int points, sym_t s, span_t span, int i1, int i2, int i3) {
+    loc_t p1 = list_get(point, i1);
+    loc_t p2 = list_get(point, i2);
+    loc_t p3 = list_get(point, i3);
+
+    if (s == 0)
+        return 1;
+
+    for (int i = 0; i < SYM_ORDER; ++i) {
+        sym_t si = sym_order[i];
+        if (s & si) {
+            int i4 = list_find_lim(point, points, sym_transloc(si, span, p1));
+            int i5 = list_find_lim(point, points, sym_transloc(si, span, p2));
+            int i6 = list_find_lim(point, points, sym_transloc(si, span, p3));
+            if (i4 > i5 && i4 > i6) {
+                if (i4 < i1) return 0;
+                if (i4 == i1) {
+                    if (i5 > i6) {
+                        if (i5 < i2 || (i5 == i2 && i6 < i3))
+                            return 0;
+                    } else {
+                        if (i6 < i2 || (i6 == i2 && i5 < i3))
+                            return 0;
+                    }
+                }
+            } else if (i5 > i4 && i5 > i6) {
+                if (i5 < i1) return 0;
+                if (i5 == i1) {
+                    if (i4 > i6) {
+                        if (i4 < i2 || (i4 == i2 && i6 < i3))
+                            return 0;
+                    } else {
+                        if (i6 < i2 || (i6 == i2 && i4 < i3))
+                            return 0;
+                    }
+                }
+            } else {
+                if (i6 < i1) return 0;
+                if (i6 == i1) {
+                    if (i4 > i5) {
+                        if (i4 < i2 || (i4 == i2 && i5 < i3))
+                            return 0;
+                    } else {
+                        if (i5 < i2 || (i5 == i2 && i4 < i3))
+                            return 0;
+                    }
+                }
+            }
+        }
+    }
+    return 1;
+}
+
 /* Try all possible extensions of the existing 'points'-point arrangement. */
 void try_next(int points) {
     cx_t *cx = &context[points];
@@ -333,7 +418,8 @@ void try_next(int points) {
                 /* .. and that point isn't on the list to be suppressed */
                 && !list_exists(seen, list_get(point, points))
                 /* .. and it's canonical under symmetries of this arrangement */
-                && sym_best(sym, cx->span, list_get(point, points))
+                && sym_best3(points, sym, cx->span,
+                        cx1->try3[0], cx1->try3[1], cx1->try3[2])
             ) {
                 /* then apply this extension (and recurse) */
                 try_with(points, 1);
@@ -369,8 +455,7 @@ void try_next(int points) {
         while (cx2->try2[0] < points) {
             if (
                 /* If this pair is canonical for symmetry of this arrangement */
-                sym_best2(sym, cx->span, list_get(point, cx2->try2[0]),
-                        list_get(point, cx2->try2[1]))
+                sym_best2(points, sym, cx->span, cx2->try2[0], cx2->try2[1])
                 /* .. and it's direction is canonical */
                 && !(cx2->try2[2] == 1 && sym_axis(sym, cx->span,
                         list_get(point, cx2->try2[0]),
