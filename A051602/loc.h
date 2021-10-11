@@ -17,6 +17,10 @@ typedef struct {
     loc_t max;
 } span_t;
 
+typedef struct {
+    loc_t p[2];
+} pair_t;
+
 /* We use two different loclists: the global point[], which is initialized
  * to be big enough for all points, and the per-context seen[], which
  * grows as needed.
@@ -33,10 +37,21 @@ typedef struct {
     loc_t *list;
 } loclist_t;
 
+typedef struct {
+    int size;
+    int used;
+    pair_t *list;
+} pairlist_t;
+
 loclist_t *new_loclist(int size);
 void free_loclist(loclist_t *ll);
 void resize_loclist(loclist_t *ll, int size);
 loclist_t *dup_loclist(loclist_t *ll);
+
+pairlist_t *new_pairlist(int size);
+void free_pairlist(pairlist_t *pl);
+void resize_pairlist(pairlist_t *pl, int size);
+pairlist_t *dup_pairlist(pairlist_t *pl);
 
 static loc_t loc_diff(loc_t s1, loc_t s2) {
     loc_t d;
@@ -114,6 +129,41 @@ static int list_exists_lim(loclist_t *ll, int lim, loc_t val) {
 
 static int list_exists(loclist_t *ll, loc_t val) {
     return list_exists_lim(ll, ll->used, val);
+}
+
+static void list_remove(loclist_t *ll, loc_t val) {
+    int i = list_find(ll, val);
+    if (i >= 0)
+        ll->list[i] = ll->list[--ll->used];
+}
+
+static int pair_eq(pair_t pair1, pair_t pair2) {
+    return (loc_eq(pair1.p[0], pair2.p[0]) && loc_eq(pair1.p[1], pair2.p[1]))
+        || (loc_eq(pair1.p[0], pair2.p[1]) && loc_eq(pair1.p[1], pair2.p[0]));
+}
+
+static void pair_set(pairlist_t *pl, int i, pair_t pair) {
+    if (i >= pl->size)
+        resize_pairlist(pl, i * 3 / 2);
+    pl->list[i] = pair;
+    if (pl->used <= i)
+        pl->used = i + 1;
+}
+
+static void pair_append(pairlist_t *pl, pair_t pair) {
+    pair_set(pl, pl->used, pair);
+}
+
+static pair_t pair_get(pairlist_t *pl, int i) {
+    assert(i < pl->used);
+    return pl->list[i];
+}
+
+static int pair_exists(pairlist_t *pl, pair_t pair) {
+    for (int i = 0; i < pl->used; ++i)
+        if (pair_eq(pl->list[i], pair))
+            return 1;
+    return 0;
 }
 
 #endif

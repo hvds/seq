@@ -22,6 +22,7 @@ typedef struct {
     int try3[3];    /* The next triple to try (list of 3 point indices) */
     int try2[3];    /* The next pair to try, plus direction */
     loclist_t *seen;/* List of points tried, that we don't need to try again */
+    pairlist_t *pairs;  /* List of pairs tried */
 } cx_t;
 
 int n;              /* We're trying to find A051602(n) */
@@ -57,6 +58,7 @@ void report(int i) {
 
 void init(void) {
     loclist_t *first_seen = new_loclist(10);
+    pairlist_t *first_pairs = new_pairlist(10);
     context = (cx_t *)malloc((n + 1) * sizeof(cx_t));
 
     /* used to calculate timings */
@@ -83,7 +85,8 @@ void init(void) {
         { 4, 1, 0 },    /* Next triple to look for is point[4] + [1] + [0] */
         { 1, 0, 0 },    /* Next pair to look for is point[1] + [0], in the
                          * first direction (of 2) */
-        first_seen      /* Seed with an empty list */
+        first_seen,     /* Seed with empty lists */
+        first_pairs
     };
 
     best = 1;
@@ -96,6 +99,7 @@ void init(void) {
 void finish(void) {
     free_loclist(point);
     free_loclist(context[4].seen);
+    free_pairlist(context[4].pairs);
     free(context);
 }
 
@@ -103,7 +107,7 @@ void finish(void) {
  * and calls try_with() which applies that extension and calculates the
  * effects before calling try_next() again.
  */
-void try_next(int depth);
+void try_next(int depth, int new);
 
 /* Attempt to find a given 2-point extension; on failure, returns FALSE;
  * on success, returns TRUE with the 2 new points appended to point[].
@@ -303,7 +307,39 @@ void try_with(int points, int new) {
             report(points + new);
         }
     }
-    try_next(points + new);
+
+    try_next(points + new, new);
+}
+
+/* Mark a point as seen, either while applying it (present=true) or after
+ * returning from applying it (present=false).
+ * Any seen pairs that include this point as one of the pair promote the
+ * other of the pair to be uniquely seen.
+ * Additionally we either include this point in the seen list (if not
+ * present) or remove it (if present) - in the latter case, having it
+ * included will uselessly slow down searches, since we will never try
+ * a point that's already present.
+ */
+void seen_point(loclist_t *seen, pairlist_t *pairs, loc_t p, int present) {
+    int used = pairs->used;
+
+    if (present)
+        list_remove(seen, p);
+    else
+        list_append(seen, p);
+    for (int i = used - 1; i >= 0; --i) {
+        pair_t pair = pair_get(pairs, i);
+        if (loc_eq(p, pair.p[0])) {
+            list_append(seen, pair.p[1]);
+            if (used--)
+                pair_set(pairs, i, pair_get(pairs, used));
+        } else if (loc_eq(p, pair.p[1])) {
+            list_append(seen, pair.p[0]);
+            if (used--)
+                pair_set(pairs, i, pair_get(pairs, used));
+        }
+    }
+    pairs->used = used;
 }
 
 /* Return TRUE if this pair of points is canonical under the known
@@ -392,11 +428,12 @@ bool sym_best3(int points, sym_t s, span_t span, int i1, int i2, int i3) {
 }
 
 /* Try all possible extensions of the existing 'points'-point arrangement. */
-void try_next(int points) {
+void try_next(int points, int new) {
     cx_t *cx = &context[points];
     cx_t *cx1 = &context[points + 1];
     cx_t *cx2 = &context[points + 2];
     loclist_t *seen = dup_loclist(cx->seen);
+    pairlist_t *pairs = dup_pairlist(cx->pairs);
     sym_t sym = sym_check(point, cx->span, points);
 
     if (lim_visit && visit >= lim_visit)
@@ -405,10 +442,14 @@ void try_next(int points) {
         report(points);
     ++visit;
 
+    for (int i = points - new; i < points; ++i)
+        seen_point(seen, pairs, list_get(point, i), 1);
+
     if (points + 1 <= n) {
         /* Try to extend 3 points into a square. */
         memcpy(cx1, cx, sizeof(cx_t));
         cx1->seen = seen;
+        cx1->pairs = pairs;
 
         /* Try all triples we haven't already tried */
         while (cx1->try3[0] < points) {
@@ -424,7 +465,7 @@ void try_next(int points) {
                 /* then apply this extension (and recurse) */
                 try_with(points, 1);
                 /* suppress it from further extensions of this arrangement */
-                list_append(seen, list_get(point, points));
+                seen_point(seen, pairs, list_get(point, points), 0);
                 /* restore this, it will have been overwritten */
                 cx1->squares = cx->squares;
             }
@@ -450,26 +491,34 @@ void try_next(int points) {
         /* propagate progress made */
         memcpy(&cx2->try3, &cx1->try3, sizeof(cx2->try3));
         cx2->seen = seen;
+        cx2->pairs = pairs;
 
         /* Try all pairs and directions we haven't already tried */
         while (cx2->try2[0] < points) {
             if (
                 /* If this pair is canonical for symmetry of this arrangement */
                 sym_best2(points, sym, cx->span, cx2->try2[0], cx2->try2[1])
-                /* .. and it's direction is canonical */
+                /* .. and its direction is canonical */
                 && !(cx2->try2[2] == 1 && sym_axis(sym, cx->span,
                         list_get(point, cx2->try2[0]),
                         list_get(point, cx2->try2[1])))
                 /* .. and it forms a square with two missing points */
                 && try_test2(points, cx2->try2)
-                /* .. and neither new point is on the list to be suppressed */
+                /* .. and the points are not on a list to be suppressed */
                 && !list_exists(seen, list_get(point, points))
                 && !list_exists(seen, list_get(point, points + 1))
-                /* .. and it is not a duplicate */
-                && !duplicate_pair(points, sym, cx2->try2)
+                && !pair_exists(pairs, (pair_t){
+                    list_get(point, points),
+                    list_get(point, points + 1)
+                })
             ) {
                 /* then apply this extension (and recurse) */
                 try_with(points, 2);
+                /* suppress the pair from further extensions */
+                pair_append(pairs, (pair_t){
+                    list_get(point, points),
+                    list_get(point, points + 1)
+                });
                 /* restore this, it will have been overwritten */
                 cx2->squares = cx->squares;
             }
@@ -487,6 +536,7 @@ void try_next(int points) {
         }
     }
     free_loclist(seen);
+    free_pairlist(pairs);
     return;
 }
 
@@ -528,7 +578,7 @@ int main(int argc, char** argv) {
     }
 
     init();
-    try_next(4);
+    try_next(4, 0);
 
     /* report final results */
     printf("%d %d %lu %dx%d %dx%d (%lu) %.2fs\n",
