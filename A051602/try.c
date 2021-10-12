@@ -290,6 +290,7 @@ void try_with(int points, int new) {
             minspan = span;
             maxspan = span;
             newspan = 1;
+            last_new = visit;
         } else {
             /* Match of existing record, report it only if new gridsize */
             if (minspan.x > span.x) minspan.x = span.x, newspan = 1;
@@ -299,7 +300,6 @@ void try_with(int points, int new) {
         }
         best = ncx->squares;
         if (newspan || verbose == 1) {
-            last_new = visit;
             if (verbose == 2) {
                 /* distinguish from the per-iteration report */
                 printf("* ");
