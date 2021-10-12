@@ -24,6 +24,32 @@ while (<>) {
     }x or die "Parse head: '$_'\n";
     my($i, $xspan, $yspan, $squares) = ($1, $2, $3, $4);
     my @point = map [ map $_ >> 1, split /:/ ], split ' ', substr($_, $+[0]);
+
+    # if all x,y pairs have same parity, we can rot-45 to simplify
+    my $need = 1;
+    my $base = ($point[0][0] ^ $point[0][1]) & 1;
+    for (@point) {
+        next if (($_->[0] ^ $_->[1]) & 1) == $base;
+        $need = 0;
+        last;
+    }
+    if ($need) {
+        my($minx, $maxx) = ($xspan + $yspan, 0);
+        my($miny, $maxy) = ($yspan, -$xspan - $yspan);
+        for (@point) {
+            my($x, $y) = @$_;
+            my($x2, $y2) = (($x + $y) / 2, ($y - $x) / 2);
+            @$_ = ($x2, $y2);
+            $minx = $x2 if $minx > $x2;
+            $maxx = $x2 if $maxx < $x2;
+            $miny = $y2 if $miny > $y2;
+            $maxy = $y2 if $maxy < $y2;
+        }
+        $_->[0] -= $minx, $_->[1] -= $miny for @point;
+        $xspan = $maxx - $minx + 1;
+        $yspan = $maxy - $miny + 1;
+    }
+
     ++$size[0 + @point]{$squares}
         if check($i, [ $xspan - 1, $yspan - 1 ], \@point, $squares);
 }
