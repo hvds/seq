@@ -24,7 +24,7 @@ typedef unsigned char sym_t;
 #define SYM_ORDER 5
 extern sym_t sym_order[SYM_ORDER];
 
-extern sym_t sym_check(loclist_t *ll, span_t span, int size);
+extern sym_t sym_check(loc2plist_t *ll, span_t span, int size, int power);
 extern bool sym_axis(sym_t s, span_t span, loc_t p1, loc_t p2);
 extern loc_t sym_transloc(sym_t s, span_t span, loc_t p);
 

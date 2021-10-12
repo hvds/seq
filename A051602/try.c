@@ -15,9 +15,11 @@ long clock_tick;
  * and information about what extensions have already been tried.
  * It does not list the points themselves, those are stored globally
  * in point[].
+ * At all times the 
  */
 typedef struct {
     int squares;    /* Number of squares in this arrangement */
+    int power;      /* Original unit square is now 2^power */
     span_t span;    /* Min/max extent of this arrangement */
     int try3[3];    /* The next triple to try (list of 3 point indices) */
     int try2[3];    /* The next pair to try, plus direction */
@@ -28,10 +30,10 @@ typedef struct {
 int n;              /* We're trying to find A051602(n) */
 int verbose = 0;    /* report every maximum (1) or iteration (2) */
 int best;           /* Greatest number of squares seen in any arrangement */
-loclist_t *point;   /* List of points in the current arrangement */
+loc2plist_t *point; /* List of points in the current arrangement */
 cx_t *context;      /* List of context objects */
-loc_t minspan;      /* { x, y } size of smallest maximal solution */
-loc_t maxspan;      /* { x, y } size of greatest maximal solution */
+loc2p_t minspan;    /* { x, y } size of smallest maximal solution */
+loc2p_t maxspan;    /* { x, y } size of greatest maximal solution */
 unsigned long visit;        /* Count of iterations */
 unsigned long lim_visit = 0;/* Stop after this many iterations */
 unsigned long last_new;     /* Iteration at which last new result found */
@@ -45,12 +47,14 @@ double timing(void) {
 /* Show a result-so-far, consisting of i points */
 void report(int i) {
     cx_t *cx = &context[i];
+    int power = cx->power;
     loc_t span = loc_diff(cx->span.min, cx->span.max);
 
-    printf("(%lu) %dx%d ", visit, span.x + 1, span.y + 1);
+    printf("(%lu) p%d %dx%d ", visit, power,
+            (span.x >> 1) + 1, (span.y >> 1) + 1);
     printf("%d:", cx->squares);
     for (int j = 0; j < i; ++j) {
-        loc_t p = list_get(point, j);
+        loc_t p = list2p_get(point, j, cx->power);
         printf(" %d:%d", p.x - cx->span.min.x, p.y - cx->span.min.y);
     }
     printf("\n");
@@ -69,15 +73,16 @@ void init(void) {
         setvbuf(stdout, (char*)NULL, _IONBF, 0);
 
     /* Start off with 4 points making a unit square */
-    point = new_loclist(n + 1);
-    list_set(point, 0, (loc_t){ 0, 0 });
-    list_set(point, 1, (loc_t){ 0, 1 });
-    list_set(point, 2, (loc_t){ 1, 0 });
-    list_set(point, 3, (loc_t){ 1, 1 });
+    point = new_loc2plist(n + 1);
+    list2p_set(point, 0, (loc2p_t){ 0, 0, 1 });
+    list2p_set(point, 1, (loc2p_t){ 0, 2, 1 });
+    list2p_set(point, 2, (loc2p_t){ 2, 0, 1 });
+    list2p_set(point, 3, (loc2p_t){ 2, 2, 1 });
 
     context[4] = (cx_t){
         1,                      /* squares */
-        { { 0, 0 }, { 1, 1 } }, /* span */
+        1,                      /* power */
+        { { 0, 0 }, { 2, 2 } }, /* span */
         /* We know that no three of our first four points will form an
          * empty triple, so we'll start looking for triples only from
          * the next point.
@@ -90,14 +95,14 @@ void init(void) {
     };
 
     best = 1;
-    minspan = (loc_t){ 1, 1 };
-    maxspan = (loc_t){ 1, 1 };
+    minspan = (loc2p_t){ 2, 2, 1 };
+    maxspan = (loc2p_t){ 2, 2, 1 };
     visit = 0UL;
     last_new = 0UL;
 }
 
 void finish(void) {
-    free_loclist(point);
+    free_loc2plist(point);
     free_loclist(context[4].seen);
     free_pairlist(context[4].pairs);
     free(context);
@@ -115,41 +120,44 @@ void try_next(int depth, int new);
  * considering the candidate as an edge of a square, we can make the
  * second edge by rotating it either 90 or 270 degrees.
  */
-int try_test2(int points, int try2[3]) {
-    loc_t pi = list_get(point, try2[0]);
-    loc_t pj = list_get(point, try2[1]);
+int try_test2(int points, int try2[3], int power) {
+    loc_t pi = list2p_get(point, try2[0], power);
+    loc_t pj = list2p_get(point, try2[1], power);
     int dir = try2[2];
-    loc_t pk, pl, diff;
+    loc_t diff;
+    loc2p_t pk, pl;
 
     diff = loc_diff(pi, pj);
     if (dir) {
-        pk = loc_rot90(pi, diff);
-        pl = loc_rot90(pj, diff);
+        pk = (loc2p_t){ loc_rot90(pi, diff), power };
+        pl = (loc2p_t){ loc_rot90(pj, diff), power };
     } else {
-        pk = loc_rot270(pi, diff);
-        pl = loc_rot270(pj, diff);
+        pk = (loc2p_t){ loc_rot270(pi, diff), power };
+        pl = (loc2p_t){ loc_rot270(pj, diff), power };
     }
     /* This is a valid extension only if the two new points are not
      * already present in the arrangement.
      */
-    if (list_exists_lim(point, points, pk)
-        || list_exists_lim(point, points, pl)
+    if (list2p_exists_lim(point, points, pk)
+        || list2p_exists_lim(point, points, pl)
     )
         return 0;
-    list_set(point, points, pk);
-    list_set(point, points + 1, pl);
+    list2p_set(point, points, pk);
+    list2p_set(point, points + 1, pl);
     return 1;
 }
 
 /* Return TRUE if the new pair just found by try_test2 would be
  * a duplicate of a pair we've already tried.
  */
-int duplicate_pair(int points, sym_t sym, int try2[3]) {
+int duplicate_pair(int points, sym_t sym, int try2[3], int power) {
     int ii = try2[0], ij = try2[1], ik = points, il = points + 1;
-    loc_t pi = list_get(point, ii), pj = list_get(point, ij);
-    loc_t pk = list_get(point, ik), pl = list_get(point, il);
-    loc_t pm = (loc_t){ pk.x * 2 - pi.x, pk.y * 2 - pi.y };
-    loc_t pn = (loc_t){ pl.x * 2 - pj.x, pl.y * 2 - pj.y };
+    loc_t pi = list2p_get(point, ii, power);
+    loc_t pj = list2p_get(point, ij, power);
+    loc_t pk = list2p_get(point, ik, power);
+    loc_t pl = list2p_get(point, il, power);
+    loc2p_t pm = (loc2p_t){ pk.x * 2 - pi.x, pk.y * 2 - pi.y, power };
+    loc2p_t pn = (loc2p_t){ pl.x * 2 - pj.x, pl.y * 2 - pj.y, power };
     int im, in;
 
     /* if the new pair lies on an axis of symmetry, duplication has already
@@ -161,9 +169,9 @@ int duplicate_pair(int points, sym_t sym, int try2[3]) {
     /* if the opposite pair is not already in the arrangement, there's
      * no duplication
      */
-    if ((im = list_find_lim(point, points, pm)) < 0)
+    if ((im = list2p_find_lim(point, points, pm)) < 0)
         return 0;
-    if ((in = list_find_lim(point, points, pn)) < 0)
+    if ((in = list2p_find_lim(point, points, pn)) < 0)
         return 0;
 
     /* if the opposite pair comes earlier in the order than the original
@@ -182,10 +190,10 @@ int duplicate_pair(int points, sym_t sym, int try2[3]) {
  * by attempting to rotate one edge by 90 or 270 degrees to make it
  * coincide with the third point.
  */
-int try_test3(int points, int try3[3]) {
-    loc_t pi = list_get(point, try3[0]);
-    loc_t pj = list_get(point, try3[1]);
-    loc_t pk = list_get(point, try3[2]);
+int try_test3(int points, int try3[3], int power) {
+    loc_t pi = list2p_get(point, try3[0], power);
+    loc_t pj = list2p_get(point, try3[1], power);
+    loc_t pk = list2p_get(point, try3[2], power);
     loc_t pl, diff;
 
     diff = loc_diff(pi, pj);
@@ -210,9 +218,9 @@ int try_test3(int points, int try3[3]) {
     /* This is a valid extension only if the new point is not already
      * present in the arrangement.
      */
-    if (list_exists_lim(point, points, pl))
+    if (list2p_exists_lim(point, points, (loc2p_t){ pl, power }))
         return 0;
-    list_set(point, points, pl);
+    list2p_set(point, points, (loc2p_t){ pl, power });
     return 1;
 }
 
@@ -221,24 +229,24 @@ int try_test3(int points, int try3[3]) {
  * point[i]-point[j] and point[i]-point[k], and count only when
  * j < k.
  */
-int find_squares(int i) {
-    loc_t pi = list_get(point, i);
+int find_squares(int i, int power) {
+    loc_t pi = list2p_get(point, i, power);
     int count = 0;
 
     for (int j = 0; j < i; ++j) {
-        loc_t pj = list_get(point, j);
+        loc_t pj = list2p_get(point, j, power);
         loc_t diff = loc_diff(pi, pj);
         loc_t pk = loc_rot90(pi, diff);
         loc_t pl = loc_rot90(pj, diff);
-        if (list_find_lim(point, i, pk) > j
-           && list_exists_lim(point, i, pl)
+        if (list2p_find_lim(point, i, (loc2p_t){ pk, power }) > j
+           && list2p_exists_lim(point, i, (loc2p_t){ pl, power })
         )
             ++count;
 
         pk = loc_rot270(pi, diff);
         pl = loc_rot270(pj, diff);
-        if (list_find_lim(point, i, pk) > j
-           && list_exists_lim(point, i, pl)
+        if (list2p_find_lim(point, i, (loc2p_t){ pk, power }) > j
+           && list2p_exists_lim(point, i, (loc2p_t){ pl, power })
         )
             ++count;
     }
@@ -256,17 +264,28 @@ int find_squares(int i) {
 void try_with(int points, int new) {
     cx_t *ocx = &context[points];
     cx_t *ncx = &context[points + new];
+    int power = ocx->power, raising = 0;
+
+    if (is_loc2p_odd(list2p_get2p(point, points), power)) {
+        raising = 1;
+        ++power;
+    }
 
     /* The caller will already have filled in most of the new context,
      * but some parts may have been overwritten by subsequent work.
      */
+    ncx->power = power;
     ncx->span = ocx->span;
+    if (raising) {
+        ncx->span.min = raise2p(ncx->span.min);
+        ncx->span.max = raise2p(ncx->span.max);
+    }
 
     for (int i = points; i < points + new; ++i) {
-        loc_t pi = list_get(point, i);
+        loc_t pi = list2p_get(point, i, power);
 
         /* Update the count of squares */
-        ncx->squares += find_squares(i);
+        ncx->squares += find_squares(i, power);
 
         /* Track the 4 limits of the arrangement */
         if (ncx->span.min.x > pi.x) ncx->span.min.x = pi.x;
@@ -287,16 +306,24 @@ void try_with(int points, int new) {
         }
         if (ncx->squares > best) {
             /* New record: reset minspan/maxspan, and always report this */
-            minspan = span;
-            maxspan = span;
+            minspan = (loc2p_t){ span, power };
+            maxspan = (loc2p_t){ span, power };
             newspan = 1;
             last_new = visit;
         } else {
             /* Match of existing record, report it only if new gridsize */
-            if (minspan.x > span.x) minspan.x = span.x, newspan = 1;
-            if (minspan.y > span.y) minspan.y = span.y, newspan = 1;
-            if (maxspan.x < span.x) maxspan.x = span.x, newspan = 1;
-            if (maxspan.y < span.y) maxspan.y = span.y, newspan = 1;
+            int spower = (minspan.power > maxspan.power) ? minspan.power : maxspan.power;
+            if (spower < power) {
+                minspan = lift2p(minspan, power);
+                maxspan = lift2p(maxspan, power);
+            } else if (power < spower) {
+                span = convert2p((loc2p_t){ span, power }, spower);
+            }
+
+            if (minspan.p.x > span.x) minspan.p.x = span.x, newspan = 1;
+            if (minspan.p.y > span.y) minspan.p.y = span.y, newspan = 1;
+            if (maxspan.p.x < span.x) maxspan.p.x = span.x, newspan = 1;
+            if (maxspan.p.y < span.y) maxspan.p.y = span.y, newspan = 1;
         }
         best = ncx->squares;
         if (newspan || verbose == 1) {
@@ -320,7 +347,7 @@ void try_with(int points, int new) {
  * included will uselessly slow down searches, since we will never try
  * a point that's already present.
  */
-void seen_point(loclist_t *seen, pairlist_t *pairs, loc_t p, int present) {
+void seen_point(loclist_t *seen, pairlist_t *pairs, loc_t p, int power, int present) {
     int used = pairs->used;
 
     if (present)
@@ -345,9 +372,9 @@ void seen_point(loclist_t *seen, pairlist_t *pairs, loc_t p, int present) {
 /* Return TRUE if this pair of points is canonical under the known
  * symmetries.
  */
-bool sym_best2(int points, sym_t s, span_t span, int i1, int i2) {
-    loc_t p1 = list_get(point, i1);
-    loc_t p2 = list_get(point, i2);
+bool sym_best2(int points, sym_t s, span_t span, int power, int i1, int i2) {
+    loc_t p1 = list2p_get(point, i1, power);
+    loc_t p2 = list2p_get(point, i2, power);
 
     if (s == 0)
         return 1;
@@ -355,8 +382,10 @@ bool sym_best2(int points, sym_t s, span_t span, int i1, int i2) {
     for (int i = 0; i < SYM_ORDER; ++i) {
         sym_t si = sym_order[i];
         if (s & si) {
-            int i3 = list_find_lim(point, points, sym_transloc(si, span, p1));
-            int i4 = list_find_lim(point, points, sym_transloc(si, span, p2));
+            loc_t p3 = sym_transloc(si, span, p1);
+            loc_t p4 = sym_transloc(si, span, p2);
+            int i3 = list2p_find_lim(point, points, (loc2p_t){ p3, power });
+            int i4 = list2p_find_lim(point, points, (loc2p_t){ p4, power });
             if (i3 < i4) {
                 if (i4 < i1 || (i4 == i1 && i3 < i2))
                     return 0;
@@ -374,10 +403,12 @@ bool sym_best2(int points, sym_t s, span_t span, int i1, int i2) {
  * indexed point of a given transform, or it is equal and the next-highest
  * is less, etc. The input indices are given in descending order.
  */
-bool sym_best3(int points, sym_t s, span_t span, int i1, int i2, int i3) {
-    loc_t p1 = list_get(point, i1);
-    loc_t p2 = list_get(point, i2);
-    loc_t p3 = list_get(point, i3);
+bool sym_best3(
+    int points, sym_t s, span_t span, int power, int i1, int i2, int i3
+) {
+    loc_t p1 = list2p_get(point, i1, power);
+    loc_t p2 = list2p_get(point, i2, power);
+    loc_t p3 = list2p_get(point, i3, power);
 
     if (s == 0)
         return 1;
@@ -385,9 +416,12 @@ bool sym_best3(int points, sym_t s, span_t span, int i1, int i2, int i3) {
     for (int i = 0; i < SYM_ORDER; ++i) {
         sym_t si = sym_order[i];
         if (s & si) {
-            int i4 = list_find_lim(point, points, sym_transloc(si, span, p1));
-            int i5 = list_find_lim(point, points, sym_transloc(si, span, p2));
-            int i6 = list_find_lim(point, points, sym_transloc(si, span, p3));
+            loc_t p4 = sym_transloc(si, span, p1);
+            loc_t p5 = sym_transloc(si, span, p2);
+            loc_t p6 = sym_transloc(si, span, p3);
+            int i4 = list2p_find_lim(point, points, (loc2p_t){ p4, power });
+            int i5 = list2p_find_lim(point, points, (loc2p_t){ p5, power });
+            int i6 = list2p_find_lim(point, points, (loc2p_t){ p6, power });
             if (i4 > i5 && i4 > i6) {
                 if (i4 < i1) return 0;
                 if (i4 == i1) {
@@ -434,7 +468,9 @@ void try_next(int points, int new) {
     cx_t *cx2 = &context[points + 2];
     loclist_t *seen = dup_loclist(cx->seen);
     pairlist_t *pairs = dup_pairlist(cx->pairs);
-    sym_t sym = sym_check(point, cx->span, points);
+    int power = cx->power;
+    int raising = (power > context[points - new].power) ? 1 : 0;
+    sym_t sym = sym_check(point, cx->span, points, power);
 
     if (lim_visit && visit >= lim_visit)
         return;
@@ -442,8 +478,17 @@ void try_next(int points, int new) {
         report(points);
     ++visit;
 
+    if (raising) {
+        for (int i = 0; i < seen->used; ++i)
+            list_set(seen, i, raise2p(list_get(seen, i)));
+        for (int i = 0; i < pairs->used; ++i) {
+            pair_t p = pair_get(pairs, i);
+            pair_set(pairs, i, (pair_t){ raise2p(p.p[0]), raise2p(p.p[1]) });
+        }
+    }
+
     for (int i = points - new; i < points; ++i)
-        seen_point(seen, pairs, list_get(point, i), 1);
+        seen_point(seen, pairs, list2p_get(point, i, power), power, 1);
 
     if (points + 1 <= n) {
         /* Try to extend 3 points into a square. */
@@ -455,17 +500,18 @@ void try_next(int points, int new) {
         while (cx1->try3[0] < points) {
             if (
                 /* If this triple forms a square with a missing 4th point */
-                try_test3(points, cx1->try3)
+                try_test3(points, cx1->try3, power)
                 /* .. and that point isn't on the list to be suppressed */
-                && !list_exists(seen, list_get(point, points))
+                && !list_exists(seen, list2p_get(point, points, power))
                 /* .. and it's canonical under symmetries of this arrangement */
-                && sym_best3(points, sym, cx->span,
+                && sym_best3(points, sym, cx->span, power,
                         cx1->try3[0], cx1->try3[1], cx1->try3[2])
             ) {
                 /* then apply this extension (and recurse) */
                 try_with(points, 1);
                 /* suppress it from further extensions of this arrangement */
-                seen_point(seen, pairs, list_get(point, points), 0);
+                seen_point(seen, pairs,
+                        list2p_get(point, points, power), power, 0);
                 /* restore this, it will have been overwritten */
                 cx1->squares = cx->squares;
             }
@@ -497,27 +543,28 @@ void try_next(int points, int new) {
         while (cx2->try2[0] < points) {
             if (
                 /* If this pair is canonical for symmetry of this arrangement */
-                sym_best2(points, sym, cx->span, cx2->try2[0], cx2->try2[1])
+                sym_best2(points, sym, cx->span, power,
+                        cx2->try2[0], cx2->try2[1])
                 /* .. and its direction is canonical */
                 && !(cx2->try2[2] == 1 && sym_axis(sym, cx->span,
-                        list_get(point, cx2->try2[0]),
-                        list_get(point, cx2->try2[1])))
+                        list2p_get(point, cx2->try2[0], power),
+                        list2p_get(point, cx2->try2[1], power)))
                 /* .. and it forms a square with two missing points */
-                && try_test2(points, cx2->try2)
+                && try_test2(points, cx2->try2, power)
                 /* .. and the points are not on a list to be suppressed */
-                && !list_exists(seen, list_get(point, points))
-                && !list_exists(seen, list_get(point, points + 1))
+                && !list_exists(seen, list2p_get(point, points, power))
+                && !list_exists(seen, list2p_get(point, points + 1, power))
                 && !pair_exists(pairs, (pair_t){
-                    list_get(point, points),
-                    list_get(point, points + 1)
+                    list2p_get(point, points, power),
+                    list2p_get(point, points + 1, power)
                 })
             ) {
                 /* then apply this extension (and recurse) */
                 try_with(points, 2);
                 /* suppress the pair from further extensions */
                 pair_append(pairs, (pair_t){
-                    list_get(point, points),
-                    list_get(point, points + 1)
+                    list2p_get(point, points, power),
+                    list2p_get(point, points + 1, power)
                 });
                 /* restore this, it will have been overwritten */
                 cx2->squares = cx->squares;
@@ -582,8 +629,10 @@ int main(int argc, char** argv) {
 
     /* report final results */
     printf("%d %d %lu %dx%d %dx%d (%lu) %.2fs\n",
-        n, best, last_new, minspan.x + 1, minspan.y + 1,
-        maxspan.x + 1, maxspan.y + 1, visit, timing()
+        n, best, last_new,
+        (minspan.p.x >> 1) + 1, (minspan.p.y >> 1) + 1,
+        (maxspan.p.x >> 1) + 1, (maxspan.p.y >> 1) + 1,
+        visit, timing()
     );
     finish();
     return 0;

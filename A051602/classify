@@ -19,11 +19,11 @@ while (<>) {
     /^\(/ or next;
     chomp;
     m{
-        ^ \( (\d+) \) \s
+        ^ \( (\d+) \) \s p\d+ \s
         (\d+) x (\d+) \s (\d+) : \s
     }x or die "Parse head: '$_'\n";
     my($i, $xspan, $yspan, $squares) = ($1, $2, $3, $4);
-    my @point = map [ split /:/ ], split ' ', substr($_, $+[0]);
+    my @point = map [ map $_ >> 1, split /:/ ], split ' ', substr($_, $+[0]);
     ++$size[0 + @point]{$squares}
         if check($i, [ $xspan - 1, $yspan - 1 ], \@point, $squares);
 }

@@ -27,6 +27,19 @@ loclist_t *dup_loclist(loclist_t *ll) {
     return ll2;
 }
 
+loc2plist_t *new_loc2plist(int size) {
+    loc2plist_t *l2l = (loc2plist_t *)malloc(sizeof(loc2plist_t));
+    l2l->size = size;
+    l2l->used = 0;
+    l2l->list = (loc2p_t *)malloc(sizeof(loc2p_t) * size);
+    return l2l;
+}
+
+void free_loc2plist(loc2plist_t *l2l) {
+    free(l2l->list);
+    free(l2l);
+}
+
 pairlist_t *new_pairlist(int size) {
     pairlist_t *pl = (pairlist_t *)malloc(sizeof(pairlist_t));
     pl->size = size;

@@ -51,7 +51,7 @@ loc_t sym_transloc(sym_t s, span_t span, loc_t l) {
 /*
     Return the set of symmetries shown by this arrangement of points
 */
-sym_t sym_check(loclist_t *ll, span_t span, int size) {
+sym_t sym_check(loc2plist_t *l2l, span_t span, int size, int power) {
     sym_t s = 0;
     loc_t copy[n];
 
@@ -64,7 +64,8 @@ sym_t sym_check(loclist_t *ll, span_t span, int size) {
         )
             continue;
 
-        memcpy(copy, ll->list, sizeof(loc_t) * size);
+        for (int j = 0; j < size; ++j)
+            copy[j] = list2p_get(l2l, j, power);
         remain = size;
         for (int j = 0; j < remain; ++j) {
             loc_t this = copy[j];
