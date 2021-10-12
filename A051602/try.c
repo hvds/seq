@@ -128,12 +128,15 @@ int try_test2(int points, int try2[3], int power) {
     loc2p_t pk, pl;
 
     diff = loc_diff(pi, pj);
-    if (dir) {
+    if (dir == 1) {
         pk = (loc2p_t){ loc_rot90(pi, diff), power };
         pl = (loc2p_t){ loc_rot90(pj, diff), power };
-    } else {
+    } else if (dir == 0) {
         pk = (loc2p_t){ loc_rot270(pi, diff), power };
         pl = (loc2p_t){ loc_rot270(pj, diff), power };
+    } else {
+        pk = (loc2p_t){ loc_diag1(pi, pj), power };
+        pl = (loc2p_t){ loc_diag2(pi, pj), power };
     }
     /* This is a valid extension only if the two new points are not
      * already present in the arrangement.
@@ -570,9 +573,8 @@ void try_next(int points, int new) {
                 cx2->squares = cx->squares;
             }
             /* advance to the next untried pair/dir */
-            if (cx2->try2[2] == 0) {
-                cx2->try2[2] = 1;
-            } else {
+            ++cx2->try2[2];
+            if (cx2->try2[2] == 3) {
                 cx2->try2[2] = 0;
                 ++cx2->try2[1];
                 if (cx2->try2[1] == cx2->try2[0]) {

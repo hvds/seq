@@ -67,6 +67,10 @@ void free_pairlist(pairlist_t *pl);
 void resize_pairlist(pairlist_t *pl, int size);
 pairlist_t *dup_pairlist(pairlist_t *pl);
 
+static int is_loc_odd(loc_t p) {
+    return (p.x & 1) || (p.y & 1);
+}
+
 static loc_t loc_diff(loc_t s1, loc_t s2) {
     loc_t d;
     d.x = s2.x - s1.x;
@@ -81,6 +85,12 @@ static loc_t loc_sum(loc_t s1, loc_t s2) {
     return d;
 }
 
+static loc_t loc_mid(loc_t s1, loc_t s2) {
+    loc_t d = loc_sum(s1, s2);
+    assert(!is_loc_odd(d));
+    return (loc_t){ d.x >> 1, d.y >> 1 };
+}
+
 static loc_t loc_rot90(loc_t src, loc_t diff) {
     loc_t d;
     d.x = src.x - diff.y;
@@ -93,6 +103,16 @@ static loc_t loc_rot270(loc_t src, loc_t diff) {
     d.x = src.x + diff.y;
     d.y = src.y - diff.x;
     return d;
+}
+
+static loc_t loc_diag1(loc_t p1, loc_t p2) {
+    loc_t mid = loc_mid(p1, p2);
+    return loc_rot90(mid, loc_diff(mid, p1));
+}
+
+static loc_t loc_diag2(loc_t p1, loc_t p2) {
+    loc_t mid = loc_mid(p1, p2);
+    return loc_rot90(mid, loc_diff(mid, p2));
 }
 
 static int loc_eq(loc_t s1, loc_t s2) {
@@ -189,7 +209,7 @@ static int is_loc2p_odd(loc2p_t p, int power) {
     assert(p.power <= power);
     if (p.power < power)
         return 0;
-    return (p.p.x & 1) || (p.p.y & 1);
+    return is_loc_odd(p.p);
 }
 
 static void list2p_set(loc2plist_t *l2l, int i, loc2p_t val) {
