@@ -344,28 +344,27 @@ void try_with(int points, int new) {
 
 /* Mark a point as seen, either while applying it (present=true) or after
  * returning from applying it (present=false).
- * Any seen pairs that include this point as one of the pair promote the
- * other of the pair to be uniquely seen.
- * Additionally we either include this point in the seen list (if not
- * present) or remove it (if present) - in the latter case, having it
- * included will uselessly slow down searches, since we will never try
- * a point that's already present.
+ * If present, we remove it from the seen list; if not, we add it.
+ * Similarly, any pair including this point is removed from the pairs list,
+ * and if present we promote the other point of the pair to the seen list.
  */
 void seen_point(loclist_t *seen, pairlist_t *pairs, loc_t p, int power, int present) {
-    int used = pairs->used;
-
     if (present)
         list_remove(seen, p);
     else
         list_append(seen, p);
+
+    int used = pairs->used;
     for (int i = used - 1; i >= 0; --i) {
         pair_t pair = pair_get(pairs, i);
         if (loc_eq(p, pair.p[0])) {
-            list_append(seen, pair.p[1]);
+            if (present)
+                list_append(seen, pair.p[1]);
             if (used--)
                 pair_set(pairs, i, pair_get(pairs, used));
         } else if (loc_eq(p, pair.p[1])) {
-            list_append(seen, pair.p[0]);
+            if (present)
+                list_append(seen, pair.p[0]);
             if (used--)
                 pair_set(pairs, i, pair_get(pairs, used));
         }
