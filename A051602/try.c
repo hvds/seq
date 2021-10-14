@@ -474,6 +474,33 @@ bool sym_best3(
     return 1;
 }
 
+void next_try3(int* try3) {
+    ++try3[2];
+    if (try3[2] == try3[1]) {
+        try3[2] = 0;
+        ++try3[1];
+        if (try3[1] == try3[0]) {
+            try3[1] = 1;
+            ++try3[0];
+        }
+    }
+}
+
+void next_try2(int* try2) {
+    /* three "directions" to interpret the pair as: left side of a square,
+     * right side, or diagonal.
+     */
+    ++try2[2];
+    if (try2[2] == 3) {
+        try2[2] = 0;
+        ++try2[1];
+        if (try2[1] == try2[0]) {
+            try2[1] = 0;
+            ++try2[0];
+        }
+    }
+}
+
 /* Try all possible extensions of the existing 'points'-point arrangement. */
 void try_next(int points, int new) {
     cx_t *cx = &context[points];
@@ -514,23 +541,18 @@ void try_next(int points, int new) {
                 && sym_best3(points, sym, cx->span, power,
                         cx1->try3[0], cx1->try3[1], cx1->try3[2])
             ) {
-                /* then apply this extension (and recurse) */
+                /* recursed arrangements should start from next triple */
+                next_try3(cx1->try3);
+                /* apply this extension (and recurse) */
                 try_with(points, 1);
                 /* suppress it from further extensions of this arrangement */
                 seen_point(seen, pairs,
                         list2p_get(point, points, power), power, 0);
                 /* restore this, it will have been overwritten */
                 cx1->squares = cx->squares;
-            }
-            /* advance to the next untried triple */
-            ++cx1->try3[2];
-            if (cx1->try3[2] == cx1->try3[1]) {
-                cx1->try3[2] = 0;
-                ++cx1->try3[1];
-                if (cx1->try3[1] == cx1->try3[0]) {
-                    cx1->try3[1] = 1;
-                    ++cx1->try3[0];
-                }
+            } else {
+                /* advance to the next untried triple */
+                next_try3(cx1->try3);
             }
         }
     }
@@ -566,7 +588,9 @@ void try_next(int points, int new) {
                     list2p_get(point, points + 1, power)
                 })
             ) {
-                /* then apply this extension (and recurse) */
+                /* recursed arrangements should start from next pair/dir */
+                next_try2(cx2->try2);
+                /* apply this extension (and recurse) */
                 try_with(points, 2);
                 /* suppress the pair from further extensions */
                 pair_append(pairs, (pair_t){
@@ -575,16 +599,9 @@ void try_next(int points, int new) {
                 });
                 /* restore this, it will have been overwritten */
                 cx2->squares = cx->squares;
-            }
-            /* advance to the next untried pair/dir */
-            ++cx2->try2[2];
-            if (cx2->try2[2] == 3) {
-                cx2->try2[2] = 0;
-                ++cx2->try2[1];
-                if (cx2->try2[1] == cx2->try2[0]) {
-                    cx2->try2[1] = 0;
-                    ++cx2->try2[0];
-                }
+            } else {
+                /* advance to the next untried pair/dir */
+                next_try2(cx2->try2);
             }
         }
     }
