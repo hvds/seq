@@ -4,11 +4,13 @@ use warnings;
 
 my $uniq = 0;
 my $indexed = 0;
+my $quiet = 0;
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
     $uniq = 1, next if $arg eq '-u';
     $indexed = 1, next if $arg eq '-i';
+    $quiet = 1, next if $arg eq '-q';
     die "unknown option '$arg'";
 }
 
@@ -92,7 +94,7 @@ sub check {
         return 0;
     } else {
         $seen[0 + @$p]{$s} = $i;
-        pretty($i, $span, $p, $squares) if $uniq;
+        pretty($i, $span, $p, $squares) if $uniq && !$quiet;
         return 1;
     }
 }
