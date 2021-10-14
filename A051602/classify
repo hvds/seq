@@ -72,9 +72,13 @@ sub _str {
 sub check {
     my($i, $span, $p, $squares) = @_;
     my $s = _str($p);
+    my $lookup = $seen[0 + @$p] //= {};
     my($mx, $my) = @$span;
     my($x, $y);
     for my $sub (
+        # identity
+        undef,
+
         # xY, Xy, XY
         sub { [ $x, $my - $y ] },
         sub { [ $mx - $x, $y ] },
@@ -86,17 +90,15 @@ sub check {
         sub { [ $my - $y, $x ] },
         sub { [ $my - $y, $mx - $x ] },
     ) {
-        my $t = _str([ map { ($x, $y) = @$_; $sub->() } @$p ]);
-        $s = $t if $s gt $t;
+        my $t = $sub ? _str([ map { ($x, $y) = @$_; $sub->() } @$p ]) : $s;
+        if ($lookup->{$t}) {
+            print "$lookup->{$t} == $i\n" unless $uniq;
+            return 0;
+        }
     }
-    if ($seen[0 + @$p]{$s}) {
-        print "$seen[0 + @$p]{$s} == $i\n" unless $uniq;
-        return 0;
-    } else {
-        $seen[0 + @$p]{$s} = $i;
-        pretty($i, $span, $p, $squares) if $uniq && !$quiet;
-        return 1;
-    }
+    $lookup->{$s} = $i;
+    pretty($i, $span, $p, $squares) if $uniq && !$quiet;
+    return 1;
 }
 
 sub pretty {
