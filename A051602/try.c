@@ -100,6 +100,10 @@ void init(void) {
     maxspan = (loc2p_t){ 2, 2, 1 };
     visit = 0UL;
     last_new = 0UL;
+
+    if (verbose == 2 && (quiet == 0 || n == 4))
+        report(4);
+    ++visit;
 }
 
 void finish(void) {
@@ -339,7 +343,13 @@ void try_with(int points, int new) {
         }
     }
 
-    try_next(points + new, new);
+    if (lim_visit && visit >= lim_visit)
+        return;
+    if (verbose == 2 && (quiet == 0 || points + new == n))
+        report(points + new);
+    ++visit;
+    if (points + new < n)
+        try_next(points + new, new);
 }
 
 /* Mark a point as seen, either while applying it (present=true) or after
@@ -474,12 +484,6 @@ void try_next(int points, int new) {
     int power = cx->power;
     int raising = (power > context[points - new].power) ? 1 : 0;
     sym_t sym = sym_check(point, cx->span, points, power);
-
-    if (lim_visit && visit >= lim_visit)
-        return;
-    if (verbose == 2 && (quiet == 0 || points == n))
-        report(points);
-    ++visit;
 
     if (raising) {
         for (int i = 0; i < seen->used; ++i)
