@@ -29,6 +29,7 @@ typedef struct {
 
 int n;              /* We're trying to find A051602(n) */
 int verbose = 0;    /* report every maximum (1) or iteration (2) */
+int quiet = 0;      /* skip reporting for arrangements with < n points */
 int best;           /* Greatest number of squares seen in any arrangement */
 loc2plist_t *point; /* List of points in the current arrangement */
 cx_t *context;      /* List of context objects */
@@ -297,7 +298,7 @@ void try_with(int points, int new) {
         if (ncx->span.max.y < pi.y) ncx->span.max.y = pi.y;
     }
 
-    if (ncx->squares >= best) {
+    if ((quiet == 0 || points + new == n) && ncx->squares >= best) {
         loc_t span = loc_diff(ncx->span.min, ncx->span.max);
         int newspan = 0;
 
@@ -477,7 +478,7 @@ void try_next(int points, int new) {
 
     if (lim_visit && visit >= lim_visit)
         return;
-    if (verbose == 2)
+    if (verbose == 2 && (quiet == 0 || points == n))
         report(points);
     ++visit;
 
@@ -600,6 +601,8 @@ int main(int argc, char** argv) {
             verbose = 1;
         else if (strcmp("-v", s) == 0)
             verbose = 2;
+        else if (strcmp("-q", s) == 0)
+            quiet = 1;
         else if (strcmp("-i", s) == 0)
             lim_visit = atol(argv[arg++]);
         else {
