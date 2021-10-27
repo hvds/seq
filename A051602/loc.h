@@ -26,15 +26,17 @@ typedef struct {
     loc_t p[2];
 } pair_t;
 
-/* We use two different loclists: the global point[], which is initialized
- * to be big enough for all points, and the per-context seen[], which
- * grows as needed.
+/* In 'recurse', the global point[] is a loc2plist, which allows scaling
+ * of the axes without having to recalculate existing points; the lists
+ * of single points already seen and pairs already seen are stored in the
+ * context for each recursion level as loclist_t and pairlist_t respectively;
+ * they use absolute coordinate.
  * For point[], knowledge of the recursion level is used to determine
  * which entries are relevant; this is mostly captured in the variable
  * 'points', so the *_lim() functions below are used to interrogate it.
- * For seen[], new points are appended, and seen->used tracks how many
- * entries it currently has. The bare (not *_lim()) functions are used
- * to interrogate them.
+ * For seen[] and pairs[], new points are appended, and their ->used track
+ * how many entries each currently has. The bare (not *_lim()) functions
+ * are used to interrogate them.
  */
 typedef struct {
     int size;
