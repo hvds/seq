@@ -56,7 +56,8 @@ void report(int i) {
     printf("%d:", cx->squares);
     for (int j = 0; j < i; ++j) {
         loc_t p = list2p_get(point, j, cx->power);
-        printf(" %d:%d", p.x - cx->span.min.x, p.y - cx->span.min.y);
+        printf(" %d:%d",
+                (p.x - cx->span.min.x) >> 1, (p.y - cx->span.min.y) >> 1);
     }
     printf("\n");
 }

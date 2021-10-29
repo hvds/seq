@@ -25,7 +25,7 @@ while (<>) {
         (\d+) x (\d+) \s (\d+) : \s
     }x or die "Parse head: '$_'\n";
     my($i, $xspan, $yspan, $squares) = ($1, $2, $3, $4);
-    my @point = map [ map $_ >> 1, split /:/ ], split ' ', substr($_, $+[0]);
+    my @point = map [ map $_ + 0, split /:/ ], split ' ', substr($_, $+[0]);
 
     # if all x,y pairs have same parity, we can rot-45 to simplify
     my $need = 1;
