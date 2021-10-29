@@ -1,4 +1,8 @@
 recurse
 grecurse
+advance
+madvance
+gadvance
 .recurse.c
+.advance.c
 core

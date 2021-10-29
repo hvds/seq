@@ -73,6 +73,10 @@ static int is_loc_odd(loc_t p) {
     return (p.x & 1) || (p.y & 1);
 }
 
+static int loc_parity(loc_t p) {
+    return (p.x ^ p.y) & 1;
+}
+
 static loc_t loc_diff(loc_t s1, loc_t s2) {
     loc_t d;
     d.x = s2.x - s1.x;
@@ -85,6 +89,10 @@ static loc_t loc_sum(loc_t s1, loc_t s2) {
     d.x = s1.x + s2.x;
     d.y = s1.y + s2.y;
     return d;
+}
+
+static loc_t loc_expand(loc_t p) {
+    return (loc_t){ p.y + p.x, p.y - p.x };
 }
 
 static loc_t loc_mid(loc_t s1, loc_t s2) {
@@ -107,14 +115,24 @@ static loc_t loc_rot270(loc_t src, loc_t diff) {
     return d;
 }
 
+/* In principle this is:
+        loc_t mid = loc_mid(p1, p2);
+        return loc_rot90(mid, loc_diff(mid, p1));
+ * but loc_mid() requires p1+p2 even, which is too strict.
+ * So unroll it, so we can apply only as much strictness as needed.
+ */
 static loc_t loc_diag1(loc_t p1, loc_t p2) {
-    loc_t mid = loc_mid(p1, p2);
-    return loc_rot90(mid, loc_diff(mid, p1));
+    loc_t mid2 = loc_sum(p1, p2);
+    loc_t rot2 = loc_rot90(mid2, loc_diff(mid2, loc_sum(p1, p1)));
+    assert(!is_loc_odd(rot2));
+    return (loc_t){ rot2.x >> 1, rot2.y >> 1 };
 }
 
 static loc_t loc_diag2(loc_t p1, loc_t p2) {
-    loc_t mid = loc_mid(p1, p2);
-    return loc_rot90(mid, loc_diff(mid, p2));
+    loc_t mid2 = loc_sum(p1, p2);
+    loc_t rot2 = loc_rot90(mid2, loc_diff(mid2, loc_sum(p2, p2)));
+    assert(!is_loc_odd(rot2));
+    return (loc_t){ rot2.x >> 1, rot2.y >> 1 };
 }
 
 static int loc_eq(loc_t s1, loc_t s2) {
