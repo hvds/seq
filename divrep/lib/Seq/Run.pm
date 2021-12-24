@@ -161,6 +161,9 @@ sub finalize {
     }
     close $fh;
 
+    # required for the func_matches() call below, for some types
+    $type->bind($self->n);
+
     my $ren = qr{\d+(?:e\d+)?};
     my $rend = sub { $_[0] =~ s{e(\d+)$}{0 x $1}er };
 

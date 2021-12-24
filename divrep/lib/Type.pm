@@ -38,6 +38,13 @@ sub new {
     return $self;
 }
 
+sub bind {
+    my($self, $n) = @_;
+    $self->{n} = $n;
+    $self->init;
+    return;
+}
+
 sub typename {
     my($self) = @_;
     my $class = ref($self) // $self;
@@ -128,7 +135,8 @@ sub fprio {
 # Most types have constant func_target, but not all
 sub func_matches {
     my($self, $k, $result) = @_;
-    $self->func_target($k) == $result;
+    my $target = $self->func_target($k) // die "No target set in $self";
+    return $target == $result;
 }
 
 1;
