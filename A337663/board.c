@@ -139,6 +139,11 @@ board_t *new_board(int k, int unused, group_t *g0, group_t *g1) {
     return b;
 }
 
+/*
+ * Show the board, along with some relevant parameters.
+ * Unconnected groups are separated by '  //  '; within a group the rows
+ * are separated by ';', and empty spaces are represented by 0.
+ */
 void print_board(board_t *b) {
     printf("b=%lu; k=%d; u=%d; g=%d ->  ",
             board_count, b->k, b->unused, b->groups);
