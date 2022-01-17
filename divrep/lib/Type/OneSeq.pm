@@ -37,8 +37,8 @@ sub gprio {
     my @f = factor_exp($n);
     my $highest = $f[-1][0] // 1;
     return -(
-        (log($n) / log(2)) ** 2
-        + (log($highest) / log(2)) ** 3
+        (log($n) / log(2))
+        + (log($highest) / log(2)) ** 1.5
     );
 }
 
