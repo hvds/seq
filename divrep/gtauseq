@@ -436,6 +436,7 @@ sub tau {
 
 sub ston {
     my($s) = @_;
+    $s =~ s/,//g;
     $s =~ s{e(\d+)}{"0" x $1}ie;
     return MBI($s);
 }
