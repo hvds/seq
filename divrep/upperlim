@@ -57,7 +57,6 @@ $| = 1;
 my($n, $f) = map MBI($_), @ARGV;
 $0 = "upperlim($n $f)";
 $_ = ston($_) for ($opt_n, $opt_x);
-$opt_p = [ split /,/, $opt_p ];
 my $type = Type->new($typename);
 
 my $zone = MBI(1);
@@ -68,8 +67,25 @@ my $tn = tau($n, \@nf);
 s/^!// && (push @$opt_nq, $_) for @$opt_q;
 @$_ = sort { $a <=> $b } @$_ for ($opt_i, $opt_q);
 $_ = MBI($_) for @$opt_q;
-my $mods = find_mods($type);
 
+my $opt_pp;
+if ($opt_p =~ /;/) {
+    $opt_pp = [ map [ split /,/ ], split /;/, $opt_p ];
+    my %seen;
+    for (@$opt_pp) {
+        my %this;
+        ++$this{$_} for @$_;
+        for (keys %this) {
+            $seen{$_} = $this{$_} if $this{$_} > ($seen{$_} // 0);
+        }
+    }
+    $opt_p = [ map +($_) x $seen{$_}, sort { $a <=> $b } keys %seen ];
+} else {
+    $opt_p = [ split /,/, $opt_p ];
+    $opt_pp = [ ($opt_p) x @$opt_i ];
+}
+
+my $mods = find_mods($type);
 @$opt_q = do {
     my %disallow = map +($_ => 1), @$opt_nq;
     grep !$disallow{$_}, @$opt_q;
@@ -225,9 +241,16 @@ sub find_perms {
     my($type) = @_;
     my @perms;
 
-    my $target = @$opt_i * @$opt_p;
+    my %powers;
+    my $target = 0;
+    for (0 .. $#$opt_i) {
+        my $i = $opt_i->[$_];
+        my $pp = $opt_pp->[$_];
+        $powers{$i} = _group($pp);
+        $target += @$pp;
+    }
+
     my $source = @$opt_q;
-    my $powers = _group($opt_p);
     my @order = sort {
         comb(scalar @{ $a->[3] }, $a->[2])
         <=>
@@ -235,9 +258,9 @@ sub find_perms {
     } map {
         my $i = $_;
         map {
-            my($power, $count) = ($_, $powers->{$_});
+            my($power, $count) = ($_, $powers{$i}{$_});
             [ $i, $power, $count, [ sort keys %{ $mods->[$i]{$power} } ] ];
-        } keys %$powers;
+        } keys %{ $powers{$i} };
     } @$opt_i;
 
     my $spare = ($target > $source) ? $target - $source : 0;
@@ -246,12 +269,14 @@ sub find_perms {
     my $i = 0;
     return [ map {
         my $p = $_;
-        my(%none, @mods);
+        my(%none, @mods, @powers);
         for (0 .. $#order) {
             my($i, $x, $count) = @{ $order[$_] };
             for my $mod (@{ $p->[$_] }) {
                 if ($mod) {
                     push @mods, [ MBI($mod), $x, $mods->[$i]{$x}{$mod} ];
+                    # FIXME: gtauseq won't cope if $x > 10
+                    push @powers, $x;
                 } else {
                     ++$none{$i};
                 }
@@ -263,7 +288,7 @@ sub find_perms {
                     map sprintf('%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods;
             map Runnable->new(
                 $type, $i++, [ $mm . $_ ], \@none
-            ), find_mm(scalar(@mods), $opt_p, $sample);
+            ), find_mm(scalar(@mods), \@powers, $sample);
         } : Runnable->new(
             $type,
             $i++,
@@ -274,10 +299,9 @@ sub find_perms {
 }
 
 sub find_mm {
-    my($count, $power, $sample) = @_;
-    die "FIXME: find_mm needs to cope with an array of powers";
+    my($count, $powers, $sample) = @_;
     return +("0" x $count) if $sample;
-    return NestedLoops([ ([0 .. $power - 1]) x $count ], sub {
+    return NestedLoops([ map [ 0 .. $_ - 1 ], @$powers ], sub {
         join '', @_;
     });
 }
@@ -343,8 +367,9 @@ package Runnable {
         # disallowed primes
         for my $i (@$none) {
             for my $p (@$opt_nq) {
-# FIXME: $mods no longer looks like this
+die "FIXME: \$mods no longer looks like this";
                 my $mod = $mods->[$i]{$p} // next;
+die "FIXME: \$opt_p no longer looks like this either";
                 push @$sqmods, sprintf '-m%s!%s', $p ** $opt_p, $mod;
             }
         }
