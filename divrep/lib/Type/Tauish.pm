@@ -111,7 +111,7 @@ sub test_m_rad_m {
     }
 
     if ($mf->[0][0] == 2) {
-        # p=2 uniquely introduce new non-residues at higher powers; eg
+        # p=2 uniquely introduces new non-residues at higher powers; eg
         # 3 is a non-residue (mod 4).
         my $pp2 = $mf->[0][1];
         my $tm2 = $tm / ($pp2 + 1) * $pp2;
@@ -228,7 +228,7 @@ sub find_fixed {
 
     my($tneed, $sanity_check) = $tn->bdiv($fixed_tau);
     unless ($sanity_check == 0) {
-        print "502 Error: fixed $fixed_tau not available in tau $tn\n";
+        print "502 Error: fixed $fixed_tau not available in tau $tn for k=$k\n";
         exit 1;
     }
     if ($tneed == 1) {
