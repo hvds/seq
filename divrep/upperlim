@@ -406,6 +406,10 @@ package Runnable {
             # 402 Error: all values (mod 2) disallowed (1.780s)
             return;
         }
+        for (@{ $line{404} }) {
+            # 404 Error: 48 + 0d must be divisible by n (0.03s)
+            return;
+        }
         for (@{ $line{500} }) {
             # 500 f(132, 12) > 1e20 mod(8=7, 3=2, 11=10, 25=9)  (2.290s)
             return;
