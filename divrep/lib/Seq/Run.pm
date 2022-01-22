@@ -20,6 +20,7 @@ __PACKAGE__->define($TABLE, 'run', [
     'key id runid',
     'uint n',
     'uint k',
+    'uint owner',
     'flags(complete running optimizing fix_power) status',
     'bigint optn',
     'bigint optx',
@@ -50,9 +51,11 @@ sub logpath {
 
 sub gen {
     my($class, $tauf, $db, $args) = @_;
+    my $owner = $db->type->owner;
     my $self = $db->resultset($TABLE)->new({
         n => $tauf->n,
         k => $tauf->k,
+        owner => $owner,
         %$args{qw{ optn optx optc optcp optm priority }},
     });
     $self->optimizing(1) if $args->{optimize};
@@ -62,9 +65,10 @@ sub gen {
 
 sub restrategise {
     my($class, $db) = @_;
+    my $owner = $db->type->owner;
     for my $self ($db->resultset($TABLE)->search_bitfield(
         { complete => 0 },
-    )->all) {
+    )->search({ owner => $owner })->all) {
         unlink $self->logpath($db->type) if $self->running;
         $self->delete;
     }
@@ -72,8 +76,10 @@ sub restrategise {
 
 sub lastForN {
     my($self, $db, $n) = @_;
+    my $owner = $db->type->owner;
     return $db->resultset($TABLE)->find({
         n => $n,
+        owner => $owner,
     }, {
         order_by => { -desc => [qw{ k runid }] },
         rows => 1,

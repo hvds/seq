@@ -32,6 +32,7 @@ $maxrun = shift(@ARGV) if @ARGV;
 $maxload ||= $maxproc;
 
 my $type = Type->new($typename);
+$type->bind_owner('harness');
 
 local @ENV{qw{ DBI_TRACE DBIC_TRACE }} = (1, 1) if $debug;
 my $db = Seq::Db->new($type, $opt_recreate);

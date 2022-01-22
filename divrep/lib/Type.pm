@@ -22,6 +22,11 @@ my %PROG = (
     find_shard => './find-shard',
 );
 
+my %owner = (
+    harness => 0,
+    upperlim => 1,
+);
+
 sub new {
     my($class, $typename, $c) = @_;
     my $type = $types{$typename} // die "Unknown typename '$typename'";
@@ -49,6 +54,22 @@ sub typename {
     my($self) = @_;
     my $class = ref($self) // $self;
     return $typename{$class} // die "Unknown type '$class'";
+}
+
+sub _owner {
+    my($proto, $name) = @_;
+    return $owner{$name} // die "Unknown owner '$name'";
+}
+
+sub bind_owner {
+    my($self, $name) = @_;
+    $self->{owner_id} = $self->_owner($name);
+    return;
+}
+
+sub owner {
+    my($self) = @_;
+    return $self->{owner_id} // die "No owner bound";
 }
 
 sub invoke {
