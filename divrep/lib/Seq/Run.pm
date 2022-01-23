@@ -251,7 +251,7 @@ sub finalize {
         $k == $self->k or return $self->failed("(n, k) mismatch in '$_'");
         ($depend_m, $depend_n) = ($rend->($dm), $dn);
     }
-    my($best, $tau);
+    my $best;
     for (@{ $line{211} // [] }) {
         my($s, $t) = m{
             ^ 211 \s+ Sequence \s+ (\d+) :
