@@ -187,7 +187,7 @@ sub finalize {
         }x or return $self->failed("Can't parse 200 result: '$_'");
         $n == $self->n && $k == $self->k
                 or return $self->failed("(n, k) mismatch in '$_'");
-        $self->runtime($t - $self->preptime);
+        $self->runtime($t - ($self->preptime // 0));
         $good = $rend->($d);
     }
     for (( $line{301} // [] )->[-1] // ()) {
