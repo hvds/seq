@@ -192,12 +192,12 @@ sub _strategy {
     my $optn = $g->checked + 1;
     my $optx = $g->checked * 2;
     my $_n = sub { "$_[0]" + 0 };
+    # last run may not have completed, in which case the actual point reached
+    # will be in g->checked; but the latter may also have been advanced by
+    # someone else, so take optx as the safer guess if it's the smaller
+    my $prevrange = $_n->(min($g->checked, $r->optx) - $r->optn);
     my $prep = $r->preptime;
-
-    # Note, must use $g->checked for the range, since the last run need
-    # not have reached $r->optx.
-    my $run = $r->runtime * $_n->($optx + 1 - $optn)
-            / $_n->($g->checked + 1 - $r->optn);
+    my $run = $r->runtime * $_n->($optx + 1 - $optn) / $prevrange;
     my $expect = ($prep + $run) || 1;
 
     # decide what -c value to supply
