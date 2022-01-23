@@ -233,7 +233,7 @@ sub _strategy {
 
     # If it's slow we could try sharding, but for now just reduce the range
     my $factor = (1 + $SLOW / $expect) / 2;
-    $optx = _muld($optx, $factor);
+    $optx = _bmulf($optx, $factor);
     # don't increase priority just because we're reducing the range
     # $expect *= $factor;
 
@@ -370,15 +370,15 @@ sub allFor {
 }
 
 # Multiply bigint first arg by NV second arg, returning bigint.
-# When muld is not available, we risk loss of accuracy and overflow.
-sub _muld {
-    state $have_muld = Math::GMP->can('muld') ? 1 : 0;
-    if ($have_muld) {
-        return $_[0]->muld($_[1]);
+# When bmulf is not available, we risk loss of accuracy and overflow.
+sub _bmulf {
+    state $have_bmulf = Math::GMP->can('bmulf') ? 1 : 0;
+    if ($have_bmulf) {
+        return $_[0]->bmulf($_[1]);
     } else {
-        return Math::GMP->new(
-            int("$_[0]" * $_[1])
-        );
+        my $r = int("$_[0]" * $_[1]);
+        $r = sprintf '%.0f', $r if $r =~ /e/;
+        return Math::GMP->new($r);
     }
 }
 
