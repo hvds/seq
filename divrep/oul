@@ -1,0 +1,378 @@
+#!/opt/maths/bin/perl -w
+use strict;
+use Math::GMP;
+use Math::Prime::Util qw{
+    is_prime divisors factor_exp prime_iterator invmod
+};
+use Algorithm::Loops qw{ NextPermuteNum NestedLoops };
+use POSIX qw{ :sys_wait_h };
+use Memoize;
+use List::Util qw{ sum0 };
+use lib 'lib';
+use Type;
+use Seq::Db;
+
+=head1 oul - constrain upper limit of oneseq(n, k)
+
+Try to find the parameters most likely to get a hit.
+
+=cut
+
+use lib './lib';
+use ModFunc qw/ mod_combine quadvec gcd /;
+
+sub MBI { return Math::GMP->new(@_) }
+my $zero = MBI(0);
+
+my($max, $start, $inject, $debug) = (0) x 4;
+my $typename = 'o';
+my $maxproc = 6;
+
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    ($max = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
+    ($start = $arg || shift(@ARGV)), next if $arg =~ s{^-s}{};
+    $inject = 1, next if $arg eq '-i';
+    ++$debug, next if $arg eq '-d';
+    die "Unknown option '$arg'\n";
+}
+
+$| = 1;
+my($n, $f) = map MBI($_), @ARGV;
+$0 = "oul($n $f)";
+my $type = Type->new($typename);
+$type->bind($n);
+$type->bind_owner('upperlim');
+my $db = Seq::Db->new($type, 0);
+
+my $zone = MBI(1);
+my @nf = factor_exp($n);
+my $tn = tau($n, \@nf);
+my $t0 = scalar times();
+
+my $min = g()->checked;
+$max = ston($max) if $max;
+$debug && warn "min=$min, max=$max\n";
+
+if ($f == 1) {
+    find_one($n, \@nf);
+} elsif ($f == 2) {
+    find_two($n, \@nf);
+} else {
+    warn "Not yet supporting f(n,k) for k > 2\n";
+    ...
+}
+exit 0;
+
+{
+    my $s; BEGIN { $s = '' }
+    sub diag {
+        print "\x08 \x08" x length($s);
+        ($s) = @_;
+        print $s;
+    }
+}
+
+#
+# Find the least element a_i of A025487 that has tau(a_i) = n: generate
+# each of the ways to split n into factors, and construct a corresponding
+# element of a_i that generates the required tau() that way.
+#
+sub find_one {
+    my($n, $nf) = @_;
+    my($r, $fh) = prep_run($n, 1, 1);
+
+    my $best;
+    my @p = nprimes(sum0 map $_->[1], @$nf);
+    my $fit = factor_iterator($n, $nf);
+    while (my $fact = $fit->()) {
+        my $prod = MBI(1);
+        for (0 .. $#$fact) {
+            $prod *= $p[$_] ** ($fact->[$_] - 1);
+        }
+        printf $fh <<OUT, $prod, times() - $t0;
+202 Candidate %s (%.2fs)
+OUT
+        $best = $prod if !defined($best) || $best > $prod;
+    }
+    report_seq($fh, $n, 1, $best);
+    printf $fh <<OUT, $n, $best, times() - $t0;
+200 f(%s, 1) = %s (%.2fs)
+OUT
+    finish_run($r, $fh);
+    return;
+}
+
+sub find_two {
+    my($n, $nf) = @_;
+    my $sig = join ':', map @$_, @$nf;
+    return find_two_2p($n, $nf) if $sig =~ /^2:1:(\d+):1$/;
+    warn "Not yet supporting f(n,2) except when n=2p\n";
+    ...
+}
+
+#
+# If n is of the form 2p, then our two elements are of type A:
+# 2^{p-1} q_1, r_0^{p-1} r_1, of type B: 2 q_0^{p-1}, r_0^{p-1} r_1,
+# or of type C: q_0^{2p-1}, r_0^{p-1} r_1. There is no type D:
+# consecutive {2p-1} powers are not possible.
+#
+# We find an upper limit (if not already given one) by searching for
+# type A with r_0=3; we then look for improvements to that bound with
+# successively higher r_0 until 3.r_0^{p-1} would be too high, then
+# finish by checking each possible q_0 for types B and C.
+#
+sub find_two_2p {
+    my($n, $nf) = @_;
+    my($r, $fh) = prep_run($n, 2, 1);
+
+    my $best;
+    my $r0 = MBI(2);
+    my $pow = $nf->[1][0] - 1;
+    my $cand = sub {
+        my($new) = @_;
+        return unless $new && (!$best || $best > $new);
+        printf $fh <<OUT, $new, times() - $t0;
+202 Candidate %s (%.2fs)
+OUT
+        $best = $new;
+    };
+    while (1) {
+        $r0 = next_zprime($r0);
+        my $min = $r0 ** $pow * 3;
+        if ($best && $min > $best) {
+            $debug && warn "type A: stopping at $r0 ($min > $best)\n";
+            last;
+        }
+        $cand->(find2_tryA($r0, $pow, -1, $best));
+        $cand->(find2_tryA($r0, $pow, 1, $best));
+    }
+    my $q0 = MBI(2);
+    while (1) {
+        $q0 = next_zprime($q0);
+        my $b0 = $q0 ** $pow * 2;
+        if ($b0 > $best) {
+            $debug && warn "type B: stopping at $q0 ($b0 > $best)\n";
+            last;
+        }
+        if ("1:$pow" eq join ':', sort map $_->[1], factor_exp($b0 - 1)) {
+            $cand->($b0 - 1);
+            last;
+        }
+        if ("1:$pow" eq join ':', sort map $_->[1], factor_exp($b0 + 1)) {
+            $cand->($b0);
+            last;
+        }
+    }
+    $q0 = MBI(1);
+    while (1) {
+        $q0 = next_zprime($q0);
+        my $c0 = $q0 ** ($n - 1);
+        if ($c0 > $best) {
+            $debug && warn "type C: stopping at $q0 ($c0 > $best)\n";
+            last;
+        }
+        if ("1:$pow" eq join ':', sort map $_->[1], factor_exp($c0 - 1)) {
+            $cand->($c0 - 1);
+            last;
+        }
+        if ("1:$pow" eq join ':', sort map $_->[1], factor_exp($c0 + 1)) {
+            $cand->($c0);
+            last;
+        }
+    }
+    report_seq($fh, $n, 2, $best);
+    printf $fh <<OUT, $n, $best, times() - $t0;
+200 f(%s, 2) = %s (%.2fs)
+OUT
+    finish_run($r, $fh);
+    return;
+}
+
+sub find2_tryA {
+    my($q, $x, $diff, $best) = @_;
+    my $p = MBI(2);
+    ($p, $q) = ($q, $p) if $diff < 0;
+
+    # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
+    my($px, $qx) = map $_ ** $x, ($p, $q);
+    my $m = find_common_mod($px, $qx);
+    return if $best && $m > $best;
+
+    my $op = $m / $px;
+    my $oq = ($m + 1) / $qx;
+    my $end = $best ? $best / $px : 0;
+    while (!$end || $op <= $end) {
+        $debug > 1 && warn "find2_tryA: test op=$op, oq=$oq\n";
+        return $op * $px if (
+            is_prime($op) && is_prime($oq)
+            && $op != $p && $oq != $q
+        );
+        # step the candidate by (pq)^x
+        $op += $qx;
+        $oq += $px;
+    }
+    return;
+}
+
+# TODO: take a list
+sub find_common_mod {
+    my($px, $qx) = @_;
+    return $px * invmod(-$px, $qx);
+}
+
+sub prep_run {
+    my($n, $k, $complete) = @_;
+    return (undef, *STDOUT) unless $inject;
+    my $g = g();
+    my $f = Seq::TauF->forceFor($g, $db, $k);
+    my $r = Seq::Run->gen($f, $db, {
+        optn => $zero,
+        optx => $zero,
+        optc => 0,
+        priority => 0,
+        partial => !$complete,
+    });
+    $r->running(1);
+    $r->update;
+    my $path = $r->logpath($type);
+    open(my $fh, '>', $path) or die "$path: $!";
+    print $fh "001 $0\n";
+    return ($r, $fh);
+}
+
+sub finish_run {
+    my($r, $fh) = @_;
+    if ($inject) {
+        close $fh;
+        $r->finalize($db);
+    }
+}
+
+sub report_seq {
+    my($fh, $n, $k, $f) = @_;
+    my $good = 1;
+    my @result;
+    for (my $i = 0; ($i <= $k) || $good; ++$i) {
+        my $v = $type->func_value($n, $i, $f);
+        my $result = [ $i, $type->func($v), $v, pf($v) ];
+        $good = 0 unless $type->func_matches($i, $result->[1]);
+        push @result, $result;
+    }
+    my $flen = length($#result);
+    my $vlen = length($result[-1][2]);
+    my $name = $type->func_name;
+    for (0 .. $#result) {
+        my $r = $result[$_];
+        printf $fh <<OUT, $flen, @$r[0, 1], $name, $vlen, @$r[2, 3];
+211 Sequence % *s: % 2s = %s(% *s = %s)
+OUT
+    }
+}
+
+{
+    my $g;
+    sub g {
+        return $g //= do {
+            Seq::TauG->genTo($db, $n);
+            $db->resultset('TauG')->find({ n => $n })
+                    // die "cannot find TauG entry for n=$n";
+        };
+    }
+}
+
+sub factor_iterator {
+    my($n, $nf) = @_;
+    my @f;
+    my %p = map +($_->[0] => 1), @$nf;
+    return sub {
+        unless (@f) {
+            @f = ($n);
+            return \@f;
+        }
+        my $prod = MBI(1);
+        $prod *= pop(@f) while @f && $p{$f[-1]};
+        return undef unless @f;
+        my $prev = pop @f;
+        $prod *= $prev;
+        1 while $prod % --$prev;
+        push @f, $prev;
+        $prod /= $prev;
+        while (1) {
+            if ($prod <= $prev) {
+                push @f, $prod;
+                last;
+            }
+            --$prev while $prod % $prev;
+            push @f, $prev;
+            $prod /= $prev;
+        }
+        return \@f;
+    };
+}
+
+sub next_zprime {
+    my($p) = @_;
+    my $q = Math::Prime::Util::next_prime($p);
+    return MBI($q);
+}
+
+sub nprimes {
+    my($count) = @_;
+    my $it = prime_iterator;
+    return map MBI($it->()), 1 .. $count;
+}
+
+sub modinv {
+    my($n, $m) = @_;
+    return MBI($n)->bmodinv($m);
+}
+
+sub tau {
+    my($n, $fact) = @_;
+    $fact //= [ factor_exp($n) ];
+    my $k = 1;
+    $k *= $_->[1] + 1 for @$fact;
+    return $k;
+}
+
+sub pf {
+    my $n = shift;
+    return join '.', map {
+        $_->[1] == 1 ? $_->[0] : "$_->[0]^$_->[1]"
+    } factor_exp($n);
+}
+
+sub ston {
+    my($s) = @_;
+    $s =~ s/,//g;
+    $s =~ s{e(\d+)}{"0" x $1}ie;
+    return MBI($s);
+}
+
+sub ntos {
+    my($n) = @_;
+    $n =~ s{(0+)$}{"e" . length($1)}e;
+    return $n;
+}
+
+sub _group {
+    my($array) = @_;
+    my %result;
+    ++$result{$_} for @$array;
+    return \%result;
+}
+
+BEGIN {
+    memoize('comb');
+    sub comb {
+        my($n, $k) = @_;
+        return ($k == 0) ? 1
+                : ($k < 0 || $k > $n) ? 0
+                : ($k == 1) ? $n
+                : ($k + $k > $n) ? comb($n, $n - $k)
+                : comb($n - 1, $k - 1) + comb($n - 1, $k);
+    }
+}
+
