@@ -326,6 +326,24 @@ sub prep {
 
 sub runnable { return () }
 
+sub forceFor {
+    my($class, $taug, $db, $k) = @_;
+    my $n = $taug->n;
+    my $self = $db->resultset($TABLE)->find({ n => $n, k => $k });
+    unless ($self) {
+        die "g($n) <= @{[ $taug->maxg ]}, not forcing k=$k"
+                unless $k <= $taug->maxg;
+        $self = $db->resultset($TABLE)->new({
+            n => $n,
+            k => $k,
+            f => $zero,
+            test_order => '',
+        });
+        $self->insert;
+    }
+    return $self;
+}
+
 sub nextFor {
     my($class, $taug, $db) = @_;
     return () if $taug->complete || $taug->depend;
@@ -334,14 +352,11 @@ sub nextFor {
     if (!$self) {
         my $last = $coll->[-1];
         my $nextk = ($last ? $last->k : $taug->ming) + 1;
-        $self = $db->resultset($TABLE)->new({
-            n => $taug->n,
-            k => $nextk,
-            f => $zero,
-            test_order => '',
-        });
-        $self->minc($last->minc) if $last;
-        $self->insert;
+        $self = $class->forceFor($taug, $db, $nextk);
+        if ($last && $last->minc) {
+            $self->minc($last->minc);
+            $self->update;
+        }
     }
     return $self;
 }
