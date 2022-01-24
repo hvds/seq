@@ -23,6 +23,7 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
+my $zone = MBI(1);
 
 my($max, $start, $inject, $debug) = (0) x 4;
 my $typename = 'o';
@@ -46,7 +47,6 @@ $type->bind($n);
 $type->bind_owner('upperlim');
 my $db = Seq::Db->new($type, 0);
 
-my $zone = MBI(1);
 my @nf = factor_exp($n);
 my $tn = tau($n, \@nf);
 my $t0 = scalar times();
@@ -87,7 +87,7 @@ sub find_one {
     my @p = nprimes(sum0 map $_->[1], @$nf);
     my $fit = factor_iterator($n, $nf);
     while (my $fact = $fit->()) {
-        my $prod = MBI(1);
+        my $prod = $zone;
         for (0 .. $#$fact) {
             $prod *= $p[$_] ** ($fact->[$_] - 1);
         }
@@ -140,7 +140,7 @@ OUT
         return;
     };
     for (my $i = 0; $i <= $spare; ++$i) {
-        my $qi = MBI(1);
+        my $qi = $zone;
         my $xi = $p * (2 ** $i) - 1;
         my $si = 2 ** ($spare - $i);
         while (1) {
@@ -153,7 +153,7 @@ OUT
             }
             my $jspare = ($i == $spare) ? $spare - 1 : $spare;
             for (my $j = $i; $j <= $jspare; ++$j) {
-                my $qj = ($i == $j) ? $qi : MBI(1);
+                my $qj = ($i == $j) ? $qi : $zone;
                 my $xj = $p * (2 ** $j) - 1;
                 my $sj = 2 ** ($spare - $j);
                 while (1) {
@@ -210,7 +210,7 @@ sub mintau {
 
     my $best;
     for my $f (@$fa) {
-        my $b = MBI(1);
+        my $b = $zone;
         for (my $i = 0; $i < @$f; ++$i) {
             $b *= $p[$i] ** ($f->[$i] - 1);
         }
@@ -323,7 +323,7 @@ sub factor_iterator {
             @f = ($n);
             return \@f;
         }
-        my $prod = MBI(1);
+        my $prod = $zone;
         $prod *= pop(@f) while @f && $p{$f[-1]};
         return undef unless @f;
         my $prev = pop @f;
