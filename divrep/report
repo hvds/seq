@@ -55,6 +55,9 @@ if ($opt_table || !$n) {
 exit 0;
 
 sub report_g {
+    # tau(n) only relevant for tauseq, addseq
+    my $tauish = ($type->typename =~ /^[ta]$/) ? 1 : 0;
+
     for my $g ($db->resultset('TauG')->search(
         undef, { order_by => 'n' }
     )->all) {
@@ -72,10 +75,17 @@ sub report_g {
                 !$g->complete && $g->depend && $g->depended->ming == $g->ming
             ) ? sprintf('g(%s)', $g->depend_n)
                 : _fc(_maxf($g));
-            printf(
-                "%5s | %4s | %5s | %5s | %20s | %s\n",
-                $n, _tau($n), $g->ming, $g->maxg, $f, _comments($g),
-            );
+            if ($tauish) {
+                printf(
+                    "%5s | %4s | %5s | %5s | %20s | %s\n",
+                    $n, _tau($n), $g->ming, $g->maxg, $f, _comments($g),
+                );
+            } else {
+                printf(
+                    "%5s | %5s | %5s | %27s | %s\n",
+                    $n, $g->ming, $g->maxg, $f, _comments($g),
+                );
+            }
             next;
         }
         if ($g->complete) {
