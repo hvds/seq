@@ -107,79 +107,68 @@ OUT
 sub find_two {
     my($n, $nf) = @_;
     my $sig = join ':', map @$_, @$nf;
-    return find_two_2p($n, $nf) if $sig =~ /^2:1:(\d+):1$/;
+    return find_two_2kp($n, $nf) if $sig =~ /^2:\d+:\d+:1$/;
     warn "Not yet supporting f(n,2) except when n=2p\n";
     ...
 }
 
 #
-# If n is of the form 2p, then our two elements are of type A:
-# 2^{p-1} q_1, r_0^{p-1} r_1, of type B: 2 q_0^{p-1}, r_0^{p-1} r_1,
-# or of type C: q_0^{2p-1}, r_0^{p-1} r_1. There is no type D:
-# consecutive {2p-1} powers are not possible.
+# If n is of the form 2^k p, then for i in (0..k) each element must be
+# of some form F_i: q_0^{2^i p - 1} Q: tau(Q) = 2^{k-i}.
+# Additionally we cannot have both elements of the form F_k.
 #
-# We find an upper limit (if not already given one) by searching for
-# type A with r_0=3; we then look for improvements to that bound with
-# successively higher r_0 until 3.r_0^{p-1} would be too high, then
-# finish by checking each possible q_0 for types B and C.
+# We find an upper limit by searching for pairs both of type F_0, with
+# q_0 = 2 for one and 3 for the other. We then search more generally,
+# for each {F_a, F_b} form constructing possible pairs for each q_0 in
+# range.
 #
-sub find_two_2p {
+sub find_two_2kp {
     my($n, $nf) = @_;
     my($r, $fh) = prep_run($n, 2, 1);
 
     my $best;
-    my $r0 = MBI(2);
-    my $pow = $nf->[1][0] - 1;
+    my $p = $nf->[1][0];
+    my $spare = $nf->[0][1];
+
     my $cand = sub {
         my($new) = @_;
-        return unless $new && (!$best || $best > $new);
+        return unless $new;
         printf $fh <<OUT, $new, times() - $t0;
 202 Candidate %s (%.2fs)
 OUT
-        $best = $new;
+        $best = $new unless $best && $best < $new;
+        return;
     };
-    while (1) {
-        $r0 = next_zprime($r0);
-        my $min = $r0 ** $pow * 3;
-        if ($best && $min > $best) {
-            $debug && warn "type A: stopping at $r0 ($min > $best)\n";
-            last;
-        }
-        $cand->(find2_tryA($r0, $pow, -1, $best));
-        $cand->(find2_tryA($r0, $pow, 1, $best));
-    }
-    my $q0 = MBI(2);
-    while (1) {
-        $q0 = next_zprime($q0);
-        my $b0 = $q0 ** $pow * 2;
-        if ($b0 > $best) {
-            $debug && warn "type B: stopping at $q0 ($b0 > $best)\n";
-            last;
-        }
-        if ("1:$pow" eq join ':', sort map $_->[1], factor_exp($b0 - 1)) {
-            $cand->($b0 - 1);
-            last;
-        }
-        if ("1:$pow" eq join ':', sort map $_->[1], factor_exp($b0 + 1)) {
-            $cand->($b0);
-            last;
-        }
-    }
-    $q0 = MBI(1);
-    while (1) {
-        $q0 = next_zprime($q0);
-        my $c0 = $q0 ** ($n - 1);
-        if ($c0 > $best) {
-            $debug && warn "type C: stopping at $q0 ($c0 > $best)\n";
-            last;
-        }
-        if ("1:$pow" eq join ':', sort map $_->[1], factor_exp($c0 - 1)) {
-            $cand->($c0 - 1);
-            last;
-        }
-        if ("1:$pow" eq join ':', sort map $_->[1], factor_exp($c0 + 1)) {
-            $cand->($c0);
-            last;
+    for (my $i = 0; $i <= $spare; ++$i) {
+        my $qi = MBI(1);
+        my $xi = $p * (2 ** $i) - 1;
+        my $si = 2 ** ($spare - $i);
+        while (1) {
+            $qi = next_zprime($qi);
+            my $fi = $qi ** $xi;
+            my $ri = mintau($si, $qi);
+            if ($best && $fi * $ri > $best) {
+                $debug && warn "Fi($i) stopping at q=$qi ($fi * $ri > $best)\n";
+                last;
+            }
+            my $jspare = ($i == $spare) ? $spare - 1 : $spare;
+            for (my $j = $i; $j <= $jspare; ++$j) {
+                my $qj = ($i == $j) ? $qi : MBI(1);
+                my $xj = $p * (2 ** $j) - 1;
+                my $sj = 2 ** ($spare - $j);
+                while (1) {
+                    $qj = next_zprime($qj);
+                    next if $qj == $qi;
+                    my $fj = $qj ** $xj;
+                    my $rj = mintau($sj, $qj);
+                    if ($best && $fj * $rj > $best) {
+                        $debug && warn "Fj($j) stopping at q=$qj ($fj * $rj > $best)\n";
+                        last;
+                    }
+                    $cand->(find2_tryAB($fi, $si, $fj, $sj, $best));
+                    $cand->(find2_tryAB($fj, $sj, $fi, $si, $best));
+                }
+            }
         }
     }
     report_seq($fh, $n, 2, $best);
@@ -190,30 +179,44 @@ OUT
     return;
 }
 
-sub find2_tryA {
-    my($q, $x, $diff, $best) = @_;
-    my $p = MBI(2);
-    ($p, $q) = ($q, $p) if $diff < 0;
+sub find2_tryAB {
+    my($qi, $si, $qj, $sj, $best) = @_;
 
     # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
-    my($px, $qx) = map $_ ** $x, ($p, $q);
-    my $m = find_common_mod($px, $qx);
+    my $m = find_common_mod($qi, $qj);
     return if $best && $m > $best;
 
-    my $op = $m / $px;
-    my $oq = ($m + 1) / $qx;
-    my $end = $best ? $best / $px : 0;
-    while (!$end || $op <= $end) {
-        $debug > 1 && warn "find2_tryA: test op=$op, oq=$oq\n";
-        return $op * $px if (
-            is_prime($op) && is_prime($oq)
-            && $op != $p && $oq != $q
+    my $oi = $m / $qi;
+    my $oj = ($m + 1) / $qj;
+    my $end = $best ? $best / $qi : 0;
+    while (!$end || $oi <= $end) {
+        $debug > 1 && warn "find2_tryAB: test oi=$oi, oj=$oj\n";
+        return $oi * $qi if (
+            tau($oi) == $si && tau($oj) == $sj
+            && gcd($oi, $qi) == 1 && gcd($oj, $qj) == 1
         );
-        # step the candidate by (pq)^x
-        $op += $qx;
-        $oq += $px;
+        # step the candidate by $qi * $qj
+        $oi += $qj;
+        $oj += $qi;
     }
     return;
+}
+
+sub mintau {
+    my($tau, $avoid) = @_;
+    my $fa = factorizations($tau);
+    my %avoid = map +($_->[0] => 1), factor_exp($avoid);
+    my @p = grep !$avoid{$_}, nprimes(@{ $fa->[-1] } + keys %avoid);
+
+    my $best;
+    for my $f (@$fa) {
+        my $b = MBI(1);
+        for (my $i = 0; $i < @$f; ++$i) {
+            $b *= $p[$i] ** ($f->[$i] - 1);
+        }
+        $best = $b unless $best && $best < $b;
+    }
+    return $best;
 }
 
 # TODO: take a list
@@ -282,8 +285,37 @@ OUT
     }
 }
 
+#
+# Return an arrayref of all the ways to factorize $n (with its factor_exp
+# optionally provided as $nf) in reverse lexicographic order, each
+# factorization represented as an arrayref of descending factors.
+# Thus factorizations(12) would return [ [12], [6,2], [4,3], [3,2,2] ].
+#
+sub factorizations {
+    my($n, $nf) = @_;
+    my @f;
+    my $fi = factor_iterator($n, $nf);
+    while (my $f = $fi->()) {
+        push @f, [ @$f ];
+    }
+    return \@f;
+}
+
+#
+# Return an iterator that returns factorizations one at a time in the
+# same order and in the same form as the contents of the arrayref
+# returned by factorizations(). Returns undef to signal the end of
+# the list.
+#
 sub factor_iterator {
     my($n, $nf) = @_;
+    if ($n == 1) {
+        my $done = 0;
+        return sub {
+            return $done++ ? undef : [];
+        };
+    }
+    $nf //= [ factor_exp($n) ];
     my @f;
     my %p = map +($_->[0] => 1), @$nf;
     return sub {
