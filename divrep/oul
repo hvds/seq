@@ -1,5 +1,6 @@
 #!/opt/maths/bin/perl -w
 use strict;
+use feature 'current_sub';  # support __SUB__
 use Math::GMP;
 use Math::Prime::Util qw{
     is_prime divisors factor_exp prime_iterator invmod
@@ -131,8 +132,7 @@ OUT
     #   t => tau() not yet accounted for (ie n / tau(q))
     #
     my @v;
-    my $recurse;
-    $recurse = sub {
+    my $recurse = sub {
         my $i = ($v[0]{t} >= $v[1]{t}) ? 0 : 1;
         my $v = $v[$i];
         my $pi = @{ $v->{p} } + 1;
@@ -174,7 +174,7 @@ OUT
                 }
             }
             local $v->{q} = $v->{q} * $px;
-            $recurse->();
+            __SUB__->();    # recurse
         }
         pop @{ $v->{p} };
         return;
