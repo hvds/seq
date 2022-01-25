@@ -133,26 +133,19 @@ OUT
     #
     my @v;
     my $recurse = sub {
-        my $i = ($v[0]{t} >= $v[1]{t}) ? 0 : 1;
-        my $v = $v[$i];
-        my $pi = @{ $v->{p} } + 1;
-        my $f = $v->{f};
-        my $x = $f->[$pi];
-        if (!$x || $x <= 3) {
-            $i = 1 - $i;
-            $v = $v[$i];
-            $pi = @{ $v->{p} } + 1;
-            $f = $v->{f};
-            $x = $f->[$pi];
-        }
-        if (!$x || $x <= 3) {
+        my $i = best_v(\@v) //  do {
+            # nothing more to allocate
             my $result = find2_tryAB(
                 $v[0]{q}, $v[0]{t},
                 $v[1]{q}, $v[1]{t},
                 $best,
             );
             return $cand->($result);
-        }
+        };
+        my $v = $v[$i];
+        my $pi = @{ $v->{p} } + 1;
+        my $f = $v->{f};
+        my $x = $f->[$pi];
 
         # try to add another factor to this $v: check all primes if different,
         # or only greater primes if the same power as previous power.
@@ -229,6 +222,32 @@ sub find2_tryAB {
         $oj += $qi;
     }
     return;
+}
+
+
+# find the best entry to progress: the one with the highest tau()
+# still to fulfil, or (on equality) with the highest q, but having
+# at least one factor to allocate.
+sub best_v {
+    my($v) = @_;
+    my($i, $vi);
+    for my $j (0 .. $#$v) {
+        my $vj = $v->[$j];
+        my $next_factor = $vj->{f}[@{ $vj->{p} } + 1];
+        # skip if no factor
+        next unless $next_factor;
+        # hack: skip if factor is 3
+        next if $next_factor == 3;
+
+        if ($vi) {
+            # doesn't have higher tau
+            next if $vj->{t} < $vi->{t};
+            # doesn't have higher q
+            next if $vj->{t} == $vi->{t} && $vj->{q} < $vi->{q};
+        }
+        ($i, $vi) = ($j, $vj);
+    }
+    return $i // undef;
 }
 
 sub mintau {
