@@ -140,14 +140,22 @@ sub report_f {
     return;
 }
 
+sub run_by_owner {
+    my($r) = @_;
+    my $owner = $r->owner;
+    return join ' ', @{ $r->command } if $owner == 0;
+    return sprintf 'oul %s %s', $r->n, $r->k if $owner == 1;
+    return "unknown owner=$owner";
+}
+
 sub report_run {
     my $g = $db->resultset('TauG')->find({ n => $n });
     my $f = $db->resultset('TauF')->find({ n => $n, k => $k });
     for my $r ($f->runs->all) {
         printf "[%s] %s\n",
-            join(' ', @{ $r->command }),
+            run_by_owner($r),
             $r->complete ? sprintf('complete %.3f + %.3f',
-                    $r->preptime, $r->runtime // 0)
+                    $r->preptime // 0, $r->runtime // 0)
             : sprintf('%s, prio %.2f',
                     $r->running ? 'running' : 'waiting', $r->priority);
     }
