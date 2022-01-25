@@ -120,21 +120,72 @@ OUT
         $best = $new unless $best && $best < $new;
         return;
     };
-    my $used = $zone;
-    my $d = {
-        n => $n,
-        nf => $nf,
-        fa => $fa,
-        best => \$best,
-        cand => $cand,
-        used => $zone,
-        v => [],
+    my $depth = 0;
+    # product of primes allocated so far, that should be avoided
+    my @used = ($zone); # array only so we can localize the (single) value
+    #
+    # elements v[0..k-1] represent the composition of the value d+i that
+    # we're trying to build up. Each element is a hashref of:
+    #   fi => index in $fa of the factorization we're using
+    #   i => number of factors we've specified
+    #   q => value attributed to those factors
+    #   t => tau() not yet accounted for (ie n / tau(q))
+    #
+    my @v;
+    my $recurse;
+    $recurse = sub {
+        ++$depth;
+        my $i = ($v[0]{t} <= $v[1]{t}) ? 0 : 1;
+        my $v = $v[$i];
+        my $x = $fa->[$v->{fi}][$v->{i}];
+        if (!$x || $x <= 3) {
+            $i = 1 - $i;
+            $v = $v[$i];
+            $x = $fa->[$v->{fi}][$v->{i}];
+        }
+        if (!$x || $x <= 3) {
+            --$depth;
+            return $cand->(
+                find2_tryAB(
+                    $v[0]{q}, $n / $v[0]{t},
+                    $v[1]{q}, $n / $v[1]{t},
+                    $best,
+                )
+            );
+        }
+
+        # try to add another factor to this $v
+        local $v->{i} = $v->{i} + 1;
+        local $v->{t} = $v->{t} * $x;
+
+        # FIXME: if $x is the same as the previous entry in this factorization,
+        # we should set $p to whatever that was, or risk duplicates.
+        my $p = $zone;
+        my $tau_need = $n / $v->{t};
+        while (1) {
+            $p = next_zprime($p);
+            next if $used[0] % $p == 0;
+            local $used[0] = $used[0] * $p;
+            my $px = $p ** ($x - 1);
+            if ($best) {
+                my $min = mintau($tau_need, $used[0]);
+                if ($px * $min > $best) {
+                    $debug && warn "for $i at $v->{fi} $v->{i}, last at $p ($px * $min > $best)\n";
+                    last;
+                }
+            }
+            local $v->{q} = $v->{q} * $px;
+            $recurse->();
+        }
+        --$depth;
+        return;
     };
+
     for my $i (0 .. $#$fa) {
-        local $d->{v}[0] = { fi => $i, i => 1, q => $zone, t => 1 };
+        local $v[0] = { fi => $i, i => 1, q => $zone, t => 1 };
         for my $j (0 .. $#$fa) {
-            local $d->{v}[1] = { fi => $j, i => 1, q => $zone, t => 1 };
-            find_two_r($d);
+            local $v[1] = { fi => $j, i => 1, q => $zone, t => 1 };
+            $recurse->();
         }
     }
 
@@ -143,52 +194,6 @@ OUT
 200 f(%s, 2) = %s (%.2fs)
 OUT
     finish_run($r, $fh);
-    return;
-}
-
-sub find_two_r {
-    my($d) = @_;
-    my $i = ($d->{v}[0]{t} <= $d->{v}[1]{t}) ? 0 : 1;
-    my $v = $d->{v}[$i];
-    my $x = $d->{fa}[$v->{fi}][$v->{i}];
-    if (!$x || $x <= 3) {
-        $i = 1 - $i;
-        $v = $d->{v}[$i];
-        $x = $d->{fa}[$v->{fi}][$v->{i}];
-    }
-    if (!$x || $x <= 3) {
-        return $d->{cand}->(
-            find2_tryAB(
-                $d->{v}[0]{q}, $d->{n} / $d->{v}[0]{t},
-                $d->{v}[1]{q}, $d->{n} / $d->{v}[1]{t},
-                ${ $d->{best} },
-            )
-        );
-    }
-
-    # try to add another factor to this $v
-    local $v->{i} = $v->{i} + 1;
-    local $v->{t} = $v->{t} * $x;
-
-    # FIXME: if $x is the same as the previous entry in this factorization,
-    # we should set $p to whatever that was, or risk duplicates.
-    my $p = $zone;
-    my $tau_need = $d->{n} / $v->{t};
-    while (1) {
-        $p = next_zprime($p);
-        next if $d->{used} % $p == 0;
-        local $d->{used} = $d->{used} * $p;
-        my $px = $p ** ($x - 1);
-        if (${ $d->{best} }) {
-            my $min = mintau($tau_need, $d->{used});
-            if ($px * $min > ${ $d->{best} }) {
-                $debug && warn "for $i at $v->{fi} $v->{i}, last at $p ($px * $min > ${ $d->{best} })\n";
-                last;
-            }
-        }
-        local $v->{q} = $v->{q} * $px;
-        find_two_r($d);
-    }
     return;
 }
 
