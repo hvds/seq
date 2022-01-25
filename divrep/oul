@@ -135,7 +135,7 @@ OUT
     my $recurse;
     $recurse = sub {
         ++$depth;
-        my $i = ($v[0]{t} <= $v[1]{t}) ? 0 : 1;
+        my $i = ($v[0]{t} >= $v[1]{t}) ? 0 : 1;
         my $v = $v[$i];
         my $x = $fa->[$v->{fi}][$v->{i}];
         if (!$x || $x <= 3) {
@@ -147,8 +147,8 @@ OUT
             --$depth;
             return $cand->(
                 find2_tryAB(
-                    $v[0]{q}, $n / $v[0]{t},
-                    $v[1]{q}, $n / $v[1]{t},
+                    $v[0]{q}, $v[0]{t},
+                    $v[1]{q}, $v[1]{t},
                     $best,
                 )
             );
@@ -156,19 +156,18 @@ OUT
 
         # try to add another factor to this $v
         local $v->{i} = $v->{i} + 1;
-        local $v->{t} = $v->{t} * $x;
+        local $v->{t} = $v->{t} / $x;
 
         # FIXME: if $x is the same as the previous entry in this factorization,
         # we should set $p to whatever that was, or risk duplicates.
         my $p = $zone;
-        my $tau_need = $n / $v->{t};
         while (1) {
             $p = next_zprime($p);
             next if $used[0] % $p == 0;
             local $used[0] = $used[0] * $p;
             my $px = $p ** ($x - 1);
             if ($best) {
-                my $min = mintau($tau_need, $used[0]);
+                my $min = mintau($v->{t}, $used[0]);
                 if ($px * $min > $best) {
                     $debug && warn "for $i at $v->{fi} $v->{i}, last at $p ($px * $min > $best)\n";
                     last;
@@ -182,9 +181,9 @@ OUT
     };
 
     for my $i (0 .. $#$fa) {
-        local $v[0] = { fi => $i, i => 1, q => $zone, t => 1 };
+        local $v[0] = { fi => $i, i => 1, q => $zone, t => $n };
         for my $j (0 .. $#$fa) {
-            local $v[1] = { fi => $j, i => 1, q => $zone, t => 1 };
+            local $v[1] = { fi => $j, i => 1, q => $zone, t => $n };
             $recurse->();
         }
     }
