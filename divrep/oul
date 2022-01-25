@@ -120,7 +120,6 @@ OUT
         $best = $new unless $best && $best < $new;
         return;
     };
-    my $depth = 0;
     # product of primes allocated so far, that should be avoided
     my @used = ($zone); # array only so we can localize the (single) value
     #
@@ -134,7 +133,6 @@ OUT
     my @v;
     my $recurse;
     $recurse = sub {
-        ++$depth;
         my $i = ($v[0]{t} >= $v[1]{t}) ? 0 : 1;
         my $v = $v[$i];
         my $x = $fa->[$v->{fi}][$v->{i}];
@@ -144,7 +142,6 @@ OUT
             $x = $fa->[$v->{fi}][$v->{i}];
         }
         if (!$x || $x <= 3) {
-            --$depth;
             return $cand->(
                 find2_tryAB(
                     $v[0]{q}, $v[0]{t},
@@ -176,7 +173,6 @@ OUT
             local $v->{q} = $v->{q} * $px;
             $recurse->();
         }
-        --$depth;
         return;
     };
 
