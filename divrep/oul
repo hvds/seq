@@ -6,6 +6,7 @@ use Math::Prime::Util qw{
     is_prime divisors factor_exp prime_iterator invmod
 };
 use Algorithm::Loops qw{ NextPermuteNum NestedLoops };
+use Syntax::Keyword::Dynamically;
 use POSIX qw{ :sys_wait_h };
 use Memoize;
 use List::Util qw{ sum0 };
@@ -122,7 +123,7 @@ OUT
         return;
     };
     # product of primes allocated so far, that should be avoided
-    my @used = ($zone); # array only so we can localize the (single) value
+    my $used = $zone;
     #
     # elements v[0..k-1] represent the composition of the value d+i that
     # we're trying to build up. Each element is a hashref of:
@@ -155,12 +156,12 @@ OUT
         local $v->{t} = $v->{t} / $x;
         while (1) {
             $p = next_zprime($p);
-            next if $used[0] % $p == 0;
-            local $used[0] = $used[0] * $p;
+            next if $used % $p == 0;
+            dynamically $used = $used * $p;
             my $px = $p ** ($x - 1);
             $v->{p}[-1] = $p;
             if ($best) {
-                my $min = mintau($v->{t}, $used[0]);
+                my $min = mintau($v->{t}, $used);
                 if ($px * $min > $best) {
                     $debug && warn "for $i last at [@{ $v->{p} }] ($px * $min > $best)\n";
                     last;
