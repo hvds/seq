@@ -8,6 +8,7 @@ use Algorithm::Loops qw{ NextPermuteNum NestedLoops };
 use POSIX qw{ :sys_wait_h };
 use Memoize;
 use List::Util qw{ sum0 };
+use DDP;    # exports p, np
 use lib 'lib';
 use Type;
 use Seq::Db;
@@ -106,29 +107,9 @@ OUT
 
 sub find_two {
     my($n, $nf) = @_;
-    my $sig = join ':', map @$_, @$nf;
-    return find_two_2kp($n, $nf) if $sig =~ /^2:\d+:\d+:1$/;
-    warn "Not yet supporting f(n,2) except when n=2p\n";
-    ...
-}
-
-#
-# If n is of the form 2^k p, then for i in (0..k) each element must be
-# of some form F_i: q_0^{2^i p - 1} Q: tau(Q) = 2^{k-i}.
-# Additionally we cannot have both elements of the form F_k.
-#
-# We find an upper limit by searching for pairs both of type F_0, with
-# q_0 = 2 for one and 3 for the other. We then search more generally,
-# for each {F_a, F_b} form constructing possible pairs for each q_0 in
-# range.
-#
-sub find_two_2kp {
-    my($n, $nf) = @_;
     my($r, $fh) = prep_run($n, 2, 1);
-
+    my $fa = dual_factorizations($n, $nf);
     my $best;
-    my $p = $nf->[1][0];
-    my $spare = $nf->[0][1];
 
     my $cand = sub {
         my($new) = @_;
@@ -139,38 +120,24 @@ OUT
         $best = $new unless $best && $best < $new;
         return;
     };
-    for (my $i = 0; $i <= $spare; ++$i) {
-        my $qi = $zone;
-        my $xi = $p * (2 ** $i) - 1;
-        my $si = 2 ** ($spare - $i);
-        while (1) {
-            $qi = next_zprime($qi);
-            my $fi = $qi ** $xi;
-            my $ri = mintau($si, $qi);
-            if ($best && $fi * $ri > $best) {
-                $debug && warn "Fi($i) stopping at q=$qi ($fi * $ri > $best)\n";
-                last;
-            }
-            my $jspare = ($i == $spare) ? $spare - 1 : $spare;
-            for (my $j = $i; $j <= $jspare; ++$j) {
-                my $qj = ($i == $j) ? $qi : $zone;
-                my $xj = $p * (2 ** $j) - 1;
-                my $sj = 2 ** ($spare - $j);
-                while (1) {
-                    $qj = next_zprime($qj);
-                    next if $qj == $qi;
-                    my $fj = $qj ** $xj;
-                    my $rj = mintau($sj, $qj);
-                    if ($best && $fj * $rj > $best) {
-                        $debug && warn "Fj($j) stopping at q=$qj ($fj * $rj > $best)\n";
-                        last;
-                    }
-                    $cand->(find2_tryAB($fi, $si, $fj, $sj, $best));
-                    $cand->(find2_tryAB($fj, $sj, $fi, $si, $best));
-                }
-            }
+    my $used = $zone;
+    my $d = {
+        n => $n,
+        nf => $nf,
+        fa => $fa,
+        best => \$best,
+        cand => $cand,
+        used => $zone,
+        v => [],
+    };
+    for my $i (0 .. $#$fa) {
+        local $d->{v}[0] = { fi => $i, i => 1, q => $zone, t => 1 };
+        for my $j (0 .. $#$fa) {
+            local $d->{v}[1] = { fi => $j, i => 1, q => $zone, t => 1 };
+            find_two_r($d);
         }
     }
+
     report_seq($fh, $n, 2, $best);
     printf $fh <<OUT, $n, $best, times() - $t0;
 200 f(%s, 2) = %s (%.2fs)
@@ -179,6 +146,54 @@ OUT
     return;
 }
 
+sub find_two_r {
+    my($d) = @_;
+    my $i = ($d->{v}[0]{t} <= $d->{v}[1]{t}) ? 0 : 1;
+    my $v = $d->{v}[$i];
+    my $x = $d->{fa}[$v->{fi}][$v->{i}];
+    if (!$x || $x <= 3) {
+        $i = 1 - $i;
+        $v = $d->{v}[$i];
+        $x = $d->{fa}[$v->{fi}][$v->{i}];
+    }
+    if (!$x || $x <= 3) {
+        return $d->{cand}->(
+            find2_tryAB(
+                $d->{v}[0]{q}, $d->{n} / $d->{v}[0]{t},
+                $d->{v}[1]{q}, $d->{n} / $d->{v}[1]{t},
+                ${ $d->{best} },
+            )
+        );
+    }
+
+    # try to add another factor to this $v
+    local $v->{i} = $v->{i} + 1;
+    local $v->{t} = $v->{t} * $x;
+
+    # FIXME: if $x is the same as the previous entry in this factorization,
+    # we should set $p to whatever that was, or risk duplicates.
+    my $p = $zone;
+    my $tau_need = $d->{n} / $v->{t};
+    while (1) {
+        $p = next_zprime($p);
+        next if $d->{used} % $p == 0;
+        local $d->{used} = $d->{used} * $p;
+        my $px = $p ** ($x - 1);
+        if (${ $d->{best} }) {
+            my $min = mintau($tau_need, $d->{used});
+            if ($px * $min > ${ $d->{best} }) {
+                $debug && warn "for $i at $v->{fi} $v->{i}, last at $p ($px * $min > ${ $d->{best} })\n";
+                last;
+            }
+        }
+        local $v->{q} = $v->{q} * $px;
+        find_two_r($d);
+    }
+    return;
+}
+
+# FIXME: gcd(p, k) would be faster than gcd(p^x, k); any(k==0 (mod p_i))
+# might be faster still
 sub find2_tryAB {
     my($qi, $si, $qj, $sj, $best) = @_;
 
@@ -188,6 +203,16 @@ sub find2_tryAB {
 
     my $oi = $m / $qi;
     my $oj = ($m + 1) / $qj;
+    # Can we avoid or simplify find_common_mod() for these cases?
+    if ($si == 1) {
+        return $m if $oi == 1 && tau($oj) == $sj && gcd($oj, $qj) == 1;
+        return;
+    }
+    if ($sj == 1) {
+        return $m if $oj == 1 && tau($oi) == $si && gcd($oi, $qi) == 1;
+        return;
+    }
+
     my $end = $best ? $best / $qi : 0;
     while (!$end || $oi <= $end) {
         $debug > 1 && warn "find2_tryAB: test oi=$oi, oj=$oj\n";
@@ -222,7 +247,12 @@ sub mintau {
 # TODO: take a list
 sub find_common_mod {
     my($px, $qx) = @_;
-    return $px * invmod(-$px, $qx);
+    return $px if $qx == 1;
+    # FIXME: MPU-0.73::invmod is buggy, apparently fixed in github
+    #return $px * invmod(-$px, $qx);
+    return $px * (invmod(-$px % $qx, $qx) // do {
+        use Carp; confess("px=$px, qx=$qx");
+    });
 }
 
 sub prep_run {
@@ -283,6 +313,40 @@ OUT
                     // die "cannot find TauG entry for n=$n";
         };
     }
+}
+
+sub _sortdual {
+    (@$a == 1 && @$b == 1) ? 0
+    : (($a->[1] // 0) <=> ($b->[1] // 0)) || do {
+        local $a = [ @$a[1 .. $#$a] ];
+        local $b = [ @$b[1 .. $#$b] ];
+        _sortdual();
+    };
+}
+
+#
+# Return an arrayref of factorizations of $n, in the same form as given
+# by factorizations(), except that all factors that are powers of 2 are
+# collected and given as a single initial factor. Results are returned
+# in _ascending_ order of the remaining factors.
+# Thus dual_factorizations(12) would return [ [4, 3], [2, 6], [1, 12] ].
+#
+sub dual_factorizations {
+    return [ sort _sortdual map {
+        my @f = @$_;
+        my $bad = 0;    # skip any factorization with more than two 2^x entries
+        my $pow2;
+        for my $i (reverse 0 .. $#f) {
+            my $v = $f[$i];
+            my $ispow = ($v & ($v - 1)) ? 0 : 1;
+            if (($v & ($v - 1)) == 0) {
+                $bad = 1, last if $pow2;
+                $pow2 = $v;
+                splice @f, $i, 1;
+            }
+        }
+        $bad ? () : [ $pow2 // $zone, @f ];
+    } @{ factorizations(@_) } ];
 }
 
 #
