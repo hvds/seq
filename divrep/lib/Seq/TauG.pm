@@ -104,20 +104,20 @@ sub generate {
 
 sub good {
     my($self, $db, $ming, $checked) = @_;
-    $self->ming($ming);
-    $self->checked($checked);
+    $self->ming($ming) if $ming > $self->ming;
+    $self->checked($checked) if $checked > $self->checked;
     return $self->final($db);
 }
 
 sub bad {
     my($self, $db, $checked) = @_;
-    $self->checked($checked);
+    $self->checked($checked) if $checked > $self->checked;
     return $self->final($db);
 }
 
 sub ugly {
     my($self, $db, $maxg) = @_;
-    $self->maxg($maxg - 1);
+    $self->maxg($maxg - 1) if $maxg - 1 < $self->maxg;
     return $self->final($db);
 }
 
@@ -125,8 +125,8 @@ sub bisect {
     my($self, $db, $maxg, $bisected, $btime) = @_;
     return () if ($self->bisected // 0) >= $bisected;
     my $old_maxg = $self->maxg;
-    $self->maxg($maxg);
     if ($maxg < $old_maxg) {
+        $self->maxg($maxg);
         printf "g(%s) <= %s  [bisect %s]\n",
                 $self->n, $maxg, $bisected;
     }
@@ -137,11 +137,11 @@ sub bisect {
 
 sub depends {
     my($self, $db, $ming, $depend_n) = @_;
-    $self->ming($ming);
+    $self->ming($ming) if $ming > $self->ming;
     $self->depend(1);
     $self->depend_n($depend_n);
     my $d = $db->resultset($TABLE)->find({ n => $depend_n });
-    $self->maxg($d->maxg);
+    $self->maxg($d->maxg) if $d->maxg < $self->maxg;
     Seq::TauF->update_depends($db, $self);
     return $self->final($db);
 }
@@ -150,8 +150,8 @@ sub update_depends {
     my($self, $db) = @_;
     my $dep = $db->resultset($TABLE)->find({ n => $self->depend_n });
     Seq::TauF->update_depends($db, $self);
-    $self->ming($dep->ming) if $self->ming < $dep->ming;
-    $self->maxg($dep->maxg);
+    $self->ming($dep->ming) if $dep->ming > $self->ming;
+    $self->maxg($dep->maxg) if $dep->maxg < $self->maxg;
     $self->complete(1) if $dep->complete;
     $self->update;
     return;
