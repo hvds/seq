@@ -148,6 +148,9 @@ sub fprio {
     my($self, $n, $k, $expect) = @_;
     my $prio = $self->gprio($n);
     if ($expect) {
+        if ($expect < 0) {
+            use Carp; Carp::confess("$expect");
+        }
         $prio += List::Util::min(0, -log($expect) / log(2));
     }
     return $prio;
