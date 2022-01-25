@@ -150,9 +150,8 @@ OUT
 
         # try to add another factor to this $v: check all primes if different,
         # or only greater primes if the same power as previous power.
-        my $p = ($pi && $f->[$pi - 1] == $x)
-                ? $v->{p}[-1] : $zone;
-        push @{ $v->{p} }, $p;
+        my $p = ($pi && $f->[$pi - 1] == $x) ? $v->{p}[-1] : $zone;
+        push @{ $v->{p} }, undef;
         local $v->{t} = $v->{t} / $x;
         while (1) {
             $p = next_zprime($p);
