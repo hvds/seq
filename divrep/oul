@@ -3,7 +3,7 @@ use strict;
 use feature 'current_sub';  # support __SUB__
 use Math::GMP;
 use Math::Prime::Util qw{
-    is_prime divisors factor_exp prime_iterator invmod
+    is_prime divisors factor_exp prime_iterator chinese
 };
 use Algorithm::Loops qw{ NextPermuteNum NestedLoops };
 use Syntax::Keyword::Dynamically;
@@ -61,11 +61,8 @@ $debug && warn "min=$min, max=$max\n";
 
 if ($k == 1) {
     find_one($n, \@nf);
-} elsif ($k == 2) {
-    find_two($n, \@nf);
 } else {
-    warn "Not yet supporting f(n,k) for k > 2\n";
-    ...
+    find_any($n, \@nf);
 }
 exit 0;
 
@@ -104,9 +101,9 @@ OUT
     return;
 }
 
-sub find_two {
+sub find_any {
     my($n, $nf) = @_;
-    my($r, $fh) = prep_run($n, 2, 1);
+    my($r, $fh) = prep_run($n, $k, 1);
     my $fa = dual_factorizations($n, $nf);
     my $best;
 
@@ -174,16 +171,12 @@ OUT
 
       final:
         # nothing more to allocate, or worth allocating
-        my $result = find2_tryAB(
-            $v[0]{q}, $v[0]{t},
-            $v[1]{q}, $v[1]{t},
-            $best,
-        );
+        my $result = walk_v(\@v, $best);
         return $cand->($result);
     };
 
-    # Iterate over each possible assignment of two factorizations
-    my $fa_iter = order_iter(2, scalar @$fa);
+    # Iterate over each possible assignment of $k factorizations
+    my $fa_iter = order_iter($k, scalar @$fa);
     while (my $fo = $fa_iter->()) {
         @v = map +{
             f => $fa->[$_],
@@ -200,35 +193,46 @@ OUT
 
 # FIXME: gcd(p, k) would be faster than gcd(p^x, k); any(k==0 (mod p_i))
 # might be faster still
-sub find2_tryAB {
-    my($qi, $si, $qj, $sj, $best) = @_;
+sub walk_v {
+    my($v, $best) = @_;
+    my @q = map $_->{q}, @$v;
+    my @t = map $_->{t}, @$v;
+    my @qq = do {
+        my $qq = $zone;
+        $qq *= $_ for @q;
+        map $qq / $_, @q;
+    };
 
     # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
-    my $m = find_common_mod($qi, $qj);
+    my $m = find_common_mod(\@q);
     return if $best && $m > $best;
 
-    my $oi = $m / $qi;
-    my $oj = ($m + 1) / $qj;
-    # Can we avoid or simplify find_common_mod() for these cases?
-    if ($si == 1) {
-        return $m if $oi == 1 && tau($oj) == $sj && gcd($oj, $qj) == 1;
-        return;
-    }
-    if ($sj == 1) {
-        return $m if $oj == 1 && tau($oi) == $si && gcd($oi, $qi) == 1;
-        return;
+    my @o = map +($m + $_) / $q[$_], 0 .. $#q;
+    # special case any t[i] == 1
+    for my $i (0 .. $#t) {
+        next unless $t[$i] == 1;
+        return unless $o[$i] == 1;
+        for my $j (0 .. $#t) {
+            next if $i == $j;
+            return unless tau($o[$j]) == $t[$j];
+            return unless gcd($o[$j], $q[$j]) == 1;
+        }
+        return $m;
     }
 
-    my $end = $best ? $best / $qi : 0;
-    while (!$end || $oi <= $end) {
-        $debug > 1 && warn "find2_tryAB: test oi=$oi, oj=$oj\n";
-        return $oi * $qi if (
-            tau($oi) == $si && tau($oj) == $sj
-            && gcd($oi, $qi) == 1 && gcd($oj, $qj) == 1
-        );
-        # step the candidate by $qi * $qj
-        $oi += $qj;
-        $oj += $qi;
+    my $end = $best ? $best / $q[0] : 0;
+    while (!$end || $o[0] <= $end) {
+        $debug > 1 && warn "walk_v: test [@o]\n";
+        my $result = 1;
+        for my $i (0 .. $#o) {
+            $result = 0, last unless (
+                tau($o[$i]) == $t[$i]
+                && gcd($o[$i], $q[$i]) == 1
+            );
+        }
+        return $o[0] * $q[0] if $result;
+        # step the candidates by prod q_i
+        $o[$_] += $qq[$_] for 0 .. $#o;
     }
     return;
 }
@@ -274,15 +278,13 @@ sub mintau {
     return $best;
 }
 
-# TODO: take a list
 sub find_common_mod {
-    my($px, $qx) = @_;
-    return $px if $qx == 1;
-    # FIXME: MPU-0.73::invmod is buggy, apparently fixed in github
-    #return $px * invmod(-$px, $qx);
-    return $px * (invmod(-$px % $qx, $qx) // do {
-        use Carp; confess("px=$px, qx=$qx");
-    });
+    my($q) = @_;
+    my $result = chinese(map [ -$_, $q->[$_] ], 0 .. $#$q);
+    if (!defined $result) {
+        use Carp; confess("[@$q]");
+    }
+    return $result;
 }
 
 sub prep_run {
