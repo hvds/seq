@@ -28,7 +28,7 @@ sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
 
-my($max, $start, $inject, $debug) = (0) x 4;
+my($max, $start, $inject, $verify, $debug) = (0) x 5;
 my $typename = 'o';
 my $maxproc = 6;
 
@@ -38,13 +38,14 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($max = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
     ($start = $arg || shift(@ARGV)), next if $arg =~ s{^-s}{};
     $inject = 1, next if $arg eq '-i';
+    $verify = 1, next if $arg eq '-v';
     ++$debug, next if $arg eq '-d';
     die "Unknown option '$arg'\n";
 }
 
 $| = 1;
-my($n, $f) = map MBI($_), @ARGV;
-$0 = "oul($n $f)";
+my($n, $k) = map MBI($_), @ARGV;
+$0 = "oul($n $k)";
 my $type = Type->new($typename);
 $type->bind($n);
 $type->bind_owner('upperlim');
@@ -58,9 +59,9 @@ my $min = g()->checked;
 $max = ston($max) if $max;
 $debug && warn "min=$min, max=$max\n";
 
-if ($f == 1) {
+if ($k == 1) {
     find_one($n, \@nf);
-} elsif ($f == 2) {
+} elsif ($k == 2) {
     find_two($n, \@nf);
 } else {
     warn "Not yet supporting f(n,k) for k > 2\n";
@@ -99,11 +100,7 @@ sub find_one {
 OUT
         $best = $prod if !defined($best) || $best > $prod;
     }
-    report_seq($fh, $n, 1, $best);
-    printf $fh <<OUT, $n, $best, times() - $t0;
-200 f(%s, 1) = %s (%.2fs)
-OUT
-    finish_run($r, $fh);
+    finish_run($r, $fh, $best);
     return;
 }
 
@@ -185,11 +182,7 @@ OUT
         $recurse->();
     }
 
-    report_seq($fh, $n, 2, $best);
-    printf $fh <<OUT, $n, $best, times() - $t0;
-200 f(%s, 2) = %s (%.2fs)
-OUT
-    finish_run($r, $fh);
+    finish_run($r, $fh, $best);
     return;
 }
 
@@ -303,21 +296,72 @@ sub prep_run {
 }
 
 sub finish_run {
-    my($r, $fh) = @_;
+    my($r, $fh, $best) = @_;
+    my $checked = report_seq($fh, $n, $k, $best);
+    if ($checked) {
+        printf <<OUT, $n, $k, $best;
+265 check ok f(%s, %s) = %s
+OUT
+    } else {
+        printf <<OUT, $n, $k, $best;
+565 check not ok f(%s, %s) != %s
+OUT
+    }
+    if ($verify) {
+        my $g = g();
+        my $f = Seq::TauF->forceFor($g, $db, $k);
+        if ($f->complete) {
+            if ($f->f == $best) {
+                printf <<OUT, $n, $k, $best;
+266 db ok f(%s,%s) = %s
+OUT
+            } else {
+                printf <<OUT, $n, $k, $f->f, $best;
+566 db not ok f(%s,%s) = %s, not %s
+OUT
+                goto finish_fail;
+            }
+        } else {
+            if ($g->checked < $best) {
+                printf <<OUT, $n, $k, $g->checked, $best;
+366 db maybe ok f(%s,%s) ?= %s < %s
+OUT
+            } else {
+                printf <<OUT, $n, $k. $best;
+566 db not ok f(%s,%s) > %s, not %s
+OUT
+                goto finish_fail;
+            }
+        }
+    }
+    if ($checked) {
+        printf $fh <<OUT, $n, $k, $best, times() - $t0;
+200 f(%s, %s) = %s (%.2fs)
+OUT
+    }
     if ($inject) {
         close $fh;
         $r->finalize($db);
     }
+    return;
+  finish_fail:
+    if ($inject) {
+        close $fh;
+        $r->delete;
+    }
+    exit 1;
 }
 
 sub report_seq {
     my($fh, $n, $k, $f) = @_;
-    my $good = 1;
+    my($still_good, $all_good) = (1, 1);
     my @result;
-    for (my $i = 0; ($i <= $k) || $good; ++$i) {
+    for (my $i = 0; ($i <= $k) || $still_good; ++$i) {
         my $v = $type->func_value($n, $i, $f);
         my $result = [ $i, $type->func($v), $v, pf($v) ];
-        $good = 0 unless $type->func_matches($i, $result->[1]);
+        my $is_good = $type->func_matches($i, $result->[1]);
+        $still_good = 0 unless $is_good;
+        $all_good = 0 if $i < $k && !$is_good;
         push @result, $result;
     }
     my $flen = length($#result);
@@ -329,6 +373,7 @@ sub report_seq {
 211 Sequence % *s: % 2s = %s(% *s = %s)
 OUT
     }
+    return $all_good;
 }
 
 {
