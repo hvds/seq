@@ -131,15 +131,7 @@ OUT
     #
     my @v;
     my $recurse = sub {
-        my $i = best_v(\@v) //  do {
-            # nothing more to allocate
-            my $result = find2_tryAB(
-                $v[0]{q}, $v[0]{t},
-                $v[1]{q}, $v[1]{t},
-                $best,
-            );
-            return $cand->($result);
-        };
+        my $i = best_v(\@v) // goto final;
         my $v = $v[$i];
         my $pi = @{ $v->{p} } + 1;
         my $f = $v->{f};
@@ -148,8 +140,19 @@ OUT
         # try to add another factor to this $v: check all primes if different,
         # or only greater primes if the same power as previous power.
         my $p = ($pi && $f->[$pi - 1] == $x) ? $v->{p}[-1] : $zone;
+        my $tnext = $v->{t} / $x;
+        if ($best) {
+            my $targ = $best / $v->{q} / mintau($tnext, $used);
+            my $lim = $targ->broot($x);
+            return if $lim < $p + 1;
+            my $aq = $zone;
+            $aq *= $_->{q} for @v;
+            my $walk = $best / $aq;
+            goto final if $walk < $lim;
+        }
         push @{ $v->{p} }, undef;
-        local $v->{t} = $v->{t} / $x;
+        local $v->{t} = $tnext;
+
         while (1) {
             $p = next_zprime($p);
             next if $used % $p == 0;
@@ -168,6 +171,15 @@ OUT
         }
         pop @{ $v->{p} };
         return;
+
+      final:
+        # nothing more to allocate, or worth allocating
+        my $result = find2_tryAB(
+            $v[0]{q}, $v[0]{t},
+            $v[1]{q}, $v[1]{t},
+            $best,
+        );
+        return $cand->($result);
     };
 
     # Iterate over each possible assignment of two factorizations
@@ -233,8 +245,6 @@ sub best_v {
         my $next_factor = $vj->{f}[@{ $vj->{p} } + 1];
         # skip if no factor
         next unless $next_factor;
-        # hack: skip if factor is 3
-        next if $next_factor == 3;
 
         if ($vi) {
             # doesn't have higher tau
