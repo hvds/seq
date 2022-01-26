@@ -156,14 +156,14 @@ OUT
             dynamically $used = $used * $p;
             my $px = $p ** ($x - 1);
             $v->{p}[-1] = $p;
+            local $v->{q} = $v->{q} * $px;
             if ($best) {
                 my $min = mintau($v->{t}, $used);
-                if ($px * $min > $best) {
-                    $debug && warn "for $i last at [@{ $v->{p} }] ($px * $min > $best)\n";
+                if ($v->{q} * $min > $best) {
+                    $debug && warn "for $i last at [@{ $v->{p} }] ($v->{q} * $min > $best)\n";
                     last;
                 }
             }
-            local $v->{q} = $v->{q} * $px;
             __SUB__->();    # recurse
         }
         pop @{ $v->{p} };
