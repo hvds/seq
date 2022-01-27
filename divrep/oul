@@ -105,7 +105,7 @@ sub find_any {
     my($n, $nf) = @_;
     my($r, $fh) = prep_run($n, $k, 1);
     my $fa = dual_factorizations($n, $nf);
-    my $best;
+    my $best = $max || undef;
 
     my $cand = sub {
         my($new) = @_;
