@@ -303,6 +303,7 @@ sub prep_run {
     $r->update;
     my $path = $r->logpath($type);
     open(my $fh, '>', $path) or die "$path: $!";
+    $fh->autoflush(1);
     print $fh "001 $0\n";
     return ($r, $fh);
 }
