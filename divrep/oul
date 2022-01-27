@@ -139,12 +139,13 @@ OUT
         my $p = ($pi && $f->[$pi - 1] == $x) ? $v->{p}[-1] : $zone;
         my $tnext = $v->{t} / $x;
         if ($best) {
-            my $targ = $best / $v->{q} / mintau($tnext, $used);
+            my $besti = $best + $i;
+            my $targ = $besti / $v->{q} / mintau($tnext, $used);
             my $lim = $targ->broot($x);
             return if $lim < $p + 1;
             my $aq = $zone;
             $aq *= $_->{q} for @v;
-            my $walk = $best / $aq;
+            my $walk = $besti / $aq;
             goto final if $walk < $lim;
         }
         push @{ $v->{p} }, undef;
@@ -159,7 +160,8 @@ OUT
             local $v->{q} = $v->{q} * $px;
             if ($best) {
                 my $min = mintau($v->{t}, $used);
-                if ($v->{q} * $min > $best) {
+                # not $besti, $best may have changed
+                if ($v->{q} * $min > $best + $i) {
                     $debug && warn "for $i last at [@{ $v->{p} }] ($v->{q} * $min > $best)\n";
                     last;
                 }
