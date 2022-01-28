@@ -48,19 +48,24 @@ $type->bind($n);
 $type->bind_owner('upperlim');
 my $db = Seq::Db->new($type, 0);
 
-my @nf = factor_exp($n);
-my $tn = tau($n, \@nf);
+my $nf = [ factor_exp($n) ];
+my $tn = tau($n, $nf);
 my $t0 = scalar times();
 
-my $min = g()->checked;
+my $min = g()->checked;     # not currently used
 $max = ston($max) if $max;
-$debug && warn "min=$min, max=$max\n";
 
-if ($k == 1) {
-    find_one($n, \@nf);
-} else {
-    find_any($n, \@nf);
-}
+# Note that if we run with $max set to a non-solution, and we fail to find
+# a solution, this will finish by reporting a bad solution rather than
+# "no solution found".
+my $best = $max || undef;
+
+my $complete = 1;   # always, for now
+my($r, $fh);
+($r, $fh) = prep_run($n, $k, $complete) if $inject;
+report(sprintf "001 %s%s\n", $0, $max ? " -x$max" : "");
+find_any();
+finish_run();
 exit 0;
 
 {
@@ -69,50 +74,31 @@ exit 0;
         print "\x08 \x08" x length($s);
         ($s) = @_;
         print $s;
+        return;
     }
 }
 
-#
-# Find the least element a_i of A025487 that has tau(a_i) = n: generate
-# each of the ways to split n into factors, and construct a corresponding
-# element of a_i that generates the required tau() that way.
-#
-sub find_one {
-    my($n, $nf) = @_;
-    my($r, $fh) = prep_run($n, 1, 1);
+sub report {
+    my($msg) = @_;
+    print $fh $msg if $fh;
+    diag('');
+    print $msg;
+    return;
+}
 
-    my $best;
-    my @p = nprimes(sum0 map $_->[1], @$nf);
-    my $fit = factor_iterator($n, $nf);
-    while (my $fact = $fit->()) {
-        my $prod = $zone;
-        for (0 .. $#$fact) {
-            $prod *= $p[$_] ** ($fact->[$_] - 1);
-        }
-        printf $fh <<OUT, $prod, times() - $t0;
+sub candidate {
+    my($new) = @_;
+    return unless $new;
+    report(sprintf <<OUT, $new, times() - $t0);
 202 Candidate %s (%.2fs)
 OUT
-        $best = $prod if !defined($best) || $best > $prod;
-    }
-    finish_run($r, $fh, $best);
+    $best = $new unless $best && $best < $new;
     return;
 }
 
 sub find_any {
-    my($n, $nf) = @_;
-    my($r, $fh) = prep_run($n, $k, 1);
     my $fa = dual_factorizations($n, $nf);
-    my $best = $max || undef;
 
-    my $cand = sub {
-        my($new) = @_;
-        return unless $new;
-        printf $fh <<OUT, $new, times() - $t0;
-202 Candidate %s (%.2fs)
-OUT
-        $best = $new unless $best && $best < $new;
-        return;
-    };
     # product of primes allocated so far, that should be avoided
     my $used = $zone;
     #
@@ -171,10 +157,11 @@ OUT
       final:
         # nothing more to allocate, or worth allocating
         my $result = walk_v(\@v, $best);
-        return $cand->($result);
+        return candidate($result);
     };
 
     # Iterate over each possible assignment of $k factorizations
+    # FIXME: we get too many of these for larger k, what can we do instead?
     my $fa_iter = order_iter($k, scalar @$fa);
     while (my $fo = $fa_iter->()) {
         @v = map +{
@@ -186,7 +173,6 @@ OUT
         $recurse->();
     }
 
-    finish_run($r, $fh, $best);
     return;
 }
 
@@ -288,7 +274,6 @@ sub find_common_mod {
 
 sub prep_run {
     my($n, $k, $complete) = @_;
-    return (undef, *STDOUT) unless $inject;
     my $g = g();
     my $f = Seq::TauF->forceFor($g, $db, $k);
     my $r = Seq::Run->gen($f, $db, {
@@ -301,21 +286,20 @@ sub prep_run {
     $r->running(1);
     $r->update;
     my $path = $r->logpath($type);
+    print "path $path\n";
     open(my $fh, '>', $path) or die "$path: $!";
     $fh->autoflush(1);
-    print $fh "001 $0\n";
     return ($r, $fh);
 }
 
 sub finish_run {
-    my($r, $fh, $best) = @_;
-    my $checked = report_seq($fh, $n, $k, $best);
+    my $checked = report_seq($n, $k, $best);
     if ($checked) {
-        printf <<OUT, $n, $k, $best;
+        report(sprintf <<OUT, $n, $k, $best);
 265 check ok f(%s, %s) = %s
 OUT
     } else {
-        printf <<OUT, $n, $k, $best;
+        report(sprintf <<OUT, $n, $k, $best);
 565 check not ok f(%s, %s) != %s
 OUT
     }
@@ -324,22 +308,22 @@ OUT
         my $f = Seq::TauF->forceFor($g, $db, $k);
         if ($f->complete) {
             if ($f->f == $best) {
-                printf <<OUT, $n, $k, $best;
+                report(sprintf <<OUT, $n, $k, $best);
 266 db ok f(%s,%s) = %s
 OUT
             } else {
-                printf <<OUT, $n, $k, $f->f, $best;
+                report(sprintf <<OUT, $n, $k, $f->f, $best);
 566 db not ok f(%s,%s) = %s, not %s
 OUT
                 goto finish_fail;
             }
         } else {
             if ($g->checked < $best) {
-                printf <<OUT, $n, $k, $g->checked, $best;
+                report(sprintf <<OUT, $n, $k, $g->checked, $best);
 366 db maybe ok f(%s,%s) ?= %s < %s
 OUT
             } else {
-                printf <<OUT, $n, $k. $best;
+                report(sprintf <<OUT, $n, $k. $best);
 566 db not ok f(%s,%s) > %s, not %s
 OUT
                 goto finish_fail;
@@ -347,7 +331,7 @@ OUT
         }
     }
     if ($checked) {
-        printf $fh <<OUT, $n, $k, $best, times() - $t0;
+        report(sprintf <<OUT, $n, $k, $best, times() - $t0);
 200 f(%s, %s) = %s (%.2fs)
 OUT
     }
@@ -365,7 +349,7 @@ OUT
 }
 
 sub report_seq {
-    my($fh, $n, $k, $f) = @_;
+    my($n, $k, $f) = @_;
     my($still_good, $all_good) = (1, 1);
     my @result;
     for (my $i = 0; ($i <= $k) || $still_good; ++$i) {
@@ -381,7 +365,7 @@ sub report_seq {
     my $name = $type->func_name;
     for (0 .. $#result) {
         my $r = $result[$_];
-        printf $fh <<OUT, $flen, @$r[0, 1], $name, $vlen, @$r[2, 3];
+        report(sprintf <<OUT, $flen, @$r[0, 1], $name, $vlen, @$r[2, 3]);
 211 Sequence % *s: % 2s = %s(% *s = %s)
 OUT
     }
