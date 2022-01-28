@@ -3,12 +3,9 @@ use strict;
 use feature 'current_sub';  # support __SUB__
 use Math::GMP;
 use Math::Prime::Util qw{
-    is_prime divisors factor_exp prime_iterator chinese
+    factor_exp prime_iterator chinese
 };
-use Algorithm::Loops qw{ NextPermuteNum NestedLoops };
 use Syntax::Keyword::Dynamically;
-use POSIX qw{ :sys_wait_h };
-use Memoize;
 use List::Util qw{ first sum0 };
 use DDP;    # exports p, np
 use lib 'lib';
@@ -22,7 +19,7 @@ Try to find the parameters most likely to get a hit.
 =cut
 
 use lib './lib';
-use ModFunc qw/ mod_combine quadvec gcd /;
+use ModFunc qw/ gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
@@ -571,30 +568,5 @@ sub ston {
     $s =~ s/,//g;
     $s =~ s{e(\d+)}{"0" x $1}ie;
     return MBI($s);
-}
-
-sub ntos {
-    my($n) = @_;
-    $n =~ s{(0+)$}{"e" . length($1)}e;
-    return $n;
-}
-
-sub _group {
-    my($array) = @_;
-    my %result;
-    ++$result{$_} for @$array;
-    return \%result;
-}
-
-BEGIN {
-    memoize('comb');
-    sub comb {
-        my($n, $k) = @_;
-        return ($k == 0) ? 1
-                : ($k < 0 || $k > $n) ? 0
-                : ($k == 1) ? $n
-                : ($k + $k > $n) ? comb($n, $n - $k)
-                : comb($n - 1, $k - 1) + comb($n - 1, $k);
-    }
 }
 
