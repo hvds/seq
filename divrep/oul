@@ -67,8 +67,9 @@ report(sprintf "001 %s%s\n", $0, $max ? " -x$max" : "");
 
     my $fa = dual_factorizations($n, $nf);
 
-    # product of primes allocated so far, that should be avoided
-    my $used = $zone;
+    # lookup of primes allocated so far, that should be avoided
+    my %used;
+
     #
     # elements v[0..k-1] represent the composition of the value d+i that
     # we're trying to build up. Each element is a hashref of:
@@ -135,7 +136,7 @@ sub recurse {
     my $tnext = $v->{t} / $x;
     if ($best) {
         my $besti = $best + $i;
-        my $targ = $besti / $v->{q} / mintau($tnext, $used);
+        my $targ = $besti / $v->{q} / mintau($tnext, \%used);
         my $lim = $targ->broot($x);
         return if $lim < $p + 1;
         my $aq = $zone;
@@ -148,13 +149,13 @@ sub recurse {
 
     while (1) {
         $p = next_zprime($p);
-        next if $used % $p == 0;
-        dynamically $used = $used * $p;
+        next if $used{$p};
+        local $used{$p} = 1;
         my $px = $p ** ($x - 1);
         $v->{p}[-1] = $p;
         local $v->{q} = $v->{q} * $px;
         if ($best) {
-            my $min = mintau($v->{t}, $used);
+            my $min = mintau($v->{t}, \%used);
             # not $besti, $best may have changed
             if ($v->{q} * $min > $best + $i) {
                 $debug && warn "for $i last at [@{ $v->{p} }] ($v->{q} * $min > $best)\n";
@@ -245,8 +246,7 @@ sub best_v {
 sub mintau {
     my($tau, $avoid) = @_;
     my $fa = factorizations($tau);
-    my %avoid = map +($_->[0] => 1), factor_exp($avoid);
-    my @p = grep !$avoid{$_}, nprimes(@{ $fa->[-1] } + keys %avoid);
+    my @p = grep !$avoid->{$_}, nprimes(@{ $fa->[-1] } + keys %$avoid);
 
     my $best;
     for my $f (@$fa) {
