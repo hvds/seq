@@ -50,7 +50,9 @@ my $db = Seq::Db->new($type, 0);
 
 my $nf = [ factor_exp($n) ];
 my $tn = tau($n, $nf);
+my $diag_delay = 1;
 my $t0 = scalar times();
+my $diagt = $t0 + $diag_delay;
 
 my $min = g()->checked;     # not currently used
 $max = ston($max) if $max;
@@ -70,6 +72,11 @@ report(sprintf "001 %s%s\n", $0, $max ? " -x$max" : "");
     # lookup of primes allocated so far, that should be avoided
     my %used;
 
+    # catch primes by recursion level, to report as shard
+    my $level = 0;
+    my $fo;
+    my @shard;
+
     #
     # elements v[0..k-1] represent the composition of the value d+i that
     # we're trying to build up. Each element is a hashref of:
@@ -79,10 +86,11 @@ report(sprintf "001 %s%s\n", $0, $max ? " -x$max" : "");
     #   t => tau() not yet accounted for (ie n / tau(q))
     #
     my @v;
+
     # Iterate over each possible assignment of $k factorizations
     # FIXME: we get too many of these for larger k, what can we do instead?
     my $fa_iter = order_iter($k, scalar @$fa);
-    while (my $fo = $fa_iter->()) {
+    while ($fo = $fa_iter->()) {
         @v = map +{
             f => $fa->[$_],
             p => [],
@@ -103,12 +111,19 @@ exit 0;
         print $s;
         return;
     }
+    sub keep_diag {
+        if (length $s) {
+            print "\n";
+            $s = '';
+        }
+        return;
+    }
 }
 
 sub report {
     my($msg) = @_;
     print $fh $msg if $fh;
-    diag('');
+    keep_diag();
     print $msg;
     return;
 }
@@ -161,8 +176,14 @@ sub recurse {
                 $debug && warn "for $i last at [@{ $v->{p} }] ($v->{q} * $min > $best)\n";
                 last;
             }
+
+        $shard[$level++] = $p;
+        if (times() >= $diagt) {
+            $diagt = times() + $diag_delay;
+            diag("[@$fo] [@shard[0 .. $level - 1]]");
         }
         recurse();
+        --$level;
     }
     pop @{ $v->{p} };
     return;
@@ -202,9 +223,20 @@ sub walk_v {
         return $m;
     }
 
+    #
+    # This is the core loop, for long runs we expect to spend the bulk
+    # of our time here (probably in factorization for the tau() checks).
+    #
     my $end = $best ? $best / $q[0] : 0;
+    my $endi = $end / $qq[0];
     while (!$end || $o[0] <= $end) {
         $debug > 1 && warn "walk_v: test [@o]\n";
+
+        if (times() >= $diagt) {
+            $diagt = times() + $diag_delay;
+            my $ati = $o[0] / $qq[0];
+            diag("[@$fo] [@shard[0 .. $level - 1]] $ati / $endi");
+        }
         my $result = 1;
         for my $i (0 .. $#o) {
             $result = 0, last unless (
