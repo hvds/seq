@@ -149,14 +149,17 @@ sub recurse {
     # or only greater primes if the same power as previous power.
     my $p = ($pi && $f->[$pi - 1] == $x) ? $v->{p}[-1] : $zone;
     my $tnext = $v->{t} / $x;
+
+    # we can get slightly better accuracy by recalculating this each
+    # time in the loop below, at least for small $p, but the cost
+    # outweighs the benefit
+    my $mint = mintau($tnext, \%used);
     if ($best) {
-        my $besti = $best + $i;
-        my $targ = $besti / $v->{q} / mintau($tnext, \%used);
-        my $lim = $targ->broot($x);
+        my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
         return if $lim < $p + 1;
         my $aq = $zone;
         $aq *= $_->{q} for @v;
-        my $walk = $besti / $aq;
+        my $walk = ($best + $i) / $aq;
         goto final if $walk < $lim;
     }
     push @{ $v->{p} }, undef;
@@ -170,10 +173,8 @@ sub recurse {
         $v->{p}[-1] = $p;
         local $v->{q} = $v->{q} * $px;
         if ($best) {
-            my $min = mintau($v->{t}, \%used);
-            # not $besti, $best may have changed
-            if ($v->{q} * $min > $best + $i) {
-                $debug && warn "for $i last at [@{ $v->{p} }] ($v->{q} * $min > $best)\n";
+            if ($v->{q} * $mint > $best + $i) {
+                $debug && warn "for $i last at [@{ $v->{p} }] ($v->{q} * $mint > $best)\n";
                 last;
             }
 
