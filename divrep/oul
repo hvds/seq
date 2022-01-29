@@ -64,7 +64,33 @@ my $complete = 1;   # always, for now
 my($r, $fh);
 ($r, $fh) = prep_run($n, $k, $complete) if $inject;
 report(sprintf "001 %s%s\n", $0, $max ? " -x$max" : "");
-find_any();
+
+    my $fa = dual_factorizations($n, $nf);
+
+    # product of primes allocated so far, that should be avoided
+    my $used = $zone;
+    #
+    # elements v[0..k-1] represent the composition of the value d+i that
+    # we're trying to build up. Each element is a hashref of:
+    #   f => the factorization we're using from $fa
+    #   p[] => primes we've allocated to the factors
+    #   q => total value attributed
+    #   t => tau() not yet accounted for (ie n / tau(q))
+    #
+    my @v;
+    # Iterate over each possible assignment of $k factorizations
+    # FIXME: we get too many of these for larger k, what can we do instead?
+    my $fa_iter = order_iter($k, scalar @$fa);
+    while (my $fo = $fa_iter->()) {
+        @v = map +{
+            f => $fa->[$_],
+            p => [],
+            q => $zone,
+            t => $n,
+        }, @$fo;
+        recurse();
+    }
+
 finish_run();
 exit 0;
 
@@ -96,84 +122,54 @@ OUT
     return;
 }
 
-sub find_any {
-    my $fa = dual_factorizations($n, $nf);
+sub recurse {
+    my $i = best_v(\@v) // goto final;
+    my $v = $v[$i];
+    my $pi = @{ $v->{p} } + 1;
+    my $f = $v->{f};
+    my $x = $f->[$pi];
 
-    # product of primes allocated so far, that should be avoided
-    my $used = $zone;
-    #
-    # elements v[0..k-1] represent the composition of the value d+i that
-    # we're trying to build up. Each element is a hashref of:
-    #   f => the factorization we're using from $fa
-    #   p[] => primes we've allocated to the factors
-    #   q => total value attributed
-    #   t => tau() not yet accounted for (ie n / tau(q))
-    #
-    my @v;
-    my $recurse = sub {
-        my $i = best_v(\@v) // goto final;
-        my $v = $v[$i];
-        my $pi = @{ $v->{p} } + 1;
-        my $f = $v->{f};
-        my $x = $f->[$pi];
-
-        # try to add another factor to this $v: check all primes if different,
-        # or only greater primes if the same power as previous power.
-        my $p = ($pi && $f->[$pi - 1] == $x) ? $v->{p}[-1] : $zone;
-        my $tnext = $v->{t} / $x;
-        if ($best) {
-            my $besti = $best + $i;
-            my $targ = $besti / $v->{q} / mintau($tnext, $used);
-            my $lim = $targ->broot($x);
-            return if $lim < $p + 1;
-            my $aq = $zone;
-            $aq *= $_->{q} for @v;
-            my $walk = $besti / $aq;
-            goto final if $walk < $lim;
-        }
-        push @{ $v->{p} }, undef;
-        local $v->{t} = $tnext;
-
-        while (1) {
-            $p = next_zprime($p);
-            next if $used % $p == 0;
-            dynamically $used = $used * $p;
-            my $px = $p ** ($x - 1);
-            $v->{p}[-1] = $p;
-            local $v->{q} = $v->{q} * $px;
-            if ($best) {
-                my $min = mintau($v->{t}, $used);
-                # not $besti, $best may have changed
-                if ($v->{q} * $min > $best + $i) {
-                    $debug && warn "for $i last at [@{ $v->{p} }] ($v->{q} * $min > $best)\n";
-                    last;
-                }
-            }
-            __SUB__->();    # recurse
-        }
-        pop @{ $v->{p} };
-        return;
-
-      final:
-        # nothing more to allocate, or worth allocating
-        my $result = walk_v(\@v, $best);
-        return candidate($result);
-    };
-
-    # Iterate over each possible assignment of $k factorizations
-    # FIXME: we get too many of these for larger k, what can we do instead?
-    my $fa_iter = order_iter($k, scalar @$fa);
-    while (my $fo = $fa_iter->()) {
-        @v = map +{
-            f => $fa->[$_],
-            p => [],
-            q => $zone,
-            t => $n,
-        }, @$fo;
-        $recurse->();
+    # try to add another factor to this $v: check all primes if different,
+    # or only greater primes if the same power as previous power.
+    my $p = ($pi && $f->[$pi - 1] == $x) ? $v->{p}[-1] : $zone;
+    my $tnext = $v->{t} / $x;
+    if ($best) {
+        my $besti = $best + $i;
+        my $targ = $besti / $v->{q} / mintau($tnext, $used);
+        my $lim = $targ->broot($x);
+        return if $lim < $p + 1;
+        my $aq = $zone;
+        $aq *= $_->{q} for @v;
+        my $walk = $besti / $aq;
+        goto final if $walk < $lim;
     }
+    push @{ $v->{p} }, undef;
+    local $v->{t} = $tnext;
 
+    while (1) {
+        $p = next_zprime($p);
+        next if $used % $p == 0;
+        dynamically $used = $used * $p;
+        my $px = $p ** ($x - 1);
+        $v->{p}[-1] = $p;
+        local $v->{q} = $v->{q} * $px;
+        if ($best) {
+            my $min = mintau($v->{t}, $used);
+            # not $besti, $best may have changed
+            if ($v->{q} * $min > $best + $i) {
+                $debug && warn "for $i last at [@{ $v->{p} }] ($v->{q} * $min > $best)\n";
+                last;
+            }
+        }
+        recurse();
+    }
+    pop @{ $v->{p} };
     return;
+
+  final:
+    # nothing more to allocate, or worth allocating
+    my $result = walk_v(\@v, $best);
+    return candidate($result);
 }
 
 # FIXME: gcd(p, k) would be faster than gcd(p^x, k); any(k==0 (mod p_i))
