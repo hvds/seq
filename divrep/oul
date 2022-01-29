@@ -163,21 +163,33 @@ sub recurse {
         goto final if $walk < $lim;
     }
     push @{ $v->{p} }, undef;
-    local $v->{t} = $tnext;
 
+    my $pb = $best;
     while (1) {
         $p = next_zprime($p);
         next if $used{$p};
         local $used{$p} = 1;
         my $px = $p ** ($x - 1);
         $v->{p}[-1] = $p;
-        local $v->{q} = $v->{q} * $px;
+        my $q = $v->{q} * $px;
         if ($best) {
-            if ($v->{q} * $mint > $best + $i) {
-                $debug && warn "for $i last at [@{ $v->{p} }] ($v->{q} * $mint > $best)\n";
+            if ($q * $mint > $best + $i) {
+                $debug && warn "for $i last at [@{ $v->{p} }] ($q * $mint > $best)\n";
                 last;
             }
+            if (!$pb || $best < $pb) {
+                $pb = $best;
+                my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
+                return if $lim < $p;
+                my $aq = $zone;
+                $aq *= $_->{q} for @v;
+                my $walk = ($best + $i) / $aq;
+                goto final if $walk < $lim;
+            }
+        }
 
+        local $v->{t} = $tnext;
+        local $v->{q} = $q;
         $shard[$level++] = $p;
         if (times() >= $diagt) {
             $diagt = times() + $diag_delay;
