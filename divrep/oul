@@ -6,7 +6,7 @@ use Math::Prime::Util qw{
     factor_exp prime_iterator chinese
 };
 use Syntax::Keyword::Dynamically;
-use List::Util qw{ first sum0 };
+use List::Util qw{ first sum0 all };
 use DDP;    # exports p, np
 use lib 'lib';
 use Type;
@@ -237,14 +237,15 @@ sub walk_v {
             my $ati = $o[0] / $qq[0];
             diag("[@$fo] [@shard[0 .. $level - 1]] $ati / $endi");
         }
-        my $result = 1;
-        for my $i (0 .. $#o) {
-            $result = 0, last unless (
-                tau($o[$i]) == $t[$i]
-                && gcd($o[$i], $q[$i]) == 1
-            );
-        }
-        return $o[0] * $q[0] if $result;
+
+        # return a solution if we find one. do the gcd checks first,
+        # since they should be much faster than factorization
+        return $o[0] * $q[0] if (
+            all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o
+        ) && (
+            all { tau($o[$_]) == $t[$_] } 0 .. $#o
+        );
+
         # step the candidates by prod q_i
         $o[$_] += $qq[$_] for 0 .. $#o;
     }
