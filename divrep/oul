@@ -428,20 +428,25 @@ OUT
     }
 }
 
-#
-# Return an arrayref of all the ways to factorize $n (with its factor_exp
-# optionally provided as $nf) in reverse lexicographic order, each
-# factorization represented as an arrayref of descending factors.
-# Thus factorizations(12) would return [ [12], [6,2], [4,3], [3,2,2] ].
-#
-sub factorizations {
-    my($n, $nf) = @_;
-    my @f;
-    my $fi = factor_iterator($n, $nf);
-    while (my $f = $fi->()) {
-        push @f, [ @$f ];
+{
+    #
+    # Return an arrayref of all the ways to factorize $n (with its factor_exp
+    # optionally provided as $nf) in reverse lexicographic order, each
+    # factorization represented as an arrayref of descending factors.
+    # Thus factorizations(12) would return [ [12], [6,2], [4,3], [3,2,2] ].
+    #
+    my %fall;
+    sub factorizations {
+        my($n, $nf) = @_;
+        return $fall{$n} //= do {
+            my @f;
+            my $fi = factor_iterator($n, $nf);
+            while (my $f = $fi->()) {
+                push @f, [ @$f ];
+            }
+            \@f;
+        };
     }
-    return \@f;
 }
 
 #
