@@ -62,43 +62,47 @@ $max = ston($max) if $max;
 # "no solution found".
 my $best = $max || undef;
 
-my $complete = 1;   # always, for now
+# Always true for now; the intention is to set it false for a partial run,
+# mainly to ensure the flag is set on the Run object.
+my $complete = 1;
+
+my $fa = dual_factorizations($n, $nf);
+# Lookup of primes allocated so far, that should be avoided
+my %used;
+
+# Catch primes by recursion level, to report as shard
+my $level = 0;
+my @shard;
+
 my($r, $fh);
 ($r, $fh) = prep_run($n, $k, $complete) if $inject;
 report(sprintf "001 %s%s\n", $0, $max ? " -x$max" : "");
 
-    my $fa = dual_factorizations($n, $nf);
+#
+# Elements v[0..k-1] represent the composition of the value d+i that
+# we're trying to build up. Each element is a hashref of:
+#   f => the factorization we're using from $fa
+#   p[] => primes we've allocated to the factors
+#   q => total value attributed
+#   t => tau() not yet accounted for (ie n / tau(q))
+#
+my @v;
 
-    # lookup of primes allocated so far, that should be avoided
-    my %used;
-
-    # catch primes by recursion level, to report as shard
-    my $level = 0;
-    my $fo;
-    my @shard;
-
-    #
-    # elements v[0..k-1] represent the composition of the value d+i that
-    # we're trying to build up. Each element is a hashref of:
-    #   f => the factorization we're using from $fa
-    #   p[] => primes we've allocated to the factors
-    #   q => total value attributed
-    #   t => tau() not yet accounted for (ie n / tau(q))
-    #
-    my @v;
-
-    # Iterate over each possible assignment of $k factorizations
-    # FIXME: we get too many of these for larger k, what can we do instead?
-    my $fa_iter = order_iter($k, scalar @$fa);
-    while ($fo = $fa_iter->()) {
-        @v = map +{
-            f => $fa->[$_],
-            p => [],
-            q => $zone,
-            t => $n,
-        }, @$fo;
-        recurse();
-    }
+#
+# Iterate over each possible assignment of $k factorizations
+# FIXME: we get too many of these for larger k, what can we do instead?
+#
+my $fa_iter = order_iter($k, scalar @$fa);
+my $fo;
+while ($fo = $fa_iter->()) {
+    @v = map +{
+        f => $fa->[$_],
+        p => [],
+        q => $zone,
+        t => $n,
+    }, @$fo;
+    recurse();
+}
 
 finish_run();
 exit 0;
@@ -145,14 +149,14 @@ sub recurse {
     my $f = $v->{f};
     my $x = $f->[$pi];
 
-    # try to add another factor to this $v: check all primes if different,
-    # or only greater primes if the same power as previous power.
+    # Try to add another factor to this $v. Check all primes if different,
+    # or only greater primes if same power as previous power.
     my $p = ($pi && $f->[$pi - 1] == $x) ? $v->{p}[-1] : $zone;
     my $tnext = $v->{t} / $x;
 
-    # we can get slightly better accuracy by recalculating this each
+    # We can get slightly better accuracy by recalculating this each
     # time in the loop below, at least for small $p, but the cost
-    # outweighs the benefit
+    # outweighs the benefit.
     my $mint = mintau($tnext, \%used);
     if ($best) {
         my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
@@ -207,8 +211,6 @@ sub recurse {
     return candidate($result);
 }
 
-# FIXME: gcd(p, k) would be faster than gcd(p^x, k); any(k==0 (mod p_i))
-# might be faster still
 sub walk_v {
     my($v, $best) = @_;
     my @q = map $_->{q}, @$v;
@@ -251,8 +253,13 @@ sub walk_v {
             diag("[@$fo] [@shard[0 .. $level - 1]] $ati / $endi");
         }
 
-        # return a solution if we find one. do the gcd checks first,
-        # since they should be much faster than factorization
+        # Return a solution if we find one. Do the gcd checks first,
+        # since they should be much faster than factorization.
+        # FIXME: maintain $ati and prepare inverses for each assigned
+        # prime so the gcd check becomes a simple integer mod check:
+        #   all { $ati % $invp[$_] != $invmod[$_] } 0 .. $#o }
+        # I think we can safely rely on both $ati and assigned primes
+        # not to exceed range of exact integer maths.
         return $o[0] * $q[0] if (
             all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o
         ) && (
