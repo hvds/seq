@@ -103,12 +103,11 @@ sub report_g {
     return;
 }
 
-sub ftiming {
+sub last_complete {
     my($f) = @_;
-    my $r = reduce { ($a->runid > $b->runid) ? $a : $b } grep {
+    return reduce { ($a->runid > $b->runid) ? $a : $b } grep {
         $_->owner == 1 && $_->complete
     } $f->runs->all;
-    return $r ? $r->runtime : undef;
 }
 
 
@@ -118,8 +117,11 @@ sub _report_fk {
         printf "f(%s, %s) is impossible\n", $f->n, $f->k;
     } elsif ($f->complete && !$f->depend) {
         if ($f->f) {
-            my $t = ftiming($f);
-            my $st = defined($t) ? sprintf(' (%.2fs)', $t) : '';
+            my $rt = last_complete($f);
+            my $st = '';
+            if ($rt) {
+                $st = sprintf ' (%s%.2fs)', $rt->old ? '*' : '', $rt->runtime;
+            }
             printf "f(%s, %s) = %s%s\n", $f->n, $f->k, $f->f, $st;
         } elsif ($f->k <= $g->maxg) {
             printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked;

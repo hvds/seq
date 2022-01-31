@@ -21,7 +21,7 @@ __PACKAGE__->define($TABLE, 'run', [
     'uint n',
     'uint k',
     'uint owner',
-    'flags(complete running optimizing fix_power) status',
+    'flags(complete running optimizing fix_power old) status',
     'bigint optn',
     'bigint optx',
     'uint optc',
