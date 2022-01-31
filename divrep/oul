@@ -3,7 +3,7 @@ use strict;
 use feature 'current_sub';  # support __SUB__
 use Math::GMP;
 use Math::Prime::Util qw{
-    factor_exp prime_iterator chinese
+    factor_exp prime_iterator chinese divisors
 };
 use Syntax::Keyword::Dynamically;
 use List::Util qw{ first sum0 all };
@@ -50,6 +50,9 @@ my $db = Seq::Db->new($type, 0);
 
 my $nf = [ factor_exp($n) ];
 my $tn = tau($n, $nf);
+my(%fact, %nofact);
+prep_fact($n);
+
 my $diag_delay = 1;
 my $t0 = scalar times();
 my $diagt = $t0 + $diag_delay;
@@ -66,7 +69,6 @@ my $best = $max || undef;
 # mainly to ensure the flag is set on the Run object.
 my $complete = 1;
 
-my $fa = dual_factorizations($n, $nf);
 # Lookup of primes allocated so far, that should be avoided
 my %used;
 
@@ -74,36 +76,22 @@ my %used;
 my $level = 0;
 my @shard;
 
-my($r, $fh);
-($r, $fh) = prep_run($n, $k, $complete) if $inject;
-report(sprintf "001 %s%s\n", $0, $max ? " -x$max" : "");
-
 #
 # Elements v[0..k-1] represent the composition of the value d+i that
 # we're trying to build up. Each element is a hashref of:
-#   f => the factorization we're using from $fa
 #   p[] => primes we've allocated to the factors
+#   x[] => the power we've raised those primes to
 #   q => total value attributed
 #   t => tau() not yet accounted for (ie n / tau(q))
 #
-my @v;
+my @v = map +{
+    p => [], x => [], q => $zone, t => $n, l => 0,
+}, 0 .. $k - 1;
 
-#
-# Iterate over each possible assignment of $k factorizations
-# FIXME: we get too many of these for larger k, what can we do instead?
-#
-my $fa_iter = order_iter($k, scalar @$fa);
-my $fo;
-while ($fo = $fa_iter->()) {
-    @v = map +{
-        f => $fa->[$_],
-        p => [],
-        q => $zone,
-        t => $n,
-    }, @$fo;
-    recurse();
-}
-
+my($r, $fh);
+($r, $fh) = prep_run($n, $k, $complete) if $inject;
+report(sprintf "001 %s%s\n", $0, $max ? " -x$max" : "");
+recurse();
 finish_run();
 exit 0;
 
@@ -142,73 +130,82 @@ OUT
     return;
 }
 
+sub desc {
+    my($va) = @_;
+    return join ' ', map {
+        my($p, $x, $l) = @$_{qw{ p x l }};
+        join('.', map "$p->[$_]^@{[ $x->[$_] - 1 ]}", 0 .. $l - 1)
+                || '.';
+    } @$va;
+}
+
 sub recurse {
-    my $i = best_v(\@v) // goto final;
+    my $i = best_v(\@v) // return candidate(walk_v(\@v, $best));
     my $v = $v[$i];
-    my $pi = @{ $v->{p} } + 1;
-    my $f = $v->{f};
-    my $x = $f->[$pi];
+    my $fa = $fact{$v->{t}} // return candidate(walk_v(\@v, $best));
+    my $vlevel = $v->{l};
+    my $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
+  POWER:
+    for my $x (@$fa) {
+        next if $nofact{$x}{$prex};
 
-    # Try to add another factor to this $v. Check all primes if different,
-    # or only greater primes if same power as previous power.
-    my $p = ($pi && $f->[$pi - 1] == $x) ? $v->{p}[-1] : $zone;
-    my $tnext = $v->{t} / $x;
+        # Try to add another factor to this $v. Check all primes if different,
+        # or only greater primes if same power as previous power.
+        my $p = ($prex == $x) ? $v->{p}[$vlevel - 1] : $zone;
+        my $tnext = $v->{t} / $x;
+        $v->{x}[$vlevel] = $x;
 
-    # We can get slightly better accuracy by recalculating this each
-    # time in the loop below, at least for small $p, but the cost
-    # outweighs the benefit.
-    my $mint = mintau($tnext, \%used);
-    if ($best) {
-        my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
-        return if $lim < $p + 1;
-        my $aq = $zone;
-        $aq *= $_->{q} for @v;
-        my $walk = ($best + $i) / $aq;
-        goto final if $walk < $lim;
-    }
-    push @{ $v->{p} }, undef;
-
-    my $pb = $best;
-    while (1) {
-        $p = next_zprime($p);
-        next if $used{$p};
-        local $used{$p} = 1;
-        my $px = $p ** ($x - 1);
-        $v->{p}[-1] = $p;
-        my $q = $v->{q} * $px;
+        # We can get slightly better accuracy by recalculating this each
+        # time in the loop below, at least for small $p, but the cost
+        # outweighs the benefit.
+        my $mint = mintau($tnext, \%used);
         if ($best) {
-            if ($q * $mint > $best + $i) {
-                $debug && warn "for $i last at [@{ $v->{p} }] ($q * $mint > $best)\n";
-                last;
-            }
-            if (!$pb || $best < $pb) {
-                $pb = $best;
-                my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
-                return if $lim < $p;
-                my $aq = $zone;
-                $aq *= $_->{q} for @v;
-                my $walk = ($best + $i) / $aq;
-                goto final if $walk < $lim;
-            }
+            my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
+            next POWER if $lim < $p + 1;
+            my $aq = $zone;
+            $aq *= $_->{q} for @v;
+            my $walk = ($best + $i) / $aq;
+            candidate(walk_v(\@v, $best)), next POWER if $walk < $lim;
         }
 
-        local $v->{t} = $tnext;
-        local $v->{q} = $q;
-        $shard[$level++] = $p;
-        if (times() >= $diagt) {
-            $diagt = times() + $diag_delay;
-            diag("[@$fo] [@shard[0 .. $level - 1]]");
+        local $v->{l} = $v->{l} + 1;
+        my $pb = $best;
+        while (1) {
+            $p = next_zprime($p);
+            next if $used{$p};
+            local $used{$p} = 1;
+            my $px = $p ** ($x - 1);
+            $v->{p}[$vlevel] = $p;
+            my $q = $v->{q} * $px;
+            if ($best) {
+                if ($q * $mint > $best + $i) {
+                    $debug && warn "for $i last at [@{ $v->{p} }] ($q * $mint > $best)\n";
+                    last;
+                }
+                if (!$pb || $best < $pb) {
+                    $pb = $best;
+                    my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
+                    next POWER if $lim < $p;
+                    my $aq = $zone;
+                    $aq *= $_->{q} for @v;
+                    my $walk = ($best + $i) / $aq;
+                    candidate(walk_v(\@v, $best)), next POWER if $walk < $lim;
+                }
+            }
+
+            local $v->{t} = $tnext;
+            local $v->{q} = $q;
+            $shard[$level++] = $p;
+            if (times() >= $diagt) {
+                $diagt = times() + $diag_delay;
+                diag(desc(\@v));
+            }
+            recurse();
+            --$level;
         }
-        recurse();
-        --$level;
     }
-    pop @{ $v->{p} };
+    $#{ $v->{p} } = $vlevel - 1;
     return;
-
-  final:
-    # nothing more to allocate, or worth allocating
-    my $result = walk_v(\@v, $best);
-    return candidate($result);
 }
 
 sub walk_v {
@@ -250,7 +247,7 @@ sub walk_v {
         if (times() >= $diagt) {
             $diagt = times() + $diag_delay;
             my $ati = $o[0] / $qq[0];
-            diag("[@$fo] [@shard[0 .. $level - 1]] $ati / $endi");
+            diag(desc(\@v) . ": $ati / $endi");
         }
 
         # Return a solution if we find one. Do the gcd checks first,
@@ -281,9 +278,8 @@ sub best_v {
     my($i, $vi);
     for my $j (0 .. $#$v) {
         my $vj = $v->[$j];
-        my $next_factor = $vj->{f}[@{ $vj->{p} } + 1];
-        # skip if no factor
-        next unless $next_factor;
+        # skip if no odd prime factor
+        next unless $fact{$vj->{t}};
 
         if ($vi) {
             # doesn't have higher tau
@@ -471,40 +467,6 @@ sub order_iter {
     };
 }
 
-sub _sortdual {
-    (@$a == 1 && @$b == 1) ? 0
-    : (($a->[1] // 0) <=> ($b->[1] // 0)) || do {
-        local $a = [ @$a[1 .. $#$a] ];
-        local $b = [ @$b[1 .. $#$b] ];
-        _sortdual();
-    };
-}
-
-#
-# Return an arrayref of factorizations of $n, in the same form as given
-# by factorizations(), except that all factors that are powers of 2 are
-# collected and given as a single initial factor. Results are returned
-# in _ascending_ order of the remaining factors.
-# Thus dual_factorizations(12) would return [ [4, 3], [2, 6], [1, 12] ].
-#
-sub dual_factorizations {
-    return [ sort _sortdual map {
-        my @f = @$_;
-        my $bad = 0;    # skip any factorization with more than two 2^x entries
-        my $pow2;
-        for my $i (reverse 0 .. $#f) {
-            my $v = $f[$i];
-            my $ispow = ($v & ($v - 1)) ? 0 : 1;
-            if (($v & ($v - 1)) == 0) {
-                $bad = 1, last if $pow2;
-                $pow2 = $v;
-                splice @f, $i, 1;
-            }
-        }
-        $bad ? () : [ $pow2 // $zone, @f ];
-    } @{ factorizations(@_) } ];
-}
-
 #
 # Return an arrayref of all the ways to factorize $n (with its factor_exp
 # optionally provided as $nf) in reverse lexicographic order, each
@@ -562,6 +524,26 @@ sub factor_iterator {
         }
         return \@f;
     };
+}
+
+sub prep_fact {
+    my($n) = @_;
+    for my $d (divisors($n)) {
+        next if 0 == ($d & ($d - 1));   # skip powers of 2
+        my $df = [ factor_exp($d) ];
+        my $dp = $df->[-1][0];
+
+        # for a given tau t to satisfy, we'll want to try any divisor of t
+        # that is divisible by the highest prime dividing t, ascending order
+        $fact{$d} = [ map $dp * $_, divisors($d / $dp) ];
+
+        # if two successive factors can have the same highest prime, we
+        # deduplicate by taking them only in ascending order
+        if (($n / $d) % $dp == 0) {
+            $nofact{$d}{$_} = 1 for grep $_ > $d,
+                    map $_ * $dp, divisors($n / ($dp * $d));
+        }
+    }
 }
 
 sub next_zprime {
