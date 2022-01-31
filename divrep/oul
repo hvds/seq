@@ -166,9 +166,9 @@ sub desc {
 }
 
 sub recurse {
-    my $i = best_v(\@v) // return candidate(walk_v(\@v, $best));
+    my $i = best_v() // return candidate(walk_v());
     my $v = $v[$i];
-    my $fa = $fact{$v->{t}} // return candidate(walk_v(\@v, $best));
+    my $fa = $fact{$v->{t}} // return candidate(walk_v());
     my $vlevel = $v->{l};
     my $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
   POWER:
@@ -189,7 +189,7 @@ sub recurse {
             my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
             next POWER if $lim < $p + 1;
             my $walk = ($best + $i) / $aq[$level];
-            candidate(walk_v(\@v, $best)), next POWER if $walk < $lim;
+            candidate(walk_v()), next POWER if $walk < $lim;
         }
 
         local $v->{l} = $v->{l} + 1;
@@ -211,7 +211,7 @@ sub recurse {
                     my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
                     next POWER if $lim < $p;
                     my $walk = ($best + $i) / $aq[$level];
-                    candidate(walk_v(\@v, $best)), next POWER if $walk < $lim;
+                    candidate(walk_v()), next POWER if $walk < $lim;
                 }
             }
 
@@ -229,9 +229,8 @@ sub recurse {
 }
 
 sub walk_v {
-    my($v, $best) = @_;
-    my @q = map $_->{q}, @$v;
-    my @t = map $_->{t}, @$v;
+    my @q = map $_->{q}, @v;
+    my @t = map $_->{t}, @v;
     my $aq = $aq[$level];
     my @qq = map $aq / $_, @q;
 
@@ -270,7 +269,7 @@ sub walk_v {
         # since they should be much faster than factorization.
         # FIXME: maintain $ati and prepare inverses for each assigned
         # prime so the gcd check becomes a simple integer mod check:
-        #   all { $ati % $invp[$_] != $invmod[$_] } 0 .. $#o }
+        #   all { $ati % $invp[$_] != $invmod[$_] } 0 .. $#o
         # I think we can safely rely on both $ati and assigned primes
         # not to exceed range of exact integer maths.
         return $o[0] * $q[0] if (
@@ -290,10 +289,9 @@ sub walk_v {
 # still to fulfil, or (on equality) with the highest q, but having
 # at least one factor to allocate.
 sub best_v {
-    my($v) = @_;
     my($i, $vi);
-    for my $j (0 .. $#$v) {
-        my $vj = $v->[$j];
+    for my $j (0 .. $#v) {
+        my $vj = $v[$j];
         # skip if no odd prime factor
         next unless $fact{$vj->{t}};
 
