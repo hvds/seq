@@ -86,6 +86,9 @@ my @v = map +{
     p => [], x => [], q => $zone, t => $n, l => 0,
 }, 0 .. $k - 1;
 
+# Product of v->{q} per recursion level
+my @aq = ($zone);
+
 my($r, $fh);
 ($r, $fh) = prep_run($n, $k, $complete) if $inject;
 report(sprintf "001 %s%s\n", $0, $max ? " -x$max" : "");
@@ -185,9 +188,7 @@ sub recurse {
         if ($best) {
             my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
             next POWER if $lim < $p + 1;
-            my $aq = $zone;
-            $aq *= $_->{q} for @v;
-            my $walk = ($best + $i) / $aq;
+            my $walk = ($best + $i) / $aq[$level];
             candidate(walk_v(\@v, $best)), next POWER if $walk < $lim;
         }
 
@@ -209,15 +210,14 @@ sub recurse {
                     $pb = $best;
                     my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
                     next POWER if $lim < $p;
-                    my $aq = $zone;
-                    $aq *= $_->{q} for @v;
-                    my $walk = ($best + $i) / $aq;
+                    my $walk = ($best + $i) / $aq[$level];
                     candidate(walk_v(\@v, $best)), next POWER if $walk < $lim;
                 }
             }
 
             local $v->{t} = $tnext;
             local $v->{q} = $q;
+            local $aq[$level + 1] = $aq[$level] * $px;
             $shard[$level++] = $p;
             do_diag(desc(\@v)) if times() >= $diagt;
             recurse();
@@ -232,11 +232,8 @@ sub walk_v {
     my($v, $best) = @_;
     my @q = map $_->{q}, @$v;
     my @t = map $_->{t}, @$v;
-    my @qq = do {
-        my $qq = $zone;
-        $qq *= $_ for @q;
-        map $qq / $_, @q;
-    };
+    my $aq = $aq[$level];
+    my @qq = map $aq / $_, @q;
 
     # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
     my $m = find_common_mod(\@q);
