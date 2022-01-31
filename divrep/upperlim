@@ -1,5 +1,6 @@
-#!/opt/maths/bin/perl -w
+#!/opt/maths/bin/perl
 use strict;
+use warnings;
 use Math::GMP;
 use Math::Prime::Util qw{ is_prime next_prime divisors factor_exp };
 use Algorithm::Loops qw{ NextPermuteNum NestedLoops };

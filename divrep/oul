@@ -1,6 +1,6 @@
-#!/opt/maths/bin/perl -w
+#!/opt/maths/bin/perl
 use strict;
-use feature 'current_sub';  # support __SUB__
+use warnings;
 use Math::GMP;
 use Math::Prime::Util qw{
     factor_exp prime_iterator chinese divisors
@@ -11,15 +11,13 @@ use DDP;    # exports p, np
 use lib 'lib';
 use Type;
 use Seq::Db;
+use ModFunc qw/ gcd /;
 
 =head1 oul - constrain upper limit of oneseq(n, k)
 
 Try to find the parameters most likely to get a hit.
 
 =cut
-
-use lib './lib';
-use ModFunc qw/ gcd /;
 
 sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
