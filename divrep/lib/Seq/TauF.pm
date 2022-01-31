@@ -80,17 +80,8 @@ sub good {
     $self->update;
     printf "f(%s, %s) = %s\n", $self->n, $self->k, $self->f;
     if ($best > $self->k) {
-        my $table = $db->resultset($TABLE);
-        my @extra = map $table->new({
-            n => $self->n,
-            k => $_,
-            f => $good,
-            test_order => '',
-        }), $self->k + 1 .. $best;
-        $_->complete(1) for @extra;
-        $_->insert for @extra;
-        printf "f(%s, %s) = %s\n", $_->n, $_->k, $_->f
-                for @extra;
+        my $next = Seq::TauF->forceFor($self->g, $db, $self->k + 1);
+        return $next->good($db, $run, $good, $best);
     }
     return $self->g->good($db, $best, $good);
 }
