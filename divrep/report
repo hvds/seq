@@ -3,12 +3,12 @@ use strict;
 use warnings;
 use Math::GMP;
 use Math::Prime::Util qw{ factor_exp };
-use List::Util qw{ first };
+use List::Util qw{ first reduce };
 use lib ('./lib');
 use Seq::Db;
 use Type;
 
-my($debug, $opt_composite, $opt_table) = (0, 0, 0);
+my($debug, $opt_composite, $opt_table, $opt_run) = (0, 0, 0, 0);
 my $typename = 't';
 my $filter = sub { 1 };
 while (@ARGV && $ARGV[0] =~ /^-/) {
@@ -17,6 +17,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     $debug = 1, next if $arg eq '-d';
     $opt_composite = 1, next if $arg eq '-c';
     $opt_table = 1, next if $arg eq '-t';
+    $opt_run = 1, next if $arg eq '-r';
     $typename = $1, next if $arg =~ /^-y(.*)/;
     $filter = chain_sig($filter, $1 || shift(@ARGV)), next
             if $arg =~ /^-s(.*)/;
@@ -49,6 +50,8 @@ if ($opt_table || !$n) {
     report_g();
 } elsif (!$k) {
     report_f();
+} elsif (!$opt_run) {
+    report_fk();
 } else {
     report_run();
 }
@@ -100,6 +103,49 @@ sub report_g {
     return;
 }
 
+sub ftiming {
+    my($f) = @_;
+    my $r = reduce { ($a->runid > $b->runid) ? $a : $b } grep {
+        $_->owner == 1 && $_->complete
+    } $f->runs->all;
+    return $r ? $r->runtime : undef;
+}
+
+
+sub _report_fk {
+    my($g, $f) = @_;
+    if ($f->impossible) {
+        printf "f(%s, %s) is impossible\n", $f->n, $f->k;
+    } elsif ($f->complete && !$f->depend) {
+        if ($f->f) {
+            my $t = ftiming($f);
+            my $st = defined($t) ? sprintf(' (%.2fs)', $t) : '';
+            printf "f(%s, %s) = %s%s\n", $f->n, $f->k, $f->f, $st;
+        } elsif ($f->k <= $g->maxg) {
+            printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked;
+        } # else ignore, it was proven impossible
+    } elsif ($f->complete && $f->depend) {
+        if ($f->f) {
+            printf "f(%s, %s) = %s = %s f(%s, %s)\n",
+                    $f->n, $f->k, $f->f, $f->depend_m, $f->depend_n, $f->k;
+        } else {
+            printf "f(%s, %s) = %s f(%s, %s)\n",
+                    $f->n, $f->k, $f->depend_m, $f->depend_n, $f->k;
+        }
+    } else {
+        printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked
+                unless $g->depend;
+    }
+    return;
+}
+
+sub report_fk {
+    my $g = $db->resultset('TauG')->find({ n => $n });
+    my $f = $db->resultset('TauF')->find({ n => $n, k => $k });
+    _report_fk($g, $f);
+    return;
+}
+
 sub report_f {
     my $g = $db->resultset('TauG')->find({ n => $n });
     if ($g->complete) {
@@ -112,26 +158,7 @@ sub report_f {
     }
     my $max = $g->maxg;
     for my $f (@{ $g->fall($db) }) {
-        if ($f->impossible) {
-            printf "f(%s, %s) is impossible\n", $f->n, $f->k;
-        } elsif ($f->complete && !$f->depend) {
-            if ($f->f) {
-                printf "f(%s, %s) = %s\n", $f->n, $f->k, $f->f;
-            } elsif ($f->k <= $max) {
-                printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked;
-            } # else ignore, it was proven impossible
-        } elsif ($f->complete && $f->depend) {
-            if ($f->f) {
-                printf "f(%s, %s) = %s = %s f(%s, %s)\n",
-                        $f->n, $f->k, $f->f, $f->depend_m, $f->depend_n, $f->k;
-            } else {
-                printf "f(%s, %s) = %s f(%s, %s)\n",
-                        $f->n, $f->k, $f->depend_m, $f->depend_n, $f->k;
-            }
-        } else {
-            printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked
-                    unless $g->depend;
-        }
+        _report_fk($g, $f);
     }
     my $ts = $g->fall($db)->[-1]->test_order;
     if (@$ts) {
