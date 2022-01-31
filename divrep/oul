@@ -51,9 +51,9 @@ my $tn = tau($n, $nf);
 my(%fact, %nofact);
 prep_fact($n);
 
-my $diag_delay = 1;
+my($diag_delay, $log_delay) = (1, 600);
 my $t0 = scalar times();
-my $diagt = $t0 + $diag_delay;
+my($diagt, $logt) = ($t0 + $diag_delay, $t0 + $log_delay);
 
 my $min = g()->checked;     # not currently used
 $max = ston($max) if $max;
@@ -129,6 +129,17 @@ sub report {
     print $fh $msg if $fh;
     keep_diag();
     print $msg;
+    return;
+}
+
+sub do_diag {
+    my($msg) = @_;
+    diag($msg);
+    $diagt = times() + $diag_delay;
+    if ($fh && times() >= $logt) {
+        print $fh sprintf "305 %s (%.2fs)\n", $msg, times() - $t0;
+        $logt = times() + $logt;
+    }
     return;
 }
 
@@ -208,10 +219,7 @@ sub recurse {
             local $v->{t} = $tnext;
             local $v->{q} = $q;
             $shard[$level++] = $p;
-            if (times() >= $diagt) {
-                $diagt = times() + $diag_delay;
-                diag(desc(\@v));
-            }
+            do_diag(desc(\@v)) if times() >= $diagt;
             recurse();
             --$level;
         }
@@ -257,9 +265,8 @@ sub walk_v {
         $debug > 1 && warn "walk_v: test [@o]\n";
 
         if (times() >= $diagt) {
-            $diagt = times() + $diag_delay;
             my $ati = $o[0] / $qq[0];
-            diag(desc(\@v) . ": $ati / $endi");
+            do_diag(desc(\@v) . ": $ati / $endi");
         }
 
         # Return a solution if we find one. Do the gcd checks first,
