@@ -185,7 +185,7 @@ sub recurse {
         # We can get slightly better accuracy by recalculating this each
         # time in the loop below, at least for small $p, but the cost
         # outweighs the benefit.
-        my $mint = mintau($tnext, \%used);
+        my $mint = mintau($tnext, \%used, $i);
         if ($best) {
             my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
             next POWER if $lim < $p + 1;
@@ -334,10 +334,33 @@ sub best_v {
     }
     #
     # Return the least m such that tau(m) = $tau, avoiding the primes p
-    # that have true values in %$avoid.
+    # that have true values in %$avoid (unless they are avoided only
+    # because used in some v_$j, such that $j - $i is a multiple of p).
     #
     sub mintau {
-        my($tau, $avoid) = @_;
+        my($tau, $avoid, $i) = @_;
+
+        #
+        # Must not suppress primes just because they are allocated to
+        # some v_j: if (i - j) is a multiple of p, then v_i must also
+        # permit it.
+        # FIXME: the need for this may disappear with preallocation.
+        # FIXME: there must be a better way of doing this - maintain
+        #   a hashref of primes per v[i]?
+        my @keep;
+        for my $p (grep $_ < $k, keys %$avoid) {
+            next if ($v[$i]{q} % $p) == 0;
+            my $bad = 1;
+            for (my $j = $i + $p; $j < $k && $bad; $j += $p) {
+                $bad = 0 if ($v[$j]{q} % $p) == 0;
+            }
+            for (my $j = $i - $p; $j >= 0 && $bad; $j -= $p) {
+                $bad = 0 if ($v[$j]{q} % $p) == 0;
+            }
+            push @keep, $p unless $bad;
+        }
+        local @$avoid{@keep} = (0) x @keep;
+
         my $best;
         for my $f (@{ factorizations($tau) }) {
             my $b = $zone;
