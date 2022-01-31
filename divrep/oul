@@ -50,6 +50,7 @@ my $nf = [ factor_exp($n) ];
 my $tn = tau($n, $nf);
 my(%fact, %nofact);
 prep_fact($n);
+prep_mintau();
 
 my($diag_delay, $log_delay) = (1, 600);
 my $t0 = scalar times();
@@ -318,20 +319,38 @@ sub best_v {
     return $i // undef;
 }
 
-sub mintau {
-    my($tau, $avoid) = @_;
-    my $fa = factorizations($tau);
-    my @p = grep !$avoid->{$_}, nprimes(@{ $fa->[-1] } + keys %$avoid);
-
-    my $best;
-    for my $f (@$fa) {
-        my $b = $zone;
-        for (my $i = 0; $i < @$f; ++$i) {
-            $b *= $p[$i] ** ($f->[$i] - 1);
-        }
-        $best = $b unless $best && $best < $b;
+{
+    my @p;
+    sub prep_mintau {
+        my $cp = sum0 map $_->[1], @$nf;
+        my $cop = $cp - $nf->[0][1];
+        # We need at most 1 per factor in the longest factorization of $n,
+        # plus 1 for each me might avoid - which itself is at most $k
+        # times the number of odd prime factors in $n.
+        # Note these primes must be bigints, so we can safely take
+        # powers of them below.
+        @p = nprimes($cp + $cop * $k);
+        return;
     }
-    return $best;
+    #
+    # Return the least m such that tau(m) = $tau, avoiding the primes p
+    # that have true values in %$avoid.
+    #
+    sub mintau {
+        my($tau, $avoid) = @_;
+        my $best;
+        for my $f (@{ factorizations($tau) }) {
+            my $b = $zone;
+            my $pi = 0;
+            for (my $i = 0; $i < @$f; ++$i) {
+                my $p = $p[$pi++];
+                $p = $p[$pi++] while $avoid->{$p};
+                $b *= $p ** ($f->[$i] - 1);
+            }
+            $best = $b unless $best && $best < $b;
+        }
+        return $best;
+    }
 }
 
 sub prep_run {
