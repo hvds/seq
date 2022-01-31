@@ -95,6 +95,20 @@ recurse();
 finish_run();
 exit 0;
 
+# For debugging or sharding: inject assignment of p^x into a_i.
+sub inject {
+    my($i, $p, $x) = @_;
+    ++$x;
+    my $v = $v[$i];
+    my $zp = MBI($p);
+    my $l = $v->{l}++;
+    $v->{p}[$l] = $zp;
+    $v->{x}[$l] = $x;
+    $v->{q} *= $zp ** ($x - 1);
+    $used{$p} = 1;
+    return;
+}
+
 {
     my $s; BEGIN { $s = '' }
     sub diag {
