@@ -356,8 +356,8 @@ sub finish_run {
 265 check ok f(%s, %s) = %s
 OUT
     } else {
-        report(sprintf <<OUT, $n, $k, $best);
-565 check not ok f(%s, %s) != %s
+        report(sprintf <<OUT, $n, $k, $best, times() - $t0);
+565 check not ok f(%s, %s) != %s (%.2fs)
 OUT
     }
     if ($verify) {
@@ -369,8 +369,8 @@ OUT
 266 db ok f(%s,%s) = %s
 OUT
             } else {
-                report(sprintf <<OUT, $n, $k, $f->f, $best);
-566 db not ok f(%s,%s) = %s, not %s
+                report(sprintf <<OUT, $n, $k, $f->f, $best, times() - $t0);
+566 db not ok f(%s,%s) = %s, not %s (%.2fs)
 OUT
                 goto finish_fail;
             }
@@ -380,8 +380,8 @@ OUT
 366 db maybe ok f(%s,%s) ?= %s < %s
 OUT
             } else {
-                report(sprintf <<OUT, $n, $k. $best);
-566 db not ok f(%s,%s) > %s, not %s
+                report(sprintf <<OUT, $n, $k. $best, times() - $t0);
+566 db not ok f(%s,%s) > %s, not %s (%.2fs)
 OUT
                 goto finish_fail;
             }
