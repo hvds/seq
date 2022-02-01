@@ -429,45 +429,6 @@ OUT
 }
 
 #
-# Return an ordering of the n-tuples of integers 0 .. size-1, such
-# that sum is minimized, then lexicographically. Eg for n=2, size=3:
-# (0,0); (0,1); (1,0); (0,2); (1,1); (2,0); (2,1); (1,2); (2,2).
-# In legends below we have 'm' for max, "'" for successor, 0 <= a,b < m.
-#
-# CHECKME: do we also want to minimize max element, so that (0,1,1) comes
-# before (0,0,2)?
-#
-sub order_iter {
-    my($n, $size) = @_;
-    my $max = $size - 1;
-    my @t = (0) x $n;
-    my $done = 0;
-    return sub {
-        return undef if $done;
-        my @u = reverse @t;
-        while (1) {
-            # 00* -> 10*
-            my $set = (first { $t[$_] } 0 .. $#t)
-                    // (++$t[0], last);
-            my $spare = (first { $t[$_] < $max } $set + 1 .. $#t) // do {
-                # 0*am* -> m*a'0*
-                (++$t[$set], @t = reverse @t), last if $t[$set] < $max;
-                # 0*0m* -> m*10*
-                (++$t[$set - 1], @t = reverse @t), last if $set;
-                # m* -> done
-                $done = 1, last;
-            };
-            # 0*a'm*b.* -> m*a0*b'.*
-            --$t[$set];
-            ++$t[$spare];
-            @t[0 .. $spare - 1] = reverse @t[0 .. $spare - 1] if $spare > 1;
-            last;
-        }
-        return \@u;
-    };
-}
-
-#
 # Return an arrayref of all the ways to factorize $n (with its factor_exp
 # optionally provided as $nf) in reverse lexicographic order, each
 # factorization represented as an arrayref of descending factors.
