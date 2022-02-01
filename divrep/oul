@@ -62,6 +62,7 @@ $max = ston($max) if $max;
 # a solution, this will finish by reporting a bad solution rather than
 # "no solution found".
 my $best = $max || undef;
+my $have_best = $best ? 1 : 0;
 
 # Always true for now; the intention is to set it false for a partial run,
 # mainly to ensure the flag is set on the Run object.
@@ -152,7 +153,10 @@ sub candidate {
     report(sprintf <<OUT, $new, times() - $t0);
 202 Candidate %s (%.2fs)
 OUT
-    $best = $new unless $best && $best < $new;
+    unless ($have_best && $best < $new) {
+        $best = $new;
+        $have_best = 1;
+    }
     return;
 }
 
@@ -185,7 +189,7 @@ sub recurse {
         # time in the loop below, at least for small $p, but the cost
         # outweighs the benefit.
         my $mint = mintau($tnext, \%used, $i);
-        if ($best) {
+        if ($have_best) {
             my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
             next POWER if $lim < $p + 1;
             my $walk = ($best + $i) / $aq[$level];
@@ -198,14 +202,14 @@ sub recurse {
                 $p = next_zprime($p);
                 next if $used{$p};
                 my $qx = $q * $p ** ($x - 1);
-                next POWER if $best && $qx > $best;
+                next POWER if $have_best && $qx > $best;
                 my $result = walk_1($i, $qx - $i);
                 candidate($result), next POWER if $result;
             }
         }
 
         local $v->{l} = $v->{l} + 1;
-        my $pb = $best;
+        my($have_pb, $pb) = ($have_best, $best);
         while (1) {
             $p = next_zprime($p);
             next if $used{$p};
@@ -213,13 +217,13 @@ sub recurse {
             my $px = $p ** ($x - 1);
             $v->{p}[$vlevel] = $p;
             my $q = $v->{q} * $px;
-            if ($best) {
+            if ($have_best) {
                 if ($q * $mint > $best + $i) {
                     $debug && warn "for $i last at [@{ $v->{p} }] ($q * $mint > $best)\n";
                     last;
                 }
-                if (!$pb || $best < $pb) {
-                    $pb = $best;
+                if (!$have_pb || $best < $pb) {
+                    ($have_pb, $pb) = ($have_best, $best);
                     my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
                     next POWER if $lim < $p;
                     my $walk = ($best + $i) / $aq[$level];
@@ -257,7 +261,7 @@ sub walk_v {
     my @q = map $_->{q}, @v;
     # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
     my $m = MBI(chinese(map [ -$_, $q[$_] ], 0 .. $#q));
-    return if $best && $m > $best;
+    return if $have_best && $m > $best;
 
     my @t = map $_->{t}, @v;
     my $aq = $aq[$level];
@@ -268,7 +272,7 @@ sub walk_v {
     # This is the core loop, for long runs we expect to spend the bulk
     # of our time here (probably in factorization for the tau() checks).
     #
-    my $end = $best ? $best / $q[0] : 0;
+    my $end = $have_best ? $best / $q[0] : 0;
     my $endi = $end / $qq[0];
     while (!$end || $o[0] <= $end) {
         if (times() >= $diagt) {
