@@ -39,7 +39,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
 }
 
 $| = 1;
-my($n, $k) = map MBI($_), @ARGV;
+my($n, $k) = @ARGV;
 $0 = "oul($n $k)";
 my $type = Type->new($typename);
 $type->bind($n);
