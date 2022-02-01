@@ -71,10 +71,6 @@ my $complete = 1;
 # Lookup of primes allocated so far, that should be avoided
 my %used;
 
-# Catch primes by recursion level, to report as shard
-my $level = 0;
-my @shard;
-
 #
 # Elements v[0..k-1] represent the composition of the value d+i that
 # we're trying to build up. Each element is a hashref of:
@@ -82,12 +78,15 @@ my @shard;
 #   x[] => the power we've raised those primes to
 #   q => total value attributed
 #   t => tau() not yet accounted for (ie n / tau(q))
+#   l => level: how many entries in p[] and x[] are valid
 #
 my @v = map +{
     p => [], x => [], q => $zone, t => $n, l => 0,
 }, 0 .. $k - 1;
 
-# Product of v->{q} per recursion level
+# Recursion level
+my $level = 0;
+# Product of v[i]{q} per recursion level
 my @aq = ($zone);
 
 my($r, $fh);
@@ -234,7 +233,7 @@ sub recurse {
             local $v->{t} = $tnext;
             local $v->{q} = $q;
             local $aq[$level + 1] = $aq[$level] * $px;
-            $shard[$level++] = $p;
+            ++$level;
             do_diag(desc(\@v)) if times() >= $diagt;
             recurse();
             --$level;
