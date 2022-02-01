@@ -2,9 +2,8 @@
 use strict;
 use warnings;
 use Math::GMP;
-use Math::Prime::Util qw{
-    factor_exp prime_iterator chinese divisors
-};
+use Math::Prime::Util qw{ factor_exp prime_iterator divisors };
+use Math::Prime::Util::GMP qw{ chinese };
 use Syntax::Keyword::Dynamically;
 use List::Util qw{ first sum0 all };
 use DDP;    # exports p, np
@@ -257,7 +256,7 @@ sub walk_1 {
 sub walk_v {
     my @q = map $_->{q}, @v;
     # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
-    my $m = chinese(map [ -$_, $q[$_] ], 0 .. $#q);
+    my $m = MBI(chinese(map [ -$_, $q[$_] ], 0 .. $#q));
     return if $best && $m > $best;
 
     my @t = map $_->{t}, @v;
