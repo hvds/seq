@@ -303,6 +303,8 @@ sub walk_v {
 # at least one factor to allocate.
 sub best_v {
     my($i, $vi);
+    # FIXME: hack for f(2p,3)
+    return $#v >> 1 if $v[$#v >> 1]{l} == 0;
     for my $j (0 .. $#v) {
         my $vj = $v[$j];
         # skip if no odd prime factor
