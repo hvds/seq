@@ -12,6 +12,8 @@ use Type;
 use Seq::Db;
 use ModFunc qw/ gcd /;
 
+local $SIG{FPE} = sub { use Carp; confess("Division by zero") };
+
 =head1 oul - constrain upper limit of oneseq(n, k)
 
 Try to find the parameters most likely to get a hit.
