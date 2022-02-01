@@ -77,13 +77,14 @@ my %used;
 # Elements v[0..k-1] represent the composition of the value d+i that
 # we're trying to build up. Each element is a hashref of:
 #   p[] => primes we've allocated to the factors
+#   pu{} => lookup of primes in p[]
 #   x[] => the power we've raised those primes to
 #   q => total value attributed
 #   t => tau() not yet accounted for (ie n / tau(q))
 #   l => level: how many entries in p[] and x[] are valid
 #
 my @v = map +{
-    p => [], x => [], q => $zone, t => $n, l => 0,
+    p => [], pu => {}, x => [], q => $zone, t => $n, l => 0,
 }, 0 .. $k - 1;
 
 # Recursion level
@@ -106,6 +107,7 @@ sub inject {
     my $zp = MBI($p);
     my $l = $v->{l}++;
     $v->{p}[$l] = $zp;
+    $v->{pu}{$zp} = 1;
     $v->{x}[$l] = $x;
     $v->{q} *= $zp ** ($x - 1);
     $used{$p} = 1;
@@ -215,6 +217,7 @@ sub recurse {
             $p = next_zprime($p);
             next if $used{$p};
             local $used{$p} = 1;
+            local $v->{pu}{$p} = 1;
             my $px = $p ** ($x - 1);
             $v->{p}[$vlevel] = $p;
             my $q = $v->{q} * $px;
@@ -348,22 +351,14 @@ sub best_v {
 
         #
         # Must not suppress primes just because they are allocated to
-        # some v_j: if (i - j) is a multiple of p, then v_i must also
+        # some v_j: if |i - j| is a multiple of p, then v_i must also
         # permit it.
         # FIXME: the need for this may disappear with preallocation.
-        # FIXME: there must be a better way of doing this - maintain
-        #   a hashref of primes per v[i]?
         my @keep;
-        for my $p (grep $_ < $k, keys %$avoid) {
-            next if ($v[$i]{q} % $p) == 0;
-            my $bad = 1;
-            for (my $j = $i + $p; $j < $k && $bad; $j += $p) {
-                $bad = 0 if ($v[$j]{q} % $p) == 0;
-            }
-            for (my $j = $i - $p; $j >= 0 && $bad; $j -= $p) {
-                $bad = 0 if ($v[$j]{q} % $p) == 0;
-            }
-            push @keep, $p unless $bad;
+        for my $j (0 .. $k - 1) {
+            my $d = abs($j - $i);
+            next if $d < 2;
+            push @keep, grep +($d % $_) == 0, keys %{ $v[$j]{pu} };
         }
         local @$avoid{@keep} = (0) x @keep;
 
