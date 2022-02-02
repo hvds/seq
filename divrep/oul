@@ -24,7 +24,7 @@ sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
 
-my($max, $start, $inject, $verify, $debug) = (0) x 5;
+my($max, $start, $inject, $verify, $confirm, $debug) = (0) x 6;
 my $typename = 'o';
 my $maxproc = 6;
 
@@ -35,6 +35,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($start = $arg || shift(@ARGV)), next if $arg =~ s{^-s}{};
     $inject = 1, next if $arg eq '-i';
     $verify = 1, next if $arg eq '-v';
+    $confirm = 1, next if $arg eq '-c';
     ++$debug, next if $arg eq '-d';
     die "Unknown option '$arg'\n";
 }
@@ -59,6 +60,7 @@ my($diagt, $logt) = ($t0 + $diag_delay, $t0 + $log_delay);
 
 my $min = g()->checked;     # not currently used
 $max = ston($max) if $max;
+$max = f()->f if $confirm;
 
 # Note that if we run with $max set to a non-solution, and we fail to find
 # a solution, this will finish by reporting a bad solution rather than
@@ -410,7 +412,7 @@ OUT
     }
     if ($verify) {
         my $g = g();
-        my $f = Seq::TauF->forceFor($g, $db, $k);
+        my $f = f();
         if ($f->complete) {
             if ($f->f == $best) {
                 report(sprintf <<OUT, $n, $k, $best);
@@ -477,6 +479,12 @@ OUT
     return $all_good;
 }
 
+{
+    my $f;
+    sub f {
+        return $f //= Seq::TauF->forceFor(g(), $db, $k);
+    }
+}
 {
     my $g;
     sub g {
