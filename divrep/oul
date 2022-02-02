@@ -147,7 +147,7 @@ sub do_diag {
     $diagt = times() + $diag_delay;
     if ($fh && times() >= $logt) {
         print $fh sprintf "305 %s (%.2fs)\n", $msg, times() - $t0;
-        $logt = times() + $logt;
+        $logt = times() + $log_delay;
     }
     return;
 }
