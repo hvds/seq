@@ -284,9 +284,9 @@ sub walk_v {
     # This is the core loop, for long runs we expect to spend the bulk
     # of our time here (probably in factorization for the tau() checks).
     #
-    my $end = $have_best ? $best / $q[0] : 0;
-    my $endi = $end / $qq[0];
-    while (!$end || $o[0] <= $end) {
+    my $end = $have_best ? $best / $q[0] : undef;
+    my $endi = ($end // 0) / $qq[0];
+    while (!defined($end) || $o[0] <= $end) {
         ++$countw;
         if (times() >= $diagt) {
             my $ati = $o[0] / $qq[0];
@@ -380,7 +380,7 @@ sub best_v {
                 $p = $p[$pi++] while $avoid->{$p};
                 $b *= $p ** ($f->[$i] - 1);
             }
-            $best = $b unless $best && $best < $b;
+            $best = $b unless defined($best) && $best < $b;
         }
         return $best;
     }
