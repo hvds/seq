@@ -52,9 +52,10 @@ my($n, $f) = map MBI($_), @ARGV;
 $0 = "gt($n $f)";
 $_ = ston($_) for ($opt_n, $opt_x);
 
-printf "100 ./gtauseq -y%s %s %s%s%s-c%s -t%s %s %s\n",
+printf "100 ./gtauseq -y%s %s %s%s%s%s-c%s -t%s %s %s\n",
         $typename, ($opt_n == $opt_x ? "-nx$opt_n" : "-n$opt_n -x$opt_x"),
         _opta('m', $opt_m), _opta('mq', $opt_mq), _opta('mm', $opt_mm),
+        ($opt_ts ? "-ts@{[ join ',', @$opt_ts ]}" : ()),
         $opt_c, $opt_t, $n, $f;
 
 my $zone = MBI(1);
