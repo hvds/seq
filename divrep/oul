@@ -393,7 +393,7 @@ sub prep_run {
     my $r = Seq::Run->gen($f, $db, {
         optn => $zero,
         optx => $zero,
-        optc => 0,
+        optc => $ratchet,
         priority => 0,
         partial => !$complete,
     });
