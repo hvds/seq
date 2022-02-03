@@ -361,7 +361,7 @@ package Runnable {
         my %none = map +($_ => 1), @$none;
         my(@early, @late);
         for (split /,/, $opt_ts // '') {
-            push @{ delete $none{$_} ? \@early : \@late }, $_;
+            push @{ defined(delete $none{$_}) ? \@early : \@late }, $_;
         }
 
         # unconstrained elements should disallow known mods of
@@ -380,7 +380,7 @@ die "FIXME: \$opt_p no longer looks like this either";
             mods => $sqmods,
 # FIXME: we must retain @$none order
             #ts => join(',', @early, keys(%none), @late),
-            ts => join(',', @early, @$none, @late),
+            ts => join(',', @early, (grep $none{$_}, @$none), @late),
         }, $class;
     }
     sub id { shift->{id} }
