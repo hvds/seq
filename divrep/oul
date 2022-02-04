@@ -204,7 +204,7 @@ sub recurse {
             my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
             next POWER if $lim < $p + 1;
             my $walk = ($best + $i) / $aq[$level];
-            candidate(walk_v()), next POWER if $walk * $ratchet < $lim;
+            candidate(walk_v()), last POWER if $walk * $ratchet < $lim;
         }
 
         if ($tnext == 1) {
@@ -239,7 +239,7 @@ sub recurse {
                     my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
                     next POWER if $lim < $p;
                     my $walk = ($best + $i) / $aq[$level];
-                    candidate(walk_v()), next POWER if $walk * $ratchet < $lim;
+                    candidate(walk_v()), last POWER if $walk * $ratchet < $lim;
                 }
             }
 
