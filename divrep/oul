@@ -188,6 +188,8 @@ sub recurse {
     my $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
   POWER:
     for my $x (@$fa) {
+        # CHECKME: for n=54, we should disallow eg x=9 when t=54, since we
+        # will already have tried all x=3 and x=6 before that.
         next if $nofact{$x}{$prex};
 
         # Try to add another factor to this $v. Check all primes if different,
@@ -199,7 +201,7 @@ sub recurse {
         # We can get slightly better accuracy by recalculating this each
         # time in the loop below, at least for small $p, but the cost
         # outweighs the benefit.
-        my $mint = mintau($tnext, \%used, $i);
+        my $mint = mintau($tnext, $i);
         if ($have_best) {
             my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
             next POWER if $lim < $p + 1;
@@ -352,11 +354,11 @@ sub best_v {
     }
     #
     # Return the least m such that tau(m) = $tau, avoiding the primes p
-    # that have true values in %$avoid (unless they are avoided only
+    # that have true values in %used (unless they are avoided only
     # because used in some v_$j, such that $j - $i is a multiple of p).
     #
     sub mintau {
-        my($tau, $avoid, $i) = @_;
+        my($tau, $i) = @_;
 
         #
         # Must not suppress primes just because they are allocated to
@@ -369,7 +371,7 @@ sub best_v {
             next if $d < 2;
             push @keep, grep +($d % $_) == 0, keys %{ $v[$j]{pu} };
         }
-        local @$avoid{@keep} = (0) x @keep;
+        local @used{@keep} = (0) x @keep;
 
         my $best;
         for my $f (@{ factorizations($tau) }) {
@@ -377,7 +379,7 @@ sub best_v {
             my $pi = 0;
             for (my $i = 0; $i < @$f; ++$i) {
                 my $p = $p[$pi++];
-                $p = $p[$pi++] while $avoid->{$p};
+                $p = $p[$pi++] while $used{$p};
                 $b *= $p ** ($f->[$i] - 1);
             }
             $best = $b unless defined($best) && $best < $b;
