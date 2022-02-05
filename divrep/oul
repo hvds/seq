@@ -341,15 +341,17 @@ sub best_v {
 
 {
     my @p;
+    my %smallp;
     sub prep_mintau {
         my $cp = sum0 map $_->[1], @$nf;
         my $cop = $cp - $nf->[0][1];
         # We need at most 1 per factor in the longest factorization of $n,
-        # plus 1 for each me might avoid - which itself is at most $k
+        # plus 1 for each we might avoid - which itself is at most $k
         # times the number of odd prime factors in $n.
         # Note these primes must be bigints, so we can safely take
         # powers of them below.
         @p = nprimes($cp + $cop * $k);
+        $smallp{$_} = 1 for grep $_ < $k, @p;
         return;
     }
     #
@@ -365,12 +367,10 @@ sub best_v {
         # some v_j: if |i - j| is a multiple of p, then v_i must also
         # permit it.
         # FIXME: the need for this may disappear with preallocation.
-        my @keep;
-        for my $j (0 .. $k - 1) {
-            my $d = abs($j - $i);
-            next if $d < 2;
-            push @keep, grep +($d % $_) == 0, keys %{ $v[$j]{pu} };
-        }
+        my @keep = grep {
+            my $d = $used{$_} - $i;
+            $d && ($d % $_) == 0;
+        } grep $smallp{$_}, keys %used;
         local @used{@keep} = (undef) x @keep;
 
         my $best;
