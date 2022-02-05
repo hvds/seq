@@ -117,7 +117,7 @@ sub inject {
     $v->{pu}{$zp} = 1;
     $v->{x}[$l] = $x;
     $v->{q} *= $zp ** ($x - 1);
-    $used{$p} = 1;
+    $used{$p} = $i;
     return;
 }
 
@@ -213,7 +213,7 @@ sub recurse {
             my $q = $v->{q};
             while (1) {
                 $p = next_zprime($p);
-                next if $used{$p};
+                next if defined $used{$p};
                 my $qx = $q * $p ** ($x - 1);
                 next POWER if $have_best && $qx > $best;
                 my $result = walk_1($i, $qx - $i);
@@ -225,8 +225,8 @@ sub recurse {
         my($have_pb, $pb) = ($have_best, $best);
         while (1) {
             $p = next_zprime($p);
-            next if $used{$p};
-            local $used{$p} = 1;
+            next if defined $used{$p};
+            local $used{$p} = $i;
             local $v->{pu}{$p} = 1;
             my $px = $p ** ($x - 1);
             $v->{p}[$vlevel] = $p;
@@ -371,7 +371,7 @@ sub best_v {
             next if $d < 2;
             push @keep, grep +($d % $_) == 0, keys %{ $v[$j]{pu} };
         }
-        local @used{@keep} = (0) x @keep;
+        local @used{@keep} = (undef) x @keep;
 
         my $best;
         for my $f (@{ factorizations($tau) }) {
@@ -379,7 +379,7 @@ sub best_v {
             my $pi = 0;
             for (my $i = 0; $i < @$f; ++$i) {
                 my $p = $p[$pi++];
-                $p = $p[$pi++] while $used{$p};
+                $p = $p[$pi++] while defined $used{$p};
                 $b *= $p ** ($f->[$i] - 1);
             }
             $best = $b unless defined($best) && $best < $b;
