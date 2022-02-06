@@ -6,6 +6,7 @@ use Math::Prime::Util qw{ factor_exp prime_iterator divisors };
 use Math::Prime::Util::GMP qw{ chinese };
 use Syntax::Keyword::Dynamically;
 use List::Util qw{ first sum0 all };
+use Algorithm::Loops qw{ NestedLoops };
 use DDP;    # exports p, np
 use lib 'lib';
 use Type;
@@ -339,19 +340,76 @@ sub best_v {
     return $i // undef;
 }
 
+# Prepare an element of the @mint array below
+sub fill_mintau {
+    my($tau, $primes) = @_;
+    my @p = map MBI($_), @$primes;
+    my(@r, @v);
+    return [ [ 0, $zone ] ] if $tau == 1;
+
+    # Find all values over the given primes, and associated bit vectors
+    for my $f (@{ factorizations($tau) }) {
+        NestedLoops([
+            [ 0 .. $#$primes ],
+            map sub {
+                [ $_[-1] + 1 .. $#$primes ]
+            }, 1 .. $#$f
+        ], { OnlyWhen => 0 }, sub {
+            my $vec = 0;
+            my $val = $zone;
+            for my $i (0 .. $#_) {
+                my $j = $_[$i];
+                $vec |= 1 << $j;
+                $val *= $p[$j] ** ($f->[$i] - 1);
+            }
+            push @v, [ $vec, $val ];
+        });
+    }
+    @v = sort { $a->[1] <=> $b->[1] } @v;
+
+    # Repeatedly take best value, then discard any worse values that
+    # would use the same primes.
+    while (@v) {
+        my $v = shift @v;
+        push @r, $v;
+        my $vec = $v->[0];
+        @v = grep +($_->[0] & $vec) != $vec, @v;
+    }
+    return \@r;
+}
+
 {
+    # $mint[$t] is an arrayref possible mintau() values for tau=$t.
+    # Each entry is an arrayref [ok_vector, value]; this value should be
+    # returned if the bit vector of used primes has no bits in common
+    # with ok_vector.
+    my @mint;
+
     my @p;
     my %smallp;
     sub prep_mintau {
-        my $cp = sum0 map $_->[1], @$nf;
-        my $cop = $cp - $nf->[0][1];
-        # We need at most 1 per factor in the longest factorization of $n,
-        # plus 1 for each we might avoid - which itself is at most $k
-        # times the number of odd prime factors in $n.
-        # Note these primes must be bigints, so we can safely take
-        # powers of them below.
-        @p = nprimes($cp + $cop * $k);
+        # Max tau we care about
+        my $maxt = $n / $nf->[-1][0];
+
+        # Max factors in a factorization of maxt
+        my $cp = (sum0 map $_->[1], @$nf) - 1;
+
+        # Max allocations for an element (number of odd prime factors)
+        my $cop = $cp + 1 - $nf->[0][1];
+
+        # Max total allocations (excluding the current one)
+        my $max_alloc = $cop * $k - 1;
+
+        # We need at most 1 per factor of a factorization, plus 1 for
+        # each allocation.
+        my $need = $cp + $max_alloc;
+        @p = nprimes($need, 0);
+
+        # A prime p allocated at i + xp is not suppressed at i.
         $smallp{$_} = 1 for grep $_ < $k, @p;
+
+        # Prepare all possible mintau() for all relevant tau
+        $mint[$_] = fill_mintau($_, \@p) for divisors($maxt);
         return;
     }
     #
@@ -361,30 +419,19 @@ sub best_v {
     #
     sub mintau {
         my($tau, $i) = @_;
-
-        #
-        # Must not suppress primes just because they are allocated to
-        # some v_j: if |i - j| is a multiple of p, then v_i must also
-        # permit it.
-        # FIXME: the need for this may disappear with preallocation.
-        my @keep = grep {
-            my $d = $used{$_} - $i;
-            $d && ($d % $_) == 0;
-        } grep $smallp{$_}, keys %used;
-        local @used{@keep} = (undef) x @keep;
-
-        my $best;
-        for my $f (@{ factorizations($tau) }) {
-            my $b = $zone;
-            my $pi = 0;
-            for (my $i = 0; $i < @$f; ++$i) {
-                my $p = $p[$pi++];
-                $p = $p[$pi++] while defined $used{$p};
-                $b *= $p ** ($f->[$i] - 1);
-            }
-            $best = $b unless defined($best) && $best < $b;
+        # create bit-vector of primes to suppress
+        my $vec = 0;
+        for my $j (0 .. $#p) {
+            my $p = $p[$j];
+            my $k = $used{$p} // next;
+            my $d = $k - $i;
+            $vec |= (1 << $j) if !$d || ($d % $p) != 0;
         }
-        return $best;
+        for (@{ $mint[$tau] // die "no mint found for $tau" }) {
+            my($ok, $r) = @$_;
+            return $r if ($ok & $vec) == 0;
+        }
+        die "no mint match found for $vec at t=$tau";
     }
 }
 
@@ -599,9 +646,13 @@ sub next_zprime {
 }
 
 sub nprimes {
-    my($count) = @_;
+    my($count, $need_big) = @_;
     my $it = prime_iterator;
-    return map MBI($it->()), 1 .. $count;
+    if ($need_big) {
+        return map MBI($it->()), 1 .. $count;
+    } else {
+        return map $it->(), 1 .. $count;
+    }
 }
 
 sub modinv {
