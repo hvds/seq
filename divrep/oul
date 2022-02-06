@@ -99,6 +99,8 @@ my @aq = ($zone);
 
 my($countr, $countw) = (0, 0);
 
+my @injected = (0) x $k;
+
 my($r, $fh);
 ($r, $fh) = prep_run($n, $k, $complete) if $inject;
 report(sprintf "001 %s%s%s\n", $0,
@@ -110,7 +112,6 @@ exit 0;
 # For debugging or sharding: inject assignment of p^x into a_i.
 sub inject {
     my($i, $p, $x) = @_;
-    ++$x;
     my $v = $v[$i];
     my $zp = MBI($p);
     my $l = $v->{l}++;
@@ -118,7 +119,9 @@ sub inject {
     $v->{pu}{$zp} = 1;
     $v->{x}[$l] = $x;
     $v->{q} *= $zp ** ($x - 1);
+    $v->{t} /= $x;
     $used{$p} = $i;
+    ++$injected[$i];
     return;
 }
 
@@ -191,7 +194,7 @@ sub recurse {
     for my $x (@$fa) {
         # CHECKME: for n=54, we should disallow eg x=9 when t=54, since we
         # will already have tried all x=3 and x=6 before that.
-        next if $nofact{$x}{$prex};
+        next if $nofact{$x}{$prex} && $vlevel >= $injected[$i];
 
         # Try to add another factor to this $v. Check all primes if different,
         # or only greater primes if same power as previous power.
