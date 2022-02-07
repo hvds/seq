@@ -25,7 +25,7 @@ sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
 
-my($max, $start, $inject, $verify, $confirm, $debug) = (0) x 6;
+my($max, $start, $inject, $confirm, $debug) = (0) x 5;
 my $ratchet = 1;
 my $typename = 'o';
 my $maxproc = 6;
@@ -37,7 +37,6 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($start = $arg || shift(@ARGV)), next if $arg =~ s{^-s}{};
     ($ratchet = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     $inject = 1, next if $arg eq '-i';
-    $verify = 1, next if $arg eq '-v';
     $confirm = 1, next if $arg eq '-c';
     ++$debug, next if $arg eq '-d';
     die "Unknown option '$arg'\n";
@@ -472,33 +471,33 @@ OUT
 565 check not ok f(%s, %s) != %s (%.2fs)
 OUT
     }
-    if ($verify) {
-        my $g = g();
-        my $f = f();
-        if ($f->complete) {
-            if ($f->f == $best) {
-                report(sprintf <<OUT, $n, $k, $best);
+
+    my $g = g();
+    my $f = f();
+    if ($f->complete) {
+        if ($f->f == $best) {
+            report(sprintf <<OUT, $n, $k, $best);
 266 db ok f(%s,%s) = %s
 OUT
-            } else {
-                report(sprintf <<OUT, $n, $k, $f->f, $best, times() - $t0);
+        } else {
+            report(sprintf <<OUT, $n, $k, $f->f, $best, times() - $t0);
 566 db not ok f(%s,%s) = %s, not %s (%.2fs)
 OUT
-                goto finish_fail;
-            }
-        } else {
-            if ($g->checked < $best) {
-                report(sprintf <<OUT, $n, $k, $g->checked, $best);
+            goto finish_fail;
+        }
+    } else {
+        if ($g->checked < $best) {
+            report(sprintf <<OUT, $n, $k, $g->checked, $best);
 366 db maybe ok f(%s,%s) ?= %s < %s
 OUT
-            } else {
-                report(sprintf <<OUT, $n, $k. $best, times() - $t0);
+        } else {
+            report(sprintf <<OUT, $n, $k. $best, times() - $t0);
 566 db not ok f(%s,%s) > %s, not %s (%.2fs)
 OUT
-                goto finish_fail;
-            }
+            goto finish_fail;
         }
     }
+
     if ($checked) {
         report(sprintf <<OUT, $n, $k, $best, times() - $t0);
 200 f(%s, %s) = %s (%.2fs)
