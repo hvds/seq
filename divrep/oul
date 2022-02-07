@@ -26,6 +26,7 @@ my $zero = MBI(0);
 my $zone = MBI(1);
 
 my($max, $start, $inject, $confirm, $debug) = (0) x 5;
+my $rrun;
 my $gain = 1;
 my $typename = 'o';
 my $maxproc = 6;
@@ -36,6 +37,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($max = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
     ($start = $arg || shift(@ARGV)), next if $arg =~ s{^-s}{};
     ($gain = $arg || shift(@ARGV)), next if $arg =~ s{^-g}{};
+    ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     $inject = 1, next if $arg eq '-i';
     $confirm = 1, next if $arg eq '-c';
     ++$debug, next if $arg eq '-d';
@@ -43,12 +45,15 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
 }
 
 $| = 1;
-my($n, $k) = @ARGV;
-$0 = "oul($n $k)";
 my $type = Type->new($typename);
-$type->bind($n);
 $type->bind_owner('upperlim');
 my $db = Seq::Db->new($type, 0);
+
+my($n, $k, $r, $fh, $t0,  @rstack, $rwalk);
+($r, $fh) = recover($rrun) if $rrun;
+($n, $k) = @ARGV unless $rrun;
+$0 = "oul($n $k)";
+$type->bind($n);
 
 my $nf = [ factor_exp($n) ];
 my $tn = tau($n, $nf);
@@ -57,8 +62,8 @@ prep_fact($n);
 prep_mintau();
 
 my($diag_delay, $log_delay) = (1, 600);
-my $t0 = scalar times();
-my($diagt, $logt) = ($t0 + $diag_delay, $t0 + $log_delay);
+$t0 = scalar times() unless $rrun;
+my($diagt, $logt) = ($diag_delay, $log_delay);
 
 my $min = g()->checked;     # not currently used
 $max = ston($max) if $max;
@@ -100,11 +105,14 @@ my($countr, $countw) = (0, 0);
 
 my @injected = (0) x $k;
 
-my($r, $fh);
-($r, $fh) = prep_run($n, $k, $complete) if $inject;
-report(sprintf "001 %s%s%s\n", $0,
-        $gain > 1 ? " -g$gain" : "", $max ? " -x$max" : "");
-recurse();
+($r, $fh) = prep_run($n, $k, $complete) if $inject && !$rrun;
+report(sprintf "001 %s%s%s%s\n", ($rrun ? 'recover ' : ''),
+        $0, $gain > 1 ? " -g$gain" : "", $max ? " -x$max" : "");
+if ($rrun) {
+    recurse_inject();
+} else {
+    recurse();
+}
 finish_run();
 exit 0;
 
@@ -182,13 +190,61 @@ sub desc {
     } @$va;
 }
 
-sub recurse {
-    ++$countr;
-    my $i = best_v() // return candidate(walk_v());
+sub recurse_inject {
+    # ++$countr;
+    my $i = best_v() // return candidate(walk_v($rwalk));
     my $v = $v[$i];
-    my $fa = $fact{$v->{t}} // return candidate(walk_v());
     my $vlevel = $v->{l};
-    my $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
+    my $inject = $rstack[$i][$vlevel]
+            // return $rwalk ? candidate(walk_v($rwalk)) : recurse();
+    my($p, $x) = @$inject;
+    ++$x;
+    my $fa = $fact{$v->{t}} // die "No factor to inject to";
+    my $fi = (first { $fa->[$_] == $x } 0 .. $#$fa)
+            // die "Factor $x not found in [@$fa]";
+
+    my $zp = MBI($p);
+    my $px = $zp ** ($x - 1);
+    $v->{p}[$vlevel] = $zp;
+    $v->{x}[$vlevel] = $x;
+
+    {
+        local $v->{l} = $v->{l} + 1;
+        local $aq[$level + 1] = $aq[$level] * $px;
+        local $v->{pu}{$p} = 1;
+        local $v->{q} = $v->{q} * $px;
+        local $v->{t} = $v->{t} / $x;
+        local $used{$p} = $i;
+        ++$level;
+        recurse_inject();
+        --$level;
+    }
+    $#{ $v->{p} } = $vlevel - 1;
+    recurse({
+        i => $i,
+        v => $v,
+        fa => [ @$fa[$fi .. $#$fa] ],
+        vlevel => $vlevel,
+        prex => 0,
+        p0 => $zp,
+    });
+    return;
+}
+
+sub recurse {
+    my($i, $v, $fa, $vlevel, $prex, $p0);
+
+    if (my $reenter = $_[0]) {
+        ($i, $v, $fa, $vlevel, $prex, $p0)
+                = @$reenter{qw{ i v fa vlevel prex p0 }};
+    } else {
+        ++$countr;
+        $i = best_v() // return candidate(walk_v());
+        $v = $v[$i];
+        $fa = $fact{$v->{t}} // return candidate(walk_v());
+        $vlevel = $v->{l};
+        $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
+    }
   POWER:
     for my $x (@$fa) {
         # CHECKME: for n=54, we should disallow eg x=9 when t=54, since we
@@ -198,6 +254,10 @@ sub recurse {
         # Try to add another factor to this $v. Check all primes if different,
         # or only greater primes if same power as previous power.
         my $p = ($prex == $x) ? $v->{p}[$vlevel - 1] : $zone;
+        if ($p0) {
+            $p = $p0;
+            $p0 = undef;
+        }
         my $tnext = $v->{t} / $x;
         $v->{x}[$vlevel] = $x;
 
@@ -275,6 +335,8 @@ sub walk_1 {
 }
 
 sub walk_v {
+    my($start) = @_;
+
     my @q = map $_->{q}, @v;
     # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
     my $m = MBI(chinese(map [ -$_, $q[$_] ], 0 .. $#q));
@@ -284,6 +346,10 @@ sub walk_v {
     my $aq = $aq[$level];
     my @qq = map $aq / $_, @q;
     my @o = map +($m + $_) / $q[$_], 0 .. $#q;
+
+    if ($start) {
+        $o[$_] += $qq[$_] * $start for 0 .. $#o;
+    }
 
     #
     # This is the core loop, for long runs we expect to spend the bulk
@@ -435,6 +501,85 @@ sub fill_mintau {
         }
         die "no mint match found for $vec at t=$tau";
     }
+}
+
+sub recover {
+    my($runid) = @_;
+    my $r = $db->resultset('Run')->find({ runid => $runid })
+            // die "cannot find Run entry for runid=$runid";
+    die "Run with runid=$runid is already complete"
+            if $r->complete;
+    die "Run with runid=$runid is not owned"
+            unless $r->owner == 1;
+    my $path = $r->logpath($type);
+    print "path $path\n";
+    open(my $rfh, '<', $path)
+            or die "Cannot open $path: $!";
+    my $head = <$rfh>;
+    $head =~ m{
+        ^ 001 \s+ oul\( (\d+) \s+ (\d+) \)
+        (?: \s+ -[rg](\d+) )?
+        (?: \s+ -x(\d+) )?
+        $
+    }x or die "Cannot parse header for $path: $head";
+    ($n, $k) = ($1, $2);
+    $gain = $3 if $3;
+    $max = $4 if $4;
+
+    my $pos = tell $rfh;
+    my $trunc = 0;
+    my %log;
+    while (my $log = <$rfh>) {
+        # detect garbage at end of file
+        $trunc = 1, last if $log =~ /^\x{0}/ || $log !~ /\n\z/;
+        die "Could not parse log line in $path: $log"
+                unless $log =~ /^(\d{3})\b/;
+        $log{$1} = $log;    # keep just the last of each type
+        $pos = tell $rfh;
+    }
+    close $rfh;
+
+    my $progress;
+    for my $which (keys %log) {
+        if ($which eq '305') {
+            $progress = $log{$which};
+        } elsif ($which eq '202') {
+            $log{$which} =~ m{
+                ^ 202 \s+ Candidate \s+ (\d+) \s+ \(\d+\.\d+s\) $
+            }x or die "Could not parse 202 line in $path: $log{$which}";
+            $max = $1;
+        } elsif ($which eq '001') {
+            # previous recovery is ok
+        } else {
+            die "Unexpected log line in $path: $log{$which}";
+        }
+    }
+    die "No 305 line found to recover from in $path"
+            unless $progress;
+    $progress =~ m{
+        ^ 305 ( (?:
+            \s+ \.
+        |
+            \s+ \d+ \^ \d+
+            (?: \. \d+ \^ \d+ )*
+        ){$k} )
+        (?: : \s+ (\d+) \s+ / \s+ (\d+) )?
+        \s+ \( (\d+\.\d+) s \)
+        $
+    }x or die "Could not parse 305 line in $path, k=$k: $progress";
+    my($stack, $walk_from, $walk_to, $time) = ($1, $2, $3, $4);
+    $stack =~ s/^\s+//;
+    @rstack = map {
+        $_ eq '.' ? [] : [ map [ split /\^/ ], split /\./ ]
+    } split /\s+/, $stack;
+    $rwalk = $walk_from;
+    $t0 -= $time;
+    $inject = 1;
+
+    truncate($path, $pos) if $trunc;
+    open(my $wfh, '>>', $path) or die "$path: $!";
+    $wfh->autoflush(1);
+    return($r, $wfh);
 }
 
 sub prep_run {
