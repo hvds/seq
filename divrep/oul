@@ -25,7 +25,7 @@ sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
 
-my($max, $start, $inject, $confirm, $debug) = (0) x 5;
+my($max, $inject, $confirm, $debug) = (0) x 4;
 my $rrun;
 my $gain = 1;
 my $typename = 'o';
@@ -35,7 +35,6 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
     ($max = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
-    ($start = $arg || shift(@ARGV)), next if $arg =~ s{^-s}{};
     ($gain = $arg || shift(@ARGV)), next if $arg =~ s{^-g}{};
     ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     $inject = 1, next if $arg eq '-i';
