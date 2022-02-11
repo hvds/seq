@@ -15,9 +15,17 @@ use ModFunc qw/ gcd /;
 
 local $SIG{FPE} = sub { use Carp; confess("Division by zero") };
 
-=head1 oul - constrain upper limit of oneseq(n, k)
+=head1 oul - find min value of oneseq(n, k)
 
-Try to find the parameters most likely to get a hit.
+That is, find the least d such that tau(d + i) == n for all 0 <= i < k.
+
+The core approach is to allocate in turn each small enough prime p
+to fill a slot p^x in the value v_i = d + i, contributing a factor
+x + 1 to tau(v_i). When enough slots are allocated, we then use the
+Chinese remainder theorem to determine what d (mod a) must be, where
+a is the product of all the allocated p^x, and test each value of d
+until we find a solution or hit the limit (a previously found solution,
+a user-specified maximum, or no limit).
 
 =cut
 
