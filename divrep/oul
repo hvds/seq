@@ -299,7 +299,21 @@ sub recurse {
         my($have_pb, $pb) = ($have_best, $best);
         while (1) {
             $p = next_zprime($p);
-            next if defined $used{$p};
+            my $u = $used{$p};
+            if (defined $u) {
+                # max(k) < 7^2 + 1 for all n in our range (1..100)
+                next if $p > 5;
+                # Suppress if p is used, as long as it wasn't used p^2 away
+                my $gap = $u - $i;
+                next if $v->{pu}{$p} || ($gap % ($p * $p)) != 0;
+                # Suppress 2^m if 2^m is also used 4 away from us
+                next if $p == 2 && abs($gap) == 4 && do {
+                    my $px = $zone << ($x - 1);
+                    ($v[$u]{q} % ($px << 1)) == $px;
+                };
+                # Still need the inverse: when p^x is allocated to v_i,
+                # should force p^y on v_{i+p^2} for some valid y >= 2.
+            }
             local $used{$p} = $i;
             local $v->{pu}{$p} = 1;
             my $px = $p ** ($x - 1);
