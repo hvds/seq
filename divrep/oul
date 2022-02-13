@@ -38,6 +38,7 @@ my $rrun;
 my $gain = 1;
 my $typename = 'o';
 my $maxproc = 6;
+my $seen_best = 0;
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
@@ -76,9 +77,6 @@ my $min = g()->checked;     # not currently used
 $max = ston($max) if $max;
 $max = f()->f if $confirm;
 
-# Note that if we run with $max set to a non-solution, and we fail to find
-# a solution, this will finish by reporting a bad solution rather than
-# "no solution found".
 my $best = $max || undef;
 my $have_best = $best ? 1 : 0;
 
@@ -186,6 +184,7 @@ OUT
     unless ($have_best && $best < $new) {
         $best = $new;
         $have_best = 1;
+        $seen_best = 1;
     }
     return;
 }
@@ -573,6 +572,7 @@ sub recover {
                 ^ 202 \s+ Candidate \s+ (\d+) \s+ \(\d+\.\d+s\) $
             }x or die "Could not parse 202 line in $path: $log{$which}";
             $max = $1;
+            $seen_best = 1;
         } elsif ($which eq '001') {
             # previous recovery is ok
         } else {
@@ -631,6 +631,8 @@ sub finish_run {
     report(sprintf <<OUT, $gain, $n, $k, $countr, $countw, times() - $t0);
 367 oul -g%s %s %s: recurse %s, walk %s (%.2fs)
 OUT
+    goto finish_fail unless $seen_best;
+
     my $checked = report_seq($n, $k, $best);
     if ($checked) {
         report(sprintf <<OUT, $n, $k, $best);
