@@ -34,7 +34,7 @@ my $zero = MBI(0);
 my $zone = MBI(1);
 
 my($max, $inject, $confirm, $debug) = (0) x 4;
-my $rrun;
+my($rrun, $cap);
 my $gain = 1;
 my $typename = 'o';
 my $maxproc = 6;
@@ -46,6 +46,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($max = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
     ($gain = $arg || shift(@ARGV)), next if $arg =~ s{^-g}{};
     ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
+    ($cap = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
     $inject = 1, next if $arg eq '-i';
     $confirm = 1, next if $arg eq '-c';
     ++$debug, next if $arg eq '-d';
@@ -80,9 +81,8 @@ $max = f()->f if $confirm;
 my $best = $max || undef;
 my $have_best = $best ? 1 : 0;
 
-# Always true for now; the intention is to set it false for a partial run,
-# mainly to ensure the flag is set on the Run object.
-my $complete = 1;
+# Ensure the Run object is marked 'partial' if not a full run
+my $complete = defined($cap) ? 0 : 1;
 
 # Lookup of primes allocated so far, that should be avoided
 my %used;
@@ -113,8 +113,11 @@ my @minp;
 prep_minp();
 
 ($r, $fh) = prep_run($n, $k, $complete) if $inject && !$rrun;
-report(sprintf "001 %s%s%s%s\n", ($rrun ? 'recover ' : ''),
-        $0, $gain > 1 ? " -g$gain" : "", $max ? " -x$max" : "");
+report(sprintf "001 %s%s%s%s%s\n",
+    ($rrun ? 'recover ' : ''),
+    $0, ($cap ? " -p$cap" : ""), ($gain > 1 ? " -g$gain" : ""),
+    $max ? " -x$max" : ""
+);
 if ($rrun) {
     recurse_inject();
 } else {
@@ -276,7 +279,7 @@ sub recurse {
         # outweighs the benefit.
         my $mint = mintau($tnext, $i);
         if ($have_best) {
-            my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
+            my $lim = $cap // (($best + $i) / $v->{q} / $mint)->broot($x - 1);
             next POWER if $lim < $p + 1;
             my $walk = ($best + $i) / $aq[$level];
             candidate(walk_v()), last POWER if $walk * $gain < $lim;
@@ -286,6 +289,7 @@ sub recurse {
             my $q = $v->{q};
             while (1) {
                 $p = next_zprime($p);
+                next POWER if defined($cap) && $p > $cap;
                 next if defined $used{$p};
                 my $qx = $q * $p ** ($x - 1);
                 next POWER if $have_best && $qx > $best;
@@ -299,6 +303,7 @@ sub recurse {
         my($have_pb, $pb) = ($have_best, $best);
         while (1) {
             $p = next_zprime($p);
+            last if defined($cap) && $p > $cap;
             my $u = $used{$p};
             if (defined $u) {
                 # max(k) < 7^2 + 1 for all n in our range (1..100)
@@ -326,7 +331,7 @@ sub recurse {
                 }
                 if (!$have_pb || $best < $pb) {
                     ($have_pb, $pb) = ($have_best, $best);
-                    my $lim = (($best + $i) / $v->{q} / $mint)->broot($x - 1);
+                    my $lim = $cap // (($best + $i) / $v->{q} / $mint)->broot($x - 1);
                     next POWER if $lim < $p;
                     my $walk = ($best + $i) / $aq[$level];
                     candidate(walk_v()), last POWER if $walk * $gain < $lim;
@@ -543,13 +548,15 @@ sub recover {
     my $head = <$rfh>;
     $head =~ m{
         ^ 001 \s+ oul\( (\d+) \s+ (\d+) \)
-        (?: \s+ -[rg](\d+) )?
+        (?: \s+ -p(\d+) )?
+        (?: \s+ -g(\d+) )?
         (?: \s+ -x(\d+) )?
         $
     }x or die "Cannot parse header for $path: $head";
     ($n, $k) = ($1, $2);
-    $gain = $3 if $3;
-    $max = $4 if $4;
+    $cap = $3 if $3;
+    $gain = $4 if $4;
+    $max = $5 if $5;
 
     my $pos = tell $rfh;
     my $trunc = 0;
@@ -678,7 +685,9 @@ OUT
     }
     if ($inject) {
         close $fh;
-        $r->finalize($db);
+        $r->finalize($db) unless $cap;
+        # FIXME: not everything knows how to deal with a partial run yet
+        $r->delete if $cap;
     }
     return;
   finish_fail:
