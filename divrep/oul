@@ -291,6 +291,7 @@ sub recurse {
                 next POWER if $have_best && $qx > $best;
                 my $result = walk_1($i, $qx - $i);
                 candidate($result), next POWER if $result;
+                do_diag(desc(\@v) . ": t=1") if times() >= $diagt;
             }
         }
 
