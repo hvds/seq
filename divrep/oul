@@ -33,7 +33,7 @@ sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
 
-my($max, $inject, $confirm, $debug) = (0) x 4;
+my($max, $inject, $debug) = (0) x 3;
 my($rrun, $cap);
 my $gain = 1;
 my $typename = 'o';
@@ -48,7 +48,6 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     ($cap = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
     $inject = 1, next if $arg eq '-i';
-    $confirm = 1, next if $arg eq '-c';
     ++$debug, next if $arg eq '-d';
     die "Unknown option '$arg'\n";
 }
@@ -76,7 +75,7 @@ my($diagt, $logt) = ($diag_delay, $log_delay);
 
 my $min = g()->checked;     # not currently used
 $max = ston($max) if $max;
-$max = f()->f if $confirm;
+$max ||= f()->f;            # set from db if not specified
 
 my $best = $max || undef;
 my $have_best = $best ? 1 : 0;
