@@ -106,7 +106,7 @@ sub report_g {
 sub last_complete {
     my($f) = @_;
     return reduce { ($a->runid > $b->runid) ? $a : $b } grep {
-        $_->owner == 1 && $_->complete
+        $_->owner == 1 && $_->complete && !$_->partial
     } $f->runs->all;
 }
 
@@ -134,6 +134,8 @@ sub _report_fk {
             printf "f(%s, %s) = %s f(%s, %s)\n",
                     $f->n, $f->k, $f->depend_m, $f->depend_n, $f->k;
         }
+    } elsif ($f->f && !$f->complete) {
+        printf "f(%s, %s) <= %s\n", $f->n, $f->k, $f->f;
     } else {
         printf "f(%s, %s) > %s\n", $f->n, $f->k, $g->checked
                 unless $g->depend;
@@ -161,10 +163,6 @@ sub report_f {
     my $max = $g->maxg;
     for my $f (@{ $g->fall($db) }) {
         _report_fk($g, $f);
-    }
-    my $ts = $g->fall($db)->[-1]->test_order;
-    if (@$ts) {
-        printf "  -ts %s\n", join ',', @$ts;
     }
     return;
 }

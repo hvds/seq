@@ -109,6 +109,14 @@ sub good {
     return $self->final($db);
 }
 
+sub partial {
+    my($self, $db, $ming) = @_;
+    # FIXME: capture the distinction between 'f(n,k) exists' and
+    # 'f(n.k) known minimal' - either have two separate ming fields
+    # or mark complete only when ming == maxg _and_ f[k=maxg].complete
+    return ();
+}
+
 sub bad {
     my($self, $db, $checked) = @_;
     $self->checked($checked) if $checked > $self->checked;

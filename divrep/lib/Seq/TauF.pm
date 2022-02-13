@@ -32,8 +32,6 @@ satisfying the criterion (but is not necessarily known to be minimal:
 see the C<status> flags below). This is stored as a string representing
 a L<Math::GMP> bigint.
 
-For a given C<n> and C<k>, C<
-
 =cut
 
 use parent 'Seq::Table';
@@ -72,10 +70,7 @@ sub rprio {
 
 sub good {
     my($self, $db, $run, $good, $best) = @_;
-    if ($run->optm) {
-        die "TODO: handle partial result";
-    }
-    $self->f($good);
+    $self->f($good) if !$self->f || $self->f > $good;
     $self->complete(1);
     $self->update;
     printf "f(%s, %s) = %s\n", $self->n, $self->k, $self->f;
@@ -84,6 +79,18 @@ sub good {
         return $next->good($db, $run, $good, $best);
     }
     return $self->g->good($db, $best, $good);
+}
+
+sub partial {
+    my($self, $db, $run, $good, $best) = @_;
+    $self->f($good) if !$self->f || $self->f > $good;
+    $self->update;
+    printf "f(%s, %s) <= %s\n", $self->n, $self->k, $self->f;
+    if ($best > $self->k) {
+        my $next = Seq::TauF->forceFor($self->g, $db, $self->k + 1);
+        return $next->partial($db, $run, $good, $best);
+    }
+    return $self->g->partial($db, $best);
 }
 
 sub ugly {
@@ -130,27 +137,46 @@ sub update_depends {
     my $ming = $g->ming;
 
     for my $fd ($gd->f->all) {
-        next unless $fd->complete && $fd->f;
+        next unless $fd->f;
         my $self;
-        my $new = 0;
         if ($self = $f{$fd->k}) {
-            next if $self->f;
+            if ($fd->complete) {
+                if (!$self->f || $self->f > $fd->f) {
+                    $self->f($fd->f * $m);
+                    $self->depend_m($m);
+                    $self->depend_n($dn);
+                    $self->depend(1);
+                    $self->complete(1);
+                } elsif (!$self->complete) {
+                    $self->complete(1);
+                }
+            } else {
+                next if $self->complete;
+                if (!$self->f || $self->f > $fd->f) {
+                    $self->f($fd->f * $m);
+                    $self->depend_m($m);
+                    $self->depend_n($dn);
+                    $self->depend(1);
+                }
+            }
+            $self->update;
         } else {
             $self = $table->new({
                 n => $n,
                 k => $fd->k,
                 test_order => '',
             });
-            $new = 1;
+            $self->f($fd->f * $m);
+            $self->depend_m($m);
+            $self->depend_n($dn);
+            $self->depend(1);
+            $self->complete($fd->complete);
+            $self->insert;
         }
-        $self->f($fd->f * $m);
-        $self->depend_m($m);
-        $self->depend_n($dn);
-        $self->depend(1);
-        $self->complete(1);
-        $new ? $self->insert : $self->update;
-        $ming = $self->k if $ming < $self->k;
+        # FIXME: see TauG->partial
+        $ming = $self->k if $self->complete && $ming < $self->k;
     }
+    # FIXME: maybe pass max($g->checked, $gd->checked * $m)
     $g->good($db, $ming, $g->checked);
     return;
 }

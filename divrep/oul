@@ -624,8 +624,8 @@ sub prep_run {
         optx => $zero,
         optc => $gain,
         priority => 0,
-        partial => !$complete,
     });
+    $r->partial(1) unless $complete;
     $r->running(1);
     $r->update;
     my $path = $r->logpath($type);
@@ -685,9 +685,7 @@ OUT
     }
     if ($inject) {
         close $fh;
-        $r->finalize($db) unless $cap;
-        # FIXME: not everything knows how to deal with a partial run yet
-        $r->delete if $cap;
+        $r->finalize($db);
     }
     return;
   finish_fail:

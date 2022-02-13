@@ -21,7 +21,7 @@ __PACKAGE__->define($TABLE, 'run', [
     'uint n',
     'uint k',
     'uint owner',
-    'flags(complete running optimizing fix_power old) status',
+    'flags(complete running optimizing fix_power old partial) status',
     'bigint optn',
     'bigint optx',
     'uint optc',
@@ -274,7 +274,11 @@ sub finalize {
     $self->running(0);
 
     my $tauf = $self->f;
-    my @result =
+    my @result = $self->partial ? (
+        $good ? $tauf->partial($db, $self, $good, $best)
+        : ($bad || $ugly || $depend_n) ? ()
+        : die "panic"
+    ) : (
         $good ? $tauf->good($db, $self, $good, $best)
         : $bad ? do {
             # set the test order before bad() generates the next run
@@ -287,7 +291,8 @@ sub finalize {
             $tauf->bad($db, $self, $badm);
         } : $ugly ? $tauf->ugly($db, $self)
         : $depend_n ? $tauf->depends($db, $depend_m, $depend_n)
-        : die "panic";
+        : die "panic"
+    );
 
     eval { $self->update; 1 } or do {
         my $e = $@;
