@@ -452,14 +452,18 @@ sub recurse {
 
 sub walk_1 {
     my($i, $val) = @_;
+    my @vi;
     for (0 .. $#v) {
         next if $_ == $i;
         my $v = $v[$_];
         my($vi, $mod) = ($val + $_)->bdiv($v->{q});
         return undef if $mod;
         return undef if gcd($vi, $v->{q}) != 1;
-        return undef if tau($vi) != $v->{t};
+        $vi[$_] = $vi;
     }
+    return undef unless all {
+        tau($vi[$_]) == $v[$_]{t}
+    } grep $_ != $i, 0 .. $#v;
     return $val;
 }
 
