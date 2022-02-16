@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 use Math::GMP;
-use Math::Prime::Util qw{ factor_exp prime_iterator divisors };
+use Math::Prime::Util qw{ factor_exp prime_iterator divisors is_prime };
 use Math::Prime::Util::GMP qw{ chinese };
 use Syntax::Keyword::Dynamically;
 use List::Util qw{ first sum0 all };
@@ -67,6 +67,7 @@ my $nf = [ factor_exp($n) ];
 my $tn = tau($n, $nf);
 my(%fact, %nofact);
 prep_fact($n);
+my $use_rec2 = use_rec2();
 prep_mintau();
 
 my($diag_delay, $log_delay) = (1, 600);
@@ -117,8 +118,11 @@ report(sprintf "001 %s%s%s%s%s\n",
     $0, ($cap ? " -p$cap" : ""), ($gain > 1 ? " -g$gain" : ""),
     $max ? " -x$max" : ""
 );
+
 if ($rrun) {
     recurse_inject();
+} elsif ($use_rec2) {
+    rec2();
 } else {
     recurse();
 }
@@ -202,16 +206,24 @@ sub desc {
 
 sub recurse_inject {
     # ++$countr;
-    my $i = best_v() // return candidate(walk_v($rwalk));
+    my $is_rec2 = ($level == 0 && $use_rec2);
+    my $i = ($is_rec2 ? best_rec2() : best_v())
+            // return candidate(walk_v($rwalk));
     my $v = $v[$i];
     my $vlevel = $v->{l};
-    my $inject = $rstack[$i][$vlevel]
-            // return $rwalk ? candidate(walk_v($rwalk)) : recurse();
+    my $inject = $rstack[$i][$vlevel] // return(
+        $rwalk ? candidate(walk_v($rwalk)) : $is_rec2 ? rec2() : recurse()
+    );
     my($p, $x) = @$inject;
     ++$x;
-    my $fa = $fact{$v->{t}} // die "No factor to inject to";
+    my $fa = $is_rec2
+        ? [ @{ $fact{$v->{t}} }, 4 ]
+        : $fact{$v->{t}} // die "No factor to inject to";
     my $fi = (first { $fa->[$_] == $x } 0 .. $#$fa)
             // die "Factor $x not found in [@$fa]";
+    # For recurse() we want to skip to next prime of same power on reentry,
+    # but for rec2() we want to skip to next power: there is only one prime.
+    ++$fi if $is_rec2;
 
     my $zp = MBI($p);
     my $px = $zp ** ($x - 1);
@@ -230,7 +242,7 @@ sub recurse_inject {
         --$level;
     }
     $#{ $v->{p} } = $vlevel - 1;
-    recurse({
+    ($is_rec2 ? \&rec2 : \&recurse)->({
         i => $i,
         v => $v,
         fa => [ @$fa[$fi .. $#$fa] ],
@@ -238,6 +250,90 @@ sub recurse_inject {
         prex => 0,
         p0 => $zp,
     });
+    return;
+}
+
+#
+# Special case for first recursion step when n=4p, p>3, k>4.
+# For this case we know some v_i: k-4 <= i < 4 must have a power 2^{x-1}
+# with x | n, so x in { p, 2p, 4p, 4 }.
+#
+sub use_rec2 {
+    return +($k >= 4 && ($n % 4) == 0 && is_prime($n/4) && ($n % 3) != 0)
+            ? 1 : 0;
+}
+sub rec2 {
+    my($spike, $i0, $v, $fa, $vlevel);
+    if (my $reenter = $_[0]) {
+        $spike = 1;
+        ($i0, $v, $fa, $vlevel) = @$reenter{qw{ i v fa vlevel }};
+        my $p0 = $reenter->{p0};
+        die "Unexpected prime $p0 in packing area" if $p0 != 2;
+    } else {
+        ++$countr;
+        $spike = 0;
+        $i0 = $k - 4;
+    }
+    for my $i ($i0 .. 3) {
+        if ($spike) {
+            $spike = 0;
+        } else {
+            $v = $v[$i];
+            $fa = [ @{ $fact{$v->{t}} }, 4 ];
+            $vlevel = $v->{l};
+        }
+        my $p = MBI(2);
+      POWER:
+        for my $x (@$fa) {
+            # Try to add another power of 2 to this $v.
+            my $tnext = $v->{t} / $x;
+            $v->{x}[$vlevel] = $x;
+
+            my $mint = mintau($tnext, $i);
+            if ($have_best) {
+                my $lim = $cap // (($best + $i) / $mint)->broot($x - 1);
+                next POWER if $lim < 2;
+                my $walk = ($best + $i) / $aq[$level];
+                candidate(walk_v()), last POWER if $walk * $gain < $lim;
+            }
+
+            if ($tnext == 1) {
+                my $qx = $p ** ($x - 1);
+                next POWER if $have_best && $qx > $best;
+                candidate(walk_1($i, $qx - $i));
+                next POWER;
+            }
+
+            local $v->{l} = $v->{l} + 1;
+            local $used{$p} = $i;
+            local $v->{pu}{$p} = 1;
+            $v->{p}[$vlevel] = $p;
+            my $px = $p ** ($x - 1);
+            my $q = $px;
+            next POWER if $have_best && $q * $mint > $best + $i;
+
+            local $v->{t} = $tnext;
+            local $v->{q} = $q;
+            local $aq[$level + 1] = $aq[$level] * $px;
+            ++$level;
+            do_diag(desc(\@v)) if times() >= $diagt;
+            if ($x != 4) {
+                recurse();
+            } else {
+                # with 2^3 accounted for, force recurse to try p^{n/4-1}
+                recurse({
+                    i => $i,
+                    v => $v,
+                    fa => [ $nf->[1][0] ],
+                    vlevel => 1,
+                    prex => 0,
+                    p0 => $zone,
+                });
+            }
+            --$level;
+        }
+        $#{ $v->{p} } = $vlevel - 1;
+    }
     return;
 }
 
@@ -413,6 +509,14 @@ sub walk_v {
     return;
 }
 
+# override best_v for the first level when use_rec2()
+sub best_rec2 {
+    for (0 .. $#v) {
+        next unless @{ $rstack[$_] };
+        return $_ if $rstack[$_][0][0] == 2;
+    }
+    die "no 2 found";
+}
 
 # find the best entry to progress: the one with the highest tau()
 # still to fulfil, or (on equality) with the highest q, but having
@@ -476,7 +580,7 @@ sub fill_mintau {
 }
 
 {
-    # $mint[$t] is an arrayref possible mintau() values for tau=$t.
+    # $mint[$t] is an arrayref of possible mintau() values for tau=$t.
     # Each entry is an arrayref [ok_vector, value]; this value should be
     # returned if the bit vector of used primes has no bits in common
     # with ok_vector.
@@ -506,7 +610,10 @@ sub fill_mintau {
         $smallp{$_} = 1 for grep $_ < $k, @p;
 
         # Prepare all possible mintau() for all relevant tau
-        $mint[$_] = fill_mintau($_, \@p) for divisors($maxt);
+        $mint[$_] = fill_mintau($_, \@p) for (
+            divisors($maxt),
+            ($use_rec2 ? $n / 4 : ()),
+        );
         return;
     }
     #
