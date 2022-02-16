@@ -367,7 +367,6 @@ sub recurse {
             $p0 = undef;
         }
         my $tnext = $v->{t} / $x;
-        $v->{x}[$vlevel] = $x;
 
         # We can get slightly better accuracy by recalculating this each
         # time in the loop below, at least for small $p, but the cost
@@ -380,6 +379,9 @@ sub recurse {
             candidate(walk_v()), last POWER if $walk * $gain < $lim;
         }
 
+        $v->{x}[$vlevel] = $x;
+        local $v->{l} = $vlevel + 1;
+
         if ($tnext == 1) {
             my $q = $v->{q};
             while (1) {
@@ -390,11 +392,13 @@ sub recurse {
                 next POWER if $have_best && $qx > $best;
                 my $result = walk_1($i, $qx - $i);
                 candidate($result), next POWER if $result;
-                do_diag(desc(\@v) . ": t=1") if times() >= $diagt;
+                if (times() >= $diagt) {
+                    local $v->{p}[$vlevel] = $p;
+                    do_diag(desc(\@v) . ": t=1");
+                }
             }
         }
 
-        local $v->{l} = $v->{l} + 1;
         my($have_pb, $pb) = ($have_best, $best);
         while (1) {
             $p = next_zprime($p);
@@ -702,7 +706,11 @@ sub recover {
             \s+ \d+ \^ \d+
             (?: \. \d+ \^ \d+ )*
         ){$k} )
-        (?: : \s+ (\d+) \s+ / \s+ (\d+) )?
+        (?: : \s+ (?:
+            t=1 (?# ignore )
+        |
+            (\d+) \s+ / \s+ (\d+)
+        ) )?
         \s+ \( (\d+\.\d+) s \)
         $
     }x or die "Could not parse 305 line in $path, k=$k: $progress";
