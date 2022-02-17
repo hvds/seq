@@ -34,8 +34,7 @@ my $zero = MBI(0);
 my $zone = MBI(1);
 
 my($max, $inject, $debug) = (0) x 3;
-my($rrun, $cap);
-my $gain = 1;
+my($rrun, $cap, $gain);
 my $typename = 'o';
 my $maxproc = 6;
 my $seen_best = 0;
@@ -60,6 +59,7 @@ my $db = Seq::Db->new($type, 0);
 my($n, $k, $r, $fh, $t0,  @rstack, $rwalk);
 ($r, $fh) = recover($rrun) if $rrun;
 ($n, $k) = @ARGV unless $rrun;
+$gain //= 1;
 $0 = "oul($n $k)";
 $type->bind($n);
 
@@ -669,7 +669,7 @@ sub recover {
     }x or die "Cannot parse header for $path: $head";
     ($n, $k) = ($1, $2);
     $cap = $3 if $3;
-    $gain = $4 if $4;
+    $gain //= $4 if $4; # allow caller to override
     $max = $5 if $5;
 
     my $pos = tell $rfh;
