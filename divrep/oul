@@ -2,7 +2,9 @@
 use strict;
 use warnings;
 use Math::GMP;
-use Math::Prime::Util qw{ factor_exp prime_iterator divisors is_prime };
+use Math::Prime::Util qw{
+    factor_exp prime_iterator divisors is_prime next_prime
+};
 use Math::Prime::Util::GMP qw{ chinese };
 use Syntax::Keyword::Dynamically;
 use List::Util qw{ first sum0 all };
@@ -133,12 +135,11 @@ exit 0;
 sub inject {
     my($i, $p, $x) = @_;
     my $v = $v[$i];
-    my $zp = MBI($p);
     my $l = $v->{l}++;
-    $v->{p}[$l] = $zp;
-    $v->{pu}{$zp} = 1;
+    $v->{p}[$l] = $p;
+    $v->{pu}{$p} = 1;
     $v->{x}[$l] = $x;
-    $v->{q} *= $zp ** ($x - 1);
+    $v->{q} *= MBI($p) ** ($x - 1);
     $v->{t} /= $x;
     $used{$p} = $i;
     ++$injected[$i];
@@ -225,9 +226,8 @@ sub recurse_inject {
     # but for rec2() we want to skip to next power: there is only one prime.
     ++$fi if $is_rec2;
 
-    my $zp = MBI($p);
-    my $px = $zp ** ($x - 1);
-    $v->{p}[$vlevel] = $zp;
+    my $px = MBI($p) ** ($x - 1);
+    $v->{p}[$vlevel] = $p;
     $v->{x}[$vlevel] = $x;
 
     {
@@ -248,7 +248,7 @@ sub recurse_inject {
         fa => [ @$fa[$fi .. $#$fa] ],
         vlevel => $vlevel,
         prex => 0,
-        p0 => $zp,
+        p0 => $p,
     });
     return;
 }
@@ -282,7 +282,7 @@ sub rec2 {
             $fa = [ @{ $fact{$v->{t}} }, 4 ];
             $vlevel = $v->{l};
         }
-        my $p = MBI(2);
+        my $p = 2;
       POWER:
         for my $x (@$fa) {
             # Try to add another power of 2 to this $v.
@@ -298,7 +298,7 @@ sub rec2 {
             }
 
             if ($tnext == 1) {
-                my $qx = $p ** ($x - 1);
+                my $qx = $zone << ($x - 1);
                 next POWER if $have_best && $qx > $best;
                 candidate(walk_1($i, $qx - $i));
                 next POWER;
@@ -308,7 +308,7 @@ sub rec2 {
             local $used{$p} = $i;
             local $v->{pu}{$p} = 1;
             $v->{p}[$vlevel] = $p;
-            my $px = $p ** ($x - 1);
+            my $px = $zone << ($x - 1);
             my $q = $px;
             next POWER if $have_best && $q * $mint > $best + $i;
 
@@ -361,7 +361,7 @@ sub recurse {
         # or only greater primes if same power as previous power.
         my $p = ($prex == $x)
             ? $v->{p}[$vlevel - 1]
-            : ($minp[$i][$x] //= $zone);
+            : ($minp[$i][$x] //= 1);
         if ($p0) {
             $p = $p0;
             $p0 = undef;
@@ -385,10 +385,10 @@ sub recurse {
         if ($tnext == 1) {
             my $q = $v->{q};
             while (1) {
-                $p = next_zprime($p);
+                $p = next_prime($p);
                 next POWER if defined($cap) && $p > $cap;
                 next if defined $used{$p};
-                my $qx = $q * $p ** ($x - 1);
+                my $qx = $q * MBI($p) ** ($x - 1);
                 next POWER if $have_best && $qx > $best;
                 my $result = walk_1($i, $qx - $i);
                 candidate($result), next POWER if $result;
@@ -401,7 +401,7 @@ sub recurse {
 
         my($have_pb, $pb) = ($have_best, $best);
         while (1) {
-            $p = next_zprime($p);
+            $p = next_prime($p);
             last if defined($cap) && $p > $cap;
             my $u = $used{$p};
             if (defined $u) {
@@ -420,7 +420,7 @@ sub recurse {
             }
             local $used{$p} = $i;
             local $v->{pu}{$p} = 1;
-            my $px = $p ** ($x - 1);
+            my $px = MBI($p) ** ($x - 1);
             $v->{p}[$vlevel] = $p;
             my $q = $v->{q} * $px;
             if ($have_best) {
@@ -862,10 +862,9 @@ sub prep_minp {
 
     # suppress 2^x | v_i if x > 2 and (i + 4 < k or i - 4 >= 0)
     my @d = grep $_ > 3, divisors($n);
-    my $ztwo = MBI(2);
     for (0 .. $k - 1) {
         next if $_ + 4 >= $k && $_ - 4 < 0;
-        @{ $minp[$_] }[@d] = ($ztwo) x @d;
+        @{ $minp[$_] }[@d] = (2) x @d;
     }
     return;
 }
@@ -952,12 +951,6 @@ sub prep_fact {
                     map $_ * $dp, divisors($n / ($dp * $d));
         }
     }
-}
-
-sub next_zprime {
-    my($p) = @_;
-    my $q = Math::Prime::Util::next_prime($p);
-    return MBI($q);
 }
 
 sub nprimes {
