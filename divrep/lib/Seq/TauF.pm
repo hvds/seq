@@ -81,16 +81,25 @@ sub good {
     return $self->g->good($db, $best, $good);
 }
 
+sub _partial {
+    my($self, $db, $good) = @_;
+    if (!$self->f || $self->f > $good) {
+        $self->f($good);
+        $self->update;
+        printf "f(%s, %s) <= %s\n", $self->n, $self->k, $self->f;
+        return 1;
+    }
+    return 0;
+}
+
 sub partial {
     my($self, $db, $run, $good, $best) = @_;
-    $self->f($good) if !$self->f || $self->f > $good;
-    $self->update;
-    printf "f(%s, %s) <= %s\n", $self->n, $self->k, $self->f;
-    if ($best > $self->k) {
-        my $next = Seq::TauF->forceFor($self->g, $db, $self->k + 1);
-        return $next->partial($db, $run, $good, $best);
+    my $g = $self->g;
+    for my $k ($db->type->ming + 1 .. $best) {
+        my $this = ($k == $self->k) ? $self : Seq::TauF->forceFor($g, $db, $k);
+        $this->_partial($db, $good);
     }
-    return $self->g->partial($db, $best);
+    return $g->partial($db, $best);
 }
 
 sub ugly {
