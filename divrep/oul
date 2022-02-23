@@ -254,12 +254,15 @@ sub recurse_inject {
 }
 
 #
-# Special case for first recursion step when n=4p, p>3, k>4.
+# Special case for first recursion step when n=4q, q>3 is odd, k>=4.
 # For this case we know some v_i: k-4 <= i < 4 must have a power 2^{x-1}
-# with x | n, so x in { p, 2p, 4p, 4 }.
+# with x | n, x >= 4.
+#
+# This is also true for q even, but then x=4 is not restrictive enough.
+# TODO: find a way to take advantage of that case.
 #
 sub use_rec2 {
-    return +($k >= 4 && ($n % 4) == 0 && is_prime($n/4) && ($n % 3) != 0)
+    return +($k >= 4 && ($n % 8) == 4 && ($n % 3) != 0)
             ? 1 : 0;
 }
 sub rec2 {
