@@ -23,7 +23,7 @@ use ModFunc qw/ mod_combine quadvec gcd /;
 sub MBI { return Math::GMP->new(@_) }
 
 my($opt_n, $opt_x, $opt_c, $opt_cr, $opt_s, $opt_f, $opt_fq, $opt_e) = (0) x 8;
-my($opt_p, $opt_t) = (2, 100000);
+my($opt_p, $opt_t, $opt_cp) = (2, 100000, 0);
 my($opt_m, $opt_q, $opt_i, $opt_z, $opt_nq) = ([], [], [], [], []);
 my($opt_ts, $opt_fact);
 my $sample = 0;
@@ -40,6 +40,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_n = $arg || shift(@ARGV)), next if $arg =~ s{^-n}{};
     ($opt_x = $arg || shift(@ARGV)), next if $arg =~ s{^-x}{};
     ($opt_cr = $arg || shift(@ARGV)), next if $arg =~ s{^-cr}{};
+    ($opt_cp = $arg || shift(@ARGV)), next if $arg =~ s{^-cp}{};
     ($opt_c = $arg || shift(@ARGV)), next if $arg =~ s{^-c}{};
     ($opt_e = $arg || shift(@ARGV)), next if $arg =~ s{^-e}{};
     ($opt_s = $arg || shift(@ARGV)), next if $arg =~ s{^-s}{};
@@ -396,6 +397,7 @@ die "FIXME: \$opt_p no longer looks like this either";
             '-x', '' . $opt_x,
             ($opt_c ? ('-c', $opt_c) : ()),
             ($opt_cr ? ('-cr', $opt_cr) : ()),
+            ($opt_cp ? ('-cp', $opt_cp) : ()),
             ($opt_fact ? ('-fact') : ()),
             ($opt_f ? ('-f') : ()),
             ($opt_t ? ('-t', $opt_t) : ()),
