@@ -35,7 +35,7 @@ sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
 
-my($max, $inject, $debug) = (0) x 3;
+my($max, $inject, $debug, $nodb) = (0) x 4;
 my($rrun, $cap, $gain);
 my $typename = 'o';
 my $maxproc = 6;
@@ -49,14 +49,19 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     ($cap = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
     $inject = 1, next if $arg eq '-i';
+    $nodb = 1, next if $arg eq '-n';
     ++$debug, next if $arg eq '-d';
     die "Unknown option '$arg'\n";
+}
+
+if ($nodb && ($rrun || $inject)) {
+    die "Incompatible options: cannot recover or inject without database";
 }
 
 $| = 1;
 my $type = Type->new($typename);
 $type->bind_owner('upperlim');
-my $db = Seq::Db->new($type, 0);
+my $db = $nodb ? undef : Seq::Db->new($type, 0);
 
 my($n, $k, $r, $fh, $t0,  @rstack, $rwalk);
 $max = ston($max) if $max;
@@ -77,8 +82,7 @@ my($diag_delay, $log_delay) = (1, 600);
 $t0 = scalar times() unless $rrun;
 my($diagt, $logt) = ($diag_delay, $log_delay);
 
-my $min = g()->checked;     # not currently used
-$max ||= f()->f;            # set from db if not specified
+$max ||= f()->f unless $nodb;       # set from db if not specified
 
 my $best = $max || undef;
 my $have_best = $best ? 1 : 0;
@@ -775,29 +779,31 @@ OUT
 OUT
     }
 
-    my $g = g();
-    my $f = f();
-    if ($f->complete) {
-        if ($f->f == $best) {
-            report(sprintf <<OUT, $n, $k, $best);
+    unless ($nodb) {
+        my $g = g();
+        my $f = f();
+        if ($f->complete) {
+            if ($f->f == $best) {
+                report(sprintf <<OUT, $n, $k, $best);
 266 db ok f(%s,%s) = %s
 OUT
-        } else {
-            report(sprintf <<OUT, $n, $k, $f->f, $best, times() - $t0);
+            } else {
+                report(sprintf <<OUT, $n, $k, $f->f, $best, times() - $t0);
 566 db not ok f(%s,%s) = %s, not %s (%.2fs)
 OUT
-            goto finish_fail;
-        }
-    } else {
-        if ($g->checked < $best) {
-            report(sprintf <<OUT, $n, $k, $g->checked, $best);
+                goto finish_fail;
+            }
+        } else {
+            if ($g->checked < $best) {
+                report(sprintf <<OUT, $n, $k, $g->checked, $best);
 366 db maybe ok f(%s,%s) ?= %s < %s
 OUT
-        } else {
-            report(sprintf <<OUT, $n, $k. $best, times() - $t0);
+            } else {
+                report(sprintf <<OUT, $n, $k. $best, times() - $t0);
 566 db not ok f(%s,%s) > %s, not %s (%.2fs)
 OUT
-            goto finish_fail;
+                goto finish_fail;
+            }
         }
     }
 
