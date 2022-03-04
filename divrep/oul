@@ -59,6 +59,7 @@ $type->bind_owner('upperlim');
 my $db = Seq::Db->new($type, 0);
 
 my($n, $k, $r, $fh, $t0,  @rstack, $rwalk);
+$max = ston($max) if $max;
 ($r, $fh) = recover($rrun) if $rrun;
 ($n, $k) = @ARGV unless $rrun;
 $gain //= 1;
@@ -77,7 +78,6 @@ $t0 = scalar times() unless $rrun;
 my($diagt, $logt) = ($diag_delay, $log_delay);
 
 my $min = g()->checked;     # not currently used
-$max = ston($max) if $max;
 $max ||= f()->f;            # set from db if not specified
 
 my $best = $max || undef;
@@ -673,7 +673,7 @@ sub recover {
     ($n, $k) = ($1, $2);
     $cap = $3 if $3;
     $gain //= $4 if $4; # allow caller to override
-    $max = $5 if $5;
+    $max //= $5 if $5; # allow caller to override
 
     my $pos = tell $rfh;
     my $trunc = 0;
@@ -696,8 +696,10 @@ sub recover {
             $log{$which} =~ m{
                 ^ 202 \s+ Candidate \s+ (\d+) \s+ \(\d+\.\d+s\) $
             }x or die "Could not parse 202 line in $path: $log{$which}";
-            $max = $1;
-            $seen_best = 1;
+            unless ($max && $max < $1) {
+                $max = MBI($1);
+                $seen_best = 1;
+            }
         } elsif ($which eq '001') {
             # previous recovery is ok
         } else {
