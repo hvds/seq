@@ -3,7 +3,8 @@ use strict;
 use warnings;
 use Math::GMP;
 use Math::Prime::Util qw{
-    factor_exp prime_iterator divisors is_prime next_prime
+    factor_exp prime_iterator divisors next_prime
+    is_prime is_semiprime is_power
 };
 use Math::Prime::Util::GMP qw{ chinese };
 use Syntax::Keyword::Dynamically;
@@ -491,6 +492,28 @@ sub walk_v {
         $o[$_] += $qq[$_] * $start for 0 .. $#o;
     }
 
+    my @check = do {
+        my(@prime, @semi, @square, @other);
+        for (0 .. $#o) {
+            my $i = $_;
+            my $t = $t[$i];
+            if ($t == 2) {
+                push @prime, sub { is_prime($o[$i]) };
+            } elsif ($t == 4) {
+                push @semi, sub { is_semiprime($o[$i]) };
+            } elsif ($t & 1) {
+                push @square, sub {
+                    my $root;
+                    return 0 unless is_power($o[$i], 2, \$root);
+                    return sqtau($root) == $t[$i];
+                };
+            } else {
+                push @other, sub { tau($o[$i]) == $t };
+            }
+        }
+        (@square, @prime, @semi, @other);
+    };
+
     #
     # This is the core loop, for long runs we expect to spend the bulk
     # of our time here (probably in factorization for the tau() checks).
@@ -515,7 +538,7 @@ sub walk_v {
         return $o[0] * $q[0] if (
             all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o
         ) && (
-            all { tau($o[$_]) == $t[$_] } 0 .. $#o
+            all { $_->() } @check
         );
 
         # step the candidates by prod q_i
@@ -984,6 +1007,14 @@ sub tau {
     $fact //= [ factor_exp($n) ];
     my $k = 1;
     $k *= $_->[1] + 1 for @$fact;
+    return $k;
+}
+
+sub sqtau {
+    my($n, $fact) = @_;
+    $fact //= [ factor_exp($n) ];
+    my $k = 1;
+    $k *= 2 * $_->[1] + 1 for @$fact;
     return $k;
 }
 
