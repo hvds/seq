@@ -261,7 +261,7 @@ sub find_perms {
         map {
             my($power, $count) = ($_, $powers{$i}{$_});
             [ $i, $power, $count, [ sort keys %{ $mods->[$i]{$power} } ] ];
-        } keys %{ $powers{$i} };
+        } sort { $a <=> $b } keys %{ $powers{$i} };
     } @$opt_i;
 
     my $spare = ($target > $source) ? $target - $source : 0;
