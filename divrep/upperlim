@@ -92,8 +92,8 @@ my $mods = find_mods($type);
     my %disallow = map +($_ => 1), @$opt_nq;
     grep !$disallow{$_}, @$opt_q;
 };
-my $runlist = RunList->new;
-find_perms($runlist, $type);
+my $runlist = RunList->new($type);
+find_perms($runlist);
 print $runlist->report;
 $runlist->skipto($opt_s) if $opt_s;
 
@@ -239,7 +239,7 @@ sub fill_perms_r {
 }
 
 sub find_perms {
-    my($runlist, $type) = @_;
+    my($runlist) = @_;
     my @perms;
 
     my %powers;
@@ -287,11 +287,10 @@ sub find_perms {
             my $mm = sprintf '-mm%s/', join ',',
                     map sprintf('%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods;
             $runlist->add($_) for map [
-                $type, $i++, [ $mm . $_ ], \@none
+                $i++, [ $mm . $_ ], \@none
             ], find_mm(scalar(@mods), \@powers, $sample);
         } else {
             $runlist->add([
-                $type,
                 $i++,
                 [ map sprintf('-m%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods ],
                 \@none,
@@ -473,8 +472,9 @@ die "FIXME: \$opt_p no longer looks like this either";
 
 package RunList {
     sub new {
-        my($class) = @_;
+        my($class, $type) = @_;
         return bless {
+            type => $type,
             list => [],
             cur => 0,
         }, $class;
@@ -484,13 +484,13 @@ package RunList {
         my $list = $self->{list};
         return sprintf "Found %d perms (%d .. %d)\n",
                 0 + @$list,
-                (@$list ? map($_->[1], @$list[0, -1]) : (0, -1));
+                (@$list ? map($_->[0], @$list[0, -1]) : (0, -1));
     }
     sub skipto {
         my($self, $to) = @_;
         my $list = $self->{list};
         my $cur = $self->{cur};
-        ++$cur while $list->[$cur] && $list->[$cur]->[1] < $to;
+        ++$cur while $list->[$cur] && $list->[$cur]->[0] < $to;
         $self->{cur} = $cur;
         return;
     }
@@ -505,6 +505,7 @@ package RunList {
     }
     sub fetch {
         my($self) = @_;
-        return Runnable->new(@{ $self->{list}[ $self->{cur}++ ] });
+        my $args = $self->{list}[ $self->{cur}++ ];
+        return Runnable->new($self->{type}, @$args);
     }
 };
