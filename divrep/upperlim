@@ -476,7 +476,6 @@ package RunList {
         return bless {
             type => $type,
             list => [],
-            cur => 0,
         }, $class;
     }
     sub report {
@@ -489,9 +488,7 @@ package RunList {
     sub skipto {
         my($self, $to) = @_;
         my $list = $self->{list};
-        my $cur = $self->{cur};
-        ++$cur while $list->[$cur] && $list->[$cur]->[0] < $to;
-        $self->{cur} = $cur;
+        shift @$list while @$list && $list->[0][0] < $to;
         return;
     }
     sub add {
@@ -501,11 +498,11 @@ package RunList {
     }
     sub more {
         my($self) = @_;
-        return $self->{list}[ $self->{cur} ] ? 1 : 0;
+        return @{ $self->{list} } ? 1 : 0;
     }
     sub fetch {
         my($self) = @_;
-        my $args = $self->{list}[ $self->{cur}++ ];
+        my $args = shift @{ $self->{list} };
         return Runnable->new($self->{type}, @$args);
     }
 };
