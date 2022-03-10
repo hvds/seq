@@ -268,8 +268,7 @@ sub find_perms {
     $spare = $opt_e if $spare < $opt_e;
     fill_perms_r(\@perms, \@order, [], 0, 0, {}, $spare);
     my $i = 0;
-    $runlist->add($_) for map {
-        my $p = $_;
+    for my $p (@perms) {
         my(%none, @mods, @powers);
         for (0 .. $#order) {
             my($i, $x, $count) = @{ $order[$_] };
@@ -284,19 +283,21 @@ sub find_perms {
             }
         }
         my @none = sort { $none{$b} <=> $none{$a} } keys %none;
-        $opt_fq ? do {
+        if ($opt_fq) {
             my $mm = sprintf '-mm%s/', join ',',
                     map sprintf('%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods;
-            map [
+            $runlist->add($_) for map [
                 $type, $i++, [ $mm . $_ ], \@none
             ], find_mm(scalar(@mods), \@powers, $sample);
-        } : [
-            $type,
-            $i++,
-            [ map sprintf('-m%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods ],
-            \@none,
-        ];
-    } @perms;
+        } else {
+            $runlist->add([
+                $type,
+                $i++,
+                [ map sprintf('-m%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods ],
+                \@none,
+            ]);
+        }
+    }
     return;
 }
 
