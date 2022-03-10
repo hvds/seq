@@ -92,7 +92,7 @@ my $mods = find_mods($type);
     my %disallow = map +($_ => 1), @$opt_nq;
     grep !$disallow{$_}, @$opt_q;
 };
-my $runlist = RunList->new($type);
+my $runlist = RunList->new($type, $opt_fq);
 find_perms($runlist);
 print $runlist->report;
 $runlist->skipto($opt_s) if $opt_s;
@@ -283,19 +283,18 @@ sub find_perms {
             }
         }
         my @none = sort { $none{$b} <=> $none{$a} } keys %none;
-        if ($opt_fq) {
-            my $mm = sprintf '-mm%s/', join ',',
+        my $mods = $opt_fq ? do {
+            my $mm = sprintf '-mm%s/', join ',', 
                     map sprintf('%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods;
-            $runlist->add($_) for map [
-                $i++, [ $mm . $_ ], \@none
-            ], find_mm(scalar(@mods), \@powers, $sample);
-        } else {
-            $runlist->add([
-                $i++,
-                [ map sprintf('-m%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods ],
-                \@none,
-            ]);
-        }
+            my $count = @mods;
+            my $subindex = 0;
+            sub {
+                map [ $mm . $_ ], find_mm($count, \@powers, $sample);
+            };
+        } : [
+            map sprintf('-m%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods
+        ];
+        $runlist->add([ $i++, $mods, \@none ]);
     }
     return;
 }
@@ -472,10 +471,11 @@ die "FIXME: \$opt_p no longer looks like this either";
 
 package RunList {
     sub new {
-        my($class, $type) = @_;
+        my($class, $type, $genmod) = @_;
         return bless {
             type => $type,
             list => [],
+            genmod => $genmod,
         }, $class;
     }
     sub report {
@@ -487,8 +487,24 @@ package RunList {
     }
     sub skipto {
         my($self, $to) = @_;
+        ($to, my $subto) = split /\./, $to;
+
         my $list = $self->{list};
         shift @$list while @$list && $list->[0][0] < $to;
+
+        if ($self->{genmod} && @$list) {
+            $self->unpack_mod;
+            if ($subto) {
+                splice @{ $self->{sublist} }, 0, $subto;
+                $self->{suboff} += $subto;
+            }
+        }
+        return;
+    }
+    sub unpack_mod {
+        my($self) = @_;
+        $self->{sublist} = [ $self->{list}[0][1]->() ];
+        $self->{suboff} = 0;
         return;
     }
     sub add {
@@ -502,7 +518,20 @@ package RunList {
     }
     sub fetch {
         my($self) = @_;
-        my $args = shift @{ $self->{list} };
-        return Runnable->new($self->{type}, @$args);
+        my @args;
+        if ($self->{genmod}) {
+            $self->unpack_mod unless $self->{sublist};
+            my $off = $self->{suboff}++;
+            @args = @{ $self->{list}[0] };
+            $args[0] .= ".$off";
+            $args[1] = shift @{ $self->{sublist} };
+            if (@{ $self->{sublist} } == 0) {
+                delete $self->{sublist};
+                shift @{ $self->{list} };
+            }
+        } else {
+            @args = @{ shift @{ $self->{list} } };
+        }
+        return Runnable->new($self->{type}, @args);
     }
 };
