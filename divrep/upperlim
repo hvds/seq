@@ -287,15 +287,15 @@ sub find_perms {
         $opt_fq ? do {
             my $mm = sprintf '-mm%s/', join ',',
                     map sprintf('%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods;
-            map Runnable->new(
+            map [
                 $type, $i++, [ $mm . $_ ], \@none
-            ), find_mm(scalar(@mods), \@powers, $sample);
-        } : Runnable->new(
+            ], find_mm(scalar(@mods), \@powers, $sample);
+        } : [
             $type,
             $i++,
             [ map sprintf('-m%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods ],
             \@none,
-        );
+        ];
     } @perms;
     return;
 }
@@ -483,19 +483,19 @@ package RunList {
         my $list = $self->{list};
         return sprintf "Found %d perms (%d .. %d)\n",
                 0 + @$list,
-                (@$list ? map($_->id, @$list[0, -1]) : (0, -1));
+                (@$list ? map($_->[1], @$list[0, -1]) : (0, -1));
     }
     sub skipto {
         my($self, $to) = @_;
         my $list = $self->{list};
         my $cur = $self->{cur};
-        ++$cur while $list->[$cur] && $list->[$cur]->id < $to;
+        ++$cur while $list->[$cur] && $list->[$cur]->[1] < $to;
         $self->{cur} = $cur;
         return;
     }
     sub add {
-        my($self, $runnable) = @_;
-        push @{ $self->{list} }, $runnable;
+        my($self, $runargs) = @_;
+        push @{ $self->{list} }, $runargs;
         return;
     }
     sub more {
@@ -504,6 +504,6 @@ package RunList {
     }
     sub fetch {
         my($self) = @_;
-        return $self->{list}[ $self->{cur}++ ];
+        return Runnable->new(@{ $self->{list}[ $self->{cur}++ ] });
     }
 };
