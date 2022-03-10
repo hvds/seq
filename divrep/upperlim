@@ -92,11 +92,10 @@ my $mods = find_mods($type);
     my %disallow = map +($_ => 1), @$opt_nq;
     grep !$disallow{$_}, @$opt_q;
 };
-my $perm = find_perms($type);
-printf "Found %d perms (%d .. %d)\n", 0+@$perm, (@$perm ? map($_->id, @$perm[0, -1]) : (0, -1));
-
-my $next = 0;
-++$next while $perm->[$next] && $perm->[$next]->id < $opt_s;
+my $runlist = RunList->new;
+find_perms($runlist, $type);
+print $runlist->report;
+$runlist->skipto($opt_s) if $opt_s;
 
 print "kill -HUP $$\n";
 my $drain = 0;
@@ -109,11 +108,11 @@ while (1) {
         wait_for(\%pid) while keys %pid;
         last;
     }
-    if ($perm->[$next]) {
+    if ($runlist->more) {
         if (keys(%pid) >= $maxproc) {
             wait_for(\%pid);
         } else {
-            my $this = $perm->[$next++];
+            my $this = $runlist->fetch;
             my $pid = $this->run;
             if ($pid) {
                 $min = $this->id if !keys %pid;
@@ -238,9 +237,9 @@ sub fill_perms_r {
     }
     return;
 }
-    
+
 sub find_perms {
-    my($type) = @_;
+    my($runlist, $type) = @_;
     my @perms;
 
     my %powers;
@@ -269,7 +268,7 @@ sub find_perms {
     $spare = $opt_e if $spare < $opt_e;
     fill_perms_r(\@perms, \@order, [], 0, 0, {}, $spare);
     my $i = 0;
-    return [ map {
+    $runlist->add($_) for map {
         my $p = $_;
         my(%none, @mods, @powers);
         for (0 .. $#order) {
@@ -297,7 +296,8 @@ sub find_perms {
             [ map sprintf('-m%s=%s', $_->[0] ** $_->[1], $_->[2]), @mods ],
             \@none,
         );
-    } @perms ];
+    } @perms;
+    return;
 }
 
 sub find_mm {
@@ -467,5 +467,43 @@ die "FIXME: \$opt_p no longer looks like this either";
             return;
         }
         die "Failed to find answer in $log\n";
+    }
+};
+
+package RunList {
+    sub new {
+        my($class) = @_;
+        return bless {
+            list => [],
+            cur => 0,
+        }, $class;
+    }
+    sub report {
+        my($self) = @_;
+        my $list = $self->{list};
+        return sprintf "Found %d perms (%d .. %d)\n",
+                0 + @$list,
+                (@$list ? map($_->id, @$list[0, -1]) : (0, -1));
+    }
+    sub skipto {
+        my($self, $to) = @_;
+        my $list = $self->{list};
+        my $cur = $self->{cur};
+        ++$cur while $list->[$cur] && $list->[$cur]->id < $to;
+        $self->{cur} = $cur;
+        return;
+    }
+    sub add {
+        my($self, $runnable) = @_;
+        push @{ $self->{list} }, $runnable;
+        return;
+    }
+    sub more {
+        my($self) = @_;
+        return $self->{list}[ $self->{cur} ] ? 1 : 0;
+    }
+    sub fetch {
+        my($self) = @_;
+        return $self->{list}[ $self->{cur}++ ];
     }
 };
