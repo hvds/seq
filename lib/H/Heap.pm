@@ -33,6 +33,8 @@ Inserts the specified I<object> into the heap. Returns nothing.
 Removes and returns the least item from the heap. If the heap is empty,
 returns C<undef>.
 
+=back
+
 =cut
 
 sub new {
