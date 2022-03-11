@@ -2,6 +2,7 @@ package ModFunc;
 use strict;
 
 use Math::GMP ();
+use List::Util qw{ reduce };
 
 require Exporter;
 our @ISA = qw/ Exporter /;
@@ -88,9 +89,9 @@ DIE
 }
 
 sub gcd {
-    my($a, $b) = @_;
-    $a = Math::GMP->new($a) unless ref $a;
-    return $a->bgcd($b);
+    my $n0 = shift;
+    $n0 = Math::GMP->new($n0) unless ref $n0;
+    return reduce { $a->bgcd($b) } ($n0, @_);
 }
 
 1;
