@@ -4,10 +4,11 @@ use warnings;
 
 use parent qw{ Type::Tauish };
 use Math::GMP;
-use Math::Prime::Util qw{ factor_exp is_prime next_prime };
+use Math::Prime::Util qw{ factor_exp is_prime next_prime divmod };
 use Memoize;
 
 use ModFunc qw{ gcd };
+use RootMod qw{ allrootmod };
 *tau = \&Type::Tauish::tau;
 
 =head1 Type::AddSeq
@@ -174,6 +175,23 @@ sub mod_ytod {
     my $base = $x * $val ** $z - $n * $k;
 # CHECKME: should we increase $mod if gcd($mod, $z) > 1?
     return ($base % $mod, $mod);
+}
+
+#
+# Given d == d_m (mod m) and d = xy^z - kn, return an arrayref of arrayrefs
+# (y_s, s) as the values and moduli of possible corresponding constraints
+# on y, y == y_s (mod s),
+#
+sub mod_dtoy {
+    my($self, $c, $val, $mod, $which) = @_;
+    my($n, $k, $x, $z) = ($c->n, $c->pow_k, $c->pow_x, $c->pow_z);
+    my $xyz = $val + $k * $n;
+    my $g = gcd($xyz, $mod, $x);
+    if ($g > 1) {
+        $_ /= $g for ($xyz, $mod, $x);
+    }
+    my $yz = divmod($xyz, $x, $mod) // return [];
+    return [ map [ $_, $mod ], allrootmod($yz, $z, $mod) ];
 }
 
 1;

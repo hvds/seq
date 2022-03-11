@@ -4,10 +4,11 @@ use warnings;
 
 use parent qw{ Type::Tauish };
 use Math::GMP;
-use Math::Prime::Util qw{ is_prime next_prime factor_exp };
+use Math::Prime::Util qw{ is_prime next_prime factor_exp divmod };
 use Memoize;
 
 use ModFunc qw/ gcd /;
+use RootMod qw{ allrootmod };
 *tau = \&Type::Tauish::tau;
 
 =head1 Type::TauSeq
@@ -235,6 +236,23 @@ sub mod_ytod {
     } else {
         return (1, 0);
     }
+}
+
+#
+# Given d == d_m (mod m) and d = (xy^z - n) / k, return an arrayref of
+# arrayrefs (y_s, s) as the values and moduli of possible corresponding
+# constraints on y, y == y_s (mod s),
+#
+sub mod_dtoy {
+    my($self, $c, $val, $mod, $which) = @_;
+    my($n, $k, $x, $z) = ($c->n, $c->pow_k, $c->pow_x, $c->pow_z);
+    my $xyz = $val * $k + $n;
+    my $g = gcd($xyz, $mod, $x);
+    if ($g > 1) {
+        $_ /= $g for ($xyz, $mod, $x);
+    }
+    my $yz = divmod($xyz, $x, $mod) // return [];
+    return [ map [ $_, $mod ], allrootmod($yz, $z, $mod) ];
 }
 
 1;

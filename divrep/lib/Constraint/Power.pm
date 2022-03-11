@@ -2,17 +2,19 @@ package Constraint::Power;
 use strict;
 our @ISA = qw/ Constraint /;
 
-use ModFunc qw/ quadvec mod_combine gcd /;
+use ModFunc qw{ quadvec mod_combine gcd };
+use RootMod qw{ allrootmod };   # will come from Math::Prime::Util when released
 use warnings;
-no warnings qw/ recursion /;
+no warnings qw{ recursion };
 
 #
 # Constraint::Power->new($c, $k, $x, $z, $opt_mpow)
 # - specialization of Constraint, to find values matching the constraints
 #   specified for the Constraint object $c with the additional requirement
-#   that the k'th target is xy^z, so far a given y we have:
+#   that the k'th target is of form xy^z, so far a given y we have:
 #     d = (xy^z - n) / k    (tauseq)
 #     d = xy^z - kn         (addseq)
+#     d = xy^z - k          (oneseq)
 #
 sub new {
     my($class, $c, $k, $x, $z, $opt_mpow) = @_;
@@ -100,36 +102,27 @@ sub next {
     return $self->type->ytod($self, $cur);
 }
 
+#
+# Given a modular constraint d == v_d (mod m_d), we want to convert it to
+# a constraint y == v_y (mod m_y); but there may be more than one possible
+# v_y, so we additionally must specify which one we want.
+# Input is of form [ "${m_d}=$v_d", $which ], output is of form "$m_y=$v_y"
+# such that when $which == 0 we return the numerically least $v_y, etc.
+# 
 sub convert_mod_override {
     my($self, $array) = @_;
     my($override, $which) = @$array;
-    ++$which;
     my($mod, $op, $val) = ($override =~ m{ ^ (\d+) (=) (\d+) \z }x)
             or die "Invalid power mod override '$override'";
-    my($found, $coval) = (0, undef);
     my $type = $self->type;
-    VAL: for (0 .. $mod - 1) {
-        my($subval, $submod) = $type->mod_ytod($self, $_, $mod);
-        next VAL unless $submod;
-        if ($mod != $submod) {
-            my $cosubval = ($val % $submod);
-            next VAL unless $cosubval == $subval;
-            printf <<WARN, $subval, $submod, $cosubval, $mod;
-318 Ambiguous mod fix: y==%s (mod %s) yields d==%s (mod %s)
-WARN
-            $subval = $val; # treat as valid
-        }
-        next VAL unless $subval == $val;
-        $coval = $_;
-        last VAL if ++$found == $which;
-    }
-    unless ($found == $which) {
-        printf <<DIE, $found, $which, $val, $mod;
+    my $roots = $type->mod_dtoy($self, $val, $mod, $which);
+    unless ($roots->[$which]) {
+        printf <<DIE, 0 + @$roots, $which, $val, $mod;
 519 Found only %s of %s values matching %s (mod %s)
 DIE
         exit 1;
     }
-    return "$mod=$coval";
+    return sprintf "%s=%s", @{ $roots->[$which] }[1, 0];
 }
 
 sub mod_override {
