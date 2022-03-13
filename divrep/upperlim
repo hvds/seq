@@ -59,6 +59,7 @@ $| = 1;
 my($n, $f) = map MBI($_), @ARGV;
 $0 = "upperlim($n $f)";
 $_ = ston($_) for ($opt_n, $opt_x);
+$opt_x = $opt_n if $sample;
 my $type = Type->new($typename);
 
 my $zone = MBI(1);
@@ -266,6 +267,7 @@ sub find_perms {
 
     my $spare = ($target > $source) ? $target - $source : 0;
     $spare = $opt_e if $spare < $opt_e;
+    $spare = $target -1 if $sample;
     fill_perms_r(\@perms, \@order, [], 0, 0, {}, $spare);
     my $i = 0;
     for my $p (@perms) {
