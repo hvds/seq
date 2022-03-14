@@ -271,6 +271,7 @@ OUT
                 report_seq($n, $f, $cur, $_) unless $seq_seen[$_]++;
                 next CUR;
             }
+            $seq_seen[@$tester]++;
             report_reach($n, $f, $cur, $c);
             return $cur;
         }
