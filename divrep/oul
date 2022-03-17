@@ -498,7 +498,12 @@ sub walk_v {
             if ($t == 2) {
                 push @prime, sub { is_prime($o[$i]) };
             } elsif ($t == 4) {
-                push @semi, sub { is_semiprime($o[$i]) };
+                push @semi, sub {
+                    my $root;
+                    return is_semiprime($o[$i])
+                        ? !is_power($o[$i], 2)
+                        : (is_power($o[$i], 3, \$root) && is_prime($root));
+                };
             } elsif ($t & 1) {
                 push @square, sub {
                     my $root;
