@@ -48,6 +48,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($opt_t = $arg || shift(@ARGV)), next if $arg =~ s{^-t(?!s)}{};
     ($opt_ts = $arg || shift(@ARGV)), next if $arg =~ s{^-ts}{};
     ($typename = $arg || shift(@ARGV)), next if $arg =~ s{^-y}{};
+    ($maxproc = $arg || shift(@ARGV)), next if $arg =~ s{^-mp}{};
     push(@$opt_m, $arg || shift(@ARGV)), next if $arg =~ s{^-m}{};
     push(@$opt_q, $arg || shift(@ARGV)), next if $arg =~ s{^-q}{};
     push(@$opt_i, $arg || shift(@ARGV)), next if $arg =~ s{^-i}{};
