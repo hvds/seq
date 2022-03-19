@@ -108,8 +108,10 @@ my @v = map +{
 
 # Recursion level
 my $level = 0;
-# Product of v[i]{q} per recursion level
+# LCM of v[i]{q} per recursion level
 my @aq = ($zone);
+# powers of primes included in @aq
+my %pp;
 
 my($countr, $countw) = (0, 0);
 
@@ -141,14 +143,16 @@ sub inject {
     my $vlevel = $v->{l};
     my $px = MBI($p) ** $x;
     ++$x;
+    my($ax, $apx) = new_power($p, $x, $px);
 
+    # never localized
     $v->{p}[$vlevel] = $p;
     $v->{x}[$vlevel] = $x;
 
     # when recursing, these changes are localized
     $v->{l} = $v->{l} + 1;
-# FIXME: should be LCM
-    $aq[$level + 1] = $aq[$level] * $px;
+    $pp{$p} = $ax;
+    $aq[$level + 1] = $aq[$level] * $apx;
     $v->{pu}{$p} = 1;
     $v->{q} = $v->{q} * $px;
     $v->{t} = $v->{t} / $x;
@@ -239,13 +243,15 @@ sub recurse_inject {
     ++$fi if $is_rec2;
 
     my $px = MBI($p) ** ($x - 1);
+    my($ax, $apx) = new_power($p, $x, $px);
+
     $v->{p}[$vlevel] = $p;
     $v->{x}[$vlevel] = $x;
 
     {
         local $v->{l} = $v->{l} + 1;
-# FIXME: should be lcm
-        local $aq[$level + 1] = $aq[$level] * $px;
+        local $pp{$p} = $ax;
+        local $aq[$level + 1] = $aq[$level] * $apx;
         local $v->{pu}{$p} = 1;
         local $v->{q} = $v->{q} * $px;
         local $v->{t} = $v->{t} / $x;
@@ -330,8 +336,9 @@ sub rec2 {
 
             local $v->{t} = $tnext;
             local $v->{q} = $q;
-# FIXME: should be lcm
-            local $aq[$level + 1] = $aq[$level] * $px;
+            my($ax, $apx) = new_power($p, $x, $px);
+            local $pp{$p} = $ax;
+            local $aq[$level + 1] = $aq[$level] * $apx;
             ++$level;
             do_diag(desc(\@v)) if times() >= $diagt;
             if ($x != 4) {
@@ -456,8 +463,9 @@ sub recurse {
 
             local $v->{t} = $tnext;
             local $v->{q} = $q;
-# FIXME: should be LCM
-            local $aq[$level + 1] = $aq[$level] * $px;
+            my($ax, $apx) = new_power($p, $x, $px);
+            local $pp{$p} = $ax;
+            local $aq[$level + 1] = $aq[$level] * $apx;
             ++$level;
             do_diag(desc(\@v)) if times() >= $diagt;
             recurse();
@@ -466,6 +474,17 @@ sub recurse {
     }
     $#{ $v->{p} } = $vlevel - 1;
     return;
+}
+
+sub new_power {
+    my($p, $x, $px) = @_;
+    # assign the whole p^x if we haven't seen p before
+    my $op = $pp{$p} || return +($x, $px);
+    # assign nothing if we've seen a higher p^x before
+    return +($op, 1) if $op >= $x;
+    # else assign the difference
+    my $ax = $x - $op;
+    return +($ax, MBI($p) ** $ax);
 }
 
 sub walk_1 {
