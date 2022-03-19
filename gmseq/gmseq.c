@@ -24,14 +24,14 @@ mpz_t tz, cm_maxf;
 /* variables for calc_max() */
 mpz_t chigh, clow, t1, t2;
 
-/* non-recursed variables for A118085_r() */
+/* non-recursed variables for A085098_r() */
 mpz_t d, tempz, cur, cmax, g, p2, q2, minf;
 
-/* stack of recursed variables for A118085_r() */
-typedef struct A118085_r_varstack {
+/* stack of recursed variables for A085098_r() */
+typedef struct A085098_r_varstack {
 	mpz_t cur, cmax, p2, q2;
-} A118085_r_varstack_t;
-A118085_r_varstack_t va[MAXN];
+} A085098_r_varstack_t;
+A085098_r_varstack_t va[MAXN];
 int van;
 
 /* for n=8, largest prime factor < 3.2^16 */
@@ -729,7 +729,7 @@ void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
 	}
 }
 
-void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
+void A085098_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 	  /* p, q /= gcd(p, q) */
 	mpz_gcd(g, p, q);
 	if (mpz_cmp_ui(g, 1) > 0) {
@@ -751,7 +751,7 @@ void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 #endif
 
 	if (n > 3) {
-		A118085_r_varstack_t *v = &va[n - 1];
+		A085098_r_varstack_t *v = &va[n - 1];
 		mpz_set(v->cur, cur);
 		mpz_set(v->cmax, cmax);
 		for (; mpz_cmp(v->cur, v->cmax) <= 0; mpz_add_ui(v->cur, v->cur, 1)) {
@@ -762,7 +762,7 @@ void A118085_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
 			mpz_mul(v->p2, p, v->cur);
 			mpz_add_ui(v->q2, v->cur, 1);
 			mpz_mul(v->q2, v->q2, q);
-			A118085_r(n - 1, v->p2, v->q2, v->cur);
+			A085098_r(n - 1, v->p2, v->q2, v->cur);
 		}
 		return;
 	}
@@ -816,7 +816,7 @@ int main(int argc, char** argv) {
 			break;
 		} else if (strcmp(argv[arg], "-?") == 0 || strcmp(argv[arg], "-h") == 0) {
 			printf("Usage: %s [ -q ] [ -v ] <n> [ <a_1> <a_2> ... ]\n", argv[0]);
-			printf("Calculates A118085(n), the number of n-element multisets with prod{1+1/a_i}=2\nAny specified a_i are fixed in the ordered list of elements\nIf -v is specified, information on matching multisets is also printed\nIf neither -v nor -q is specified, reports progress every %u iterations\n", DEBUG_LOOP);
+			printf("Calculates A085098(n), the number of n-element multisets with prod{1+1/a_i}=2\nAny specified a_i are fixed in the ordered list of elements\nIf -v is specified, information on matching multisets is also printed\nIf neither -v nor -q is specified, reports progress every %u iterations\n", DEBUG_LOOP);
 			exit(0);
 		} else {
 			fprintf(stderr, "Unknown option '%s'\n", argv[arg]);
@@ -864,7 +864,7 @@ int main(int argc, char** argv) {
 		--n;
 		++arg;
 	}
-	gmp_fprintf(stderr, "count A118085(n=%d, p=%Zd, q=%Zd, cmin=%Zd)\n",
+	gmp_fprintf(stderr, "count A085098(n=%d, p=%Zd, q=%Zd, cmin=%Zd)\n",
 			n, p, q, cur);
 	if (n < 3) {
 		fprintf(stderr, "This code requires at least 3 elements unspecified\n");
@@ -874,7 +874,7 @@ int main(int argc, char** argv) {
 	t0 = times((struct tms *)NULL);
 	clock_tick = sysconf(_SC_CLK_TCK);
 	mpz_set_ui(total, 0);
-	A118085_r(n, p, q, cur);
+	A085098_r(n, p, q, cur);
 	debug_clear();
 	gmp_printf("result: %Zd (%.2f)\n", total, ((double)(times((struct tms *)NULL) - t0)) / clock_tick);
 	cleanz();
@@ -882,7 +882,7 @@ int main(int argc, char** argv) {
 }
 
 /*
-  A118085(n) counts the number of distinct multisets { a_1, a_2, ... a_n }
+  A085098(n) counts the number of distinct multisets { a_1, a_2, ... a_n }
   such that prod{1+1/a_i} = 2.
 
   This program takes mandatory first parameter n, and optional additional
