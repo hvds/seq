@@ -98,7 +98,7 @@ void initp(void) {
             ;
     }
     mpz_init(pmax);
-    mpz_set_ui(pmax, PLIM + 1);
+    mpz_set_ui(pmax, PLIM);
     mpz_mul(pmax, pmax, pmax);
 }
     
@@ -134,7 +134,7 @@ void cleanz(void) {
 /*
   find the next prime power prime[pi]^k dividing *n0, pi >= *pi0
   returns k, and sets *pi0 = pi, *n0 = *n0 / prime[pi]^k
-  if n is a prime > PLIM, returns 1 and sets *pi0 = -1, n = prime
+  if n is a prime >= PLIM, returns 1 and sets *pi0 = -1, n = prime
 */
 int nextpp_i(unsigned long *n0, int *pi0) {
     int pi = *pi0, k;
@@ -161,7 +161,7 @@ int nextpp_i(unsigned long *n0, int *pi0) {
 /*
   find the next prime power prime[pi]^k dividing n, pi >= *pi0
   returns k, and sets *pi0 = pi, n = n / prime[pi]^k
-  if n is a prime > PLIM, returns 1 and sets *pi0 = -1, n = prime
+  if n is a prime >= PLIM, returns 1 and sets *pi0 = -1, n = prime
 */
 int nextpp_z(mpz_t n, int *pi0) {
     int pi = *pi0, k;
@@ -272,7 +272,7 @@ void append_zdivisors(mpz_t n, mpz_t maxf) {
         ++pi;
     }
     un = mpz_get_ui(n);
-    while (un > PLIM) {
+    while (un >= PLIM) {
         k = nextpp_i(&un, &pi);
         if (pi < 0) {
             append_zdivisors_pp(k, un, maxf);
@@ -305,7 +305,7 @@ void append_udivisors(mpz_t n, unsigned long maxf) {
         ++pi;
     }
     un = mpz_get_ui(n);
-    while (un > PLIM) {
+    while (un >= PLIM) {
         k = nextpp_i(&un, &pi);
         if (pi < 0) {
             append_udivisors_pp(k, un, maxf);
@@ -369,7 +369,7 @@ void append_udivisors_mod(mpz_t n) {
         ++pi;
     }
     un = mpz_get_ui(n);
-    while (un > PLIM) {
+    while (un >= PLIM) {
         k = nextpp_i(&un, &pi);
         if (pi < 0) {
             append_udivisors_pp_mod(k, un);
@@ -405,7 +405,7 @@ int tau(mpz_t n) {
         ++pi;
     }
     un = mpz_get_ui(n);
-    while (un > PLIM) {
+    while (un >= PLIM) {
         k *= 1 + nextpp_i(&un, &pi);
         if (pi < 0) return k;
     }
@@ -442,7 +442,7 @@ int tau_zmax(mpz_t n, mpz_t maxf) {
         ++pi;
     }
     un = mpz_get_ui(n);
-    while (un > PLIM) {
+    while (un >= PLIM) {
         pow = nextpp_i(&un, &pi);
         k *= pow + 1;
         append_zdivisors_pp(pow, pi < 0 ? un : prime[pi], maxf);
@@ -477,7 +477,7 @@ int tau_umax(mpz_t n, unsigned long maxf) {
         ++pi;
     }
     un = mpz_get_ui(n);
-    while (un > PLIM) {
+    while (un >= PLIM) {
         pow = nextpp_i(&un, &pi);
         k *= pow + 1;
         append_udivisors_pp(pow, pi < 0 ? un : prime[pi], maxf);
@@ -660,6 +660,15 @@ void count_min_mod(mpz_t p, mpz_t q, mpz_t d, mpz_t minf) {
     }
 }
 
+/*
+  Set cmid = max(c): p.c^n <= q.(c+1)^n;
+  if cmid < cmin set it to 0 instead.
+global variables:
+  mpz_t chigh;  upper bound for binary chop
+  mpz_t clow;   lower bound for binary chop
+  mpz_t t1;     temp p . c^n
+  mpz_t t2;     temp q . (c+1)^n
+*/
 void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
     mpz_set(cmid, cmin);
     int state = 0, cmp;
@@ -677,6 +686,7 @@ void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
 #endif
         switch (state) {
           case 0:
+            /* state 0: initial calculation */
             if (cmp > 0) {
                 /* cmin is already too high, so return result < cmin */
                 mpz_set_ui(cmid, 0);
@@ -692,6 +702,7 @@ void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
             mpz_mul_2exp(cmid, cmid, 2);
             break;
           case 1:
+            /* state 1: find upper bound by repeated doubling of cmid */
             if (cmp > 0) {
                 /* finally found an upper bound, enter binary chop phase */
                 mpz_set(chigh, cmid);
@@ -708,9 +719,11 @@ void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
             }
             break;
           case 2:
+            /* state 2: binary chop in range clow to chigh */
             if (cmp > 0) {
                 mpz_set(chigh, cmid);
             } else if (cmp == 0) {
+                /* cmid is exactly right, return it */
                 return;
             } else {
                 mpz_set(clow, cmid);
@@ -729,6 +742,9 @@ void calc_max(mpz_t cmid, int n, mpz_t p, mpz_t q, mpz_t cmin) {
     }
 }
 
+/* Increase 'total' by the number of ways we can express p/q as a product
+ * of n rationals of the form (a_i + 1)/a_i, where each a_i >= cmin.
+ */
 void A085098_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
       /* p, q /= gcd(p, q) */
     mpz_gcd(g, p, q);
