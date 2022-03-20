@@ -816,6 +816,16 @@ void A085098_r(int n, mpz_t p, mpz_t q, mpz_t cmin) {
     }
 }
 
+/*
+  A085098(n) counts the number of distinct multisets { a_1, a_2, ... a_n }
+  such that prod{1+1/a_i} = 2.
+
+  This program takes mandatory first parameter n, and optional additional
+  parameters a_1, a_2, ... and counts the number of distinct n-element
+  multisets satisfying the above property, with any specified a_i fixed,
+  and with all new a_i greater than or equal to the largest specified a_i.
+*/
+
 int main(int argc, char** argv) {
     int n, arg = 1;
     long clock_tick;
@@ -896,92 +906,3 @@ int main(int argc, char** argv) {
     cleanz();
     return 0;
 }
-
-/*
-  A085098(n) counts the number of distinct multisets { a_1, a_2, ... a_n }
-  such that prod{1+1/a_i} = 2.
-
-  This program takes mandatory first parameter n, and optional additional
-  parameters a_1, a_2, ... and counts the number of distinct n-element
-  multisets satisfying the above property, with any specified a_i fixed,
-  and with all new a_i greater than or equal to the largest specified a_i.
-
-  Timings marked 'v<n>:' are from version n/100 of the code.
-
-gmseq 3 - result: 5 (0.00)
-gmseq 4 - result: 43 (0.00)
-gmseq 5 - result: 876 (0.00)
-gmseq 6 - result: 49513 (0.03)
-gmseq 7 - result: 13005235 (65.22)
-gmseq 8 - (est. 12000000)
-
-gmseq 8 11 - result: 0 (0.00)
-gmseq 8 10 - result: 0 (0.00)
-gmseq 8 9 - result: 9 (0.00)
-gmseq 8 8 - result: 130 (0.00)
-gmseq 8 7 - result: 1683 (0.02)
-gmseq 8 6 - result: 59606 (0.11)
-gmseq 8 5 - result: 1470772 (4.69)
-gmseq 8 4 - (est. 360000)
-gmseq 8 3 - (est. 1250000)
-gmseq 8 2 - (est. 1225000000)
-
-gmseq 8 4 14 - result: 0 (0.00)
-gmseq 8 4 13 - result: 0 (0.00)
-gmseq 8 4 12 - result: 5 (0.00)
-gmseq 8 4 11 - result: 17 (0.00)
-gmseq 8 4 10 - result: 345 (0.00)
-gmseq 8 4 9 - result: 1159 (0.01)
-gmseq 8 4 8 - result: 7169 (0.03)
-gmseq 8 4 7 - result: 105009 (0.17)
-gmseq 8 4 6 - result: 3881067 (497.62) (v4:560.24)
-gmseq 8 4 5 - result: 3250390 (5.46)
-gmseq 8 4 4 - (est. 360000)
-[... 8 4 4 (23..4) ...]
-[gmseq 8 4 4 6 - result: 3549078 (19.64)]
-[gmseq 8 4 4 5 - result: 8013817 (56.96)]
-[gmseq 8 4 4 4 - (est. 360000)]
-
-gmseq 8 3 16 - result: 0 (0.00)
-gmseq 8 3 15 - result: 2 (0.00)
-gmseq 8 3 14 - result: 12 (0.00)
-gmseq 8 3 13 - result: 28 (0.00)
-gmseq 8 3 12 - result: 263 (0.00)
-gmseq 8 3 11 - result: 708 (0.01)
-gmseq 8 3 10 - result: 5616 (0.03)
-gmseq 8 3 9 - result: 29605 (0.10)
-gmseq 8 3 8 - result: 251077 (0.31)
-gmseq 8 3 7 - result: 3443209 (318.44) (v4:401.17)
-gmseq 8 3 6 - result: 18632445 (v5:1078.53) (v4:1504.26)
-gmseq 8 3 5 - result: 55759629 (v4:3316.43)
-gmseq 8 3 4 - result: 159867712 (v4:30100.49)
-gmseq 8 3 3 - (est. 1200000)
-[... 8 3 3 (50..9) ...]
-[gmseq 8 3 3 19 - result: 1613078 (11.64)]
-[gmseq 8 3 3 18 - result: 2718281 (16.08)]
-[gmseq 8 3 3 17 - result: 9038231 (110.58)]
-[gmseq 8 3 3 16 - result: 12260996 (221.82)]
-[gmseq 8 3 3 15 - result: 18280089 (v5:1066.00)]
-
-gmseq 8 2 23 - result: 0 (0.00)
-gmseq 8 2 22 - result: 0 (0.00)
-gmseq 8 2 21 - result: 3 (0.00)
-gmseq 8 2 20 - result: 13 (0.00)
-gmseq 8 2 19 - result: 8 (0.00)
-gmseq 8 2 18 - result: 232 (0.01)
-gmseq 8 2 17 - result: 236 (0.03)
-gmseq 8 2 16 - result: 1201 (0.05)
-gmseq 8 2 15 - result: 7452 (0.06)
-gmseq 8 2 14 - result: 19715 (0.19)
-gmseq 8 2 13 - result: 71988 (0.39)
-gmseq 8 2 12 - result: 234759 (0.88)
-gmseq 8 2 11 - result: 907158 (2.83)
-gmseq 8 2 10 - result: 10998677 (v4:3562.45)
-gmseq 8 2 9 - result: 18352365 (319.19) (v4:569.73)
-gmseq 8 2 8 - (est. 100000)
-gmseq 8 2 7 - (est. 400000)
-gmseq 8 2 6 - (est. 2000000)
-gmseq 8 2 5 - (est. 20000000)
-gmseq 8 2 4 - (est. 100000000)
-
-*/
