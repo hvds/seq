@@ -78,7 +78,7 @@ my $use_rec2 = use_rec2();
 prep_mintau();
 
 my($diag_delay, $log_delay) = (1, 600);
-$t0 = scalar times() unless $rrun;
+$t0 = 0 unless $rrun;
 my($diagt, $logt) = ($diag_delay, $log_delay);
 
 $max ||= f()->f unless $nodb;       # set from db if not specified
