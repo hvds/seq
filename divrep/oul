@@ -7,7 +7,7 @@ use Math::Prime::Util qw{
     is_prime is_semiprime is_power
 };
 use Math::Prime::Util::GMP qw{ chinese };
-use List::Util qw{ first sum0 all };
+use List::Util qw{ first sum0 all min };
 use Algorithm::Loops qw{ NestedLoops };
 use lib 'lib';
 use Type;
@@ -70,6 +70,9 @@ $gain //= 1;
 $0 = "oul($n $k)";
 $type->bind($n);
 
+# When k >= p^2 + 1, it is possible to assign more than one power of p.
+my $max_repeat = int(sqrt($k - 1));
+
 my $nf = [ factor_exp($n) ];
 my $tn = tau($n, $nf);
 my(%fact, %nofact);
@@ -96,8 +99,8 @@ my %used;
 # Elements v[0..k-1] represent the composition of the value d+i that
 # we're trying to build up. Each element is a hashref of:
 #   p[] => primes we've allocated to the factors
-#   pu{} => lookup of primes in p[]
 #   x[] => the power we've raised those primes to
+#   pu{} => lookup of p[] to x[]
 #   q => total value attributed
 #   t => tau() not yet accounted for (ie n / tau(q))
 #   l => level: how many entries in p[] and x[] are valid
@@ -153,7 +156,7 @@ sub inject {
     $v->{l} = $v->{l} + 1;
     $pp{$p} = $ax;
     $aq[$level + 1] = $aq[$level] * $apx;
-    $v->{pu}{$p} = 1;
+    $v->{pu}{$p} = $x;
     $v->{q} = $v->{q} * $px;
     $v->{t} = $v->{t} / $x;
     $used{$p} = $i;
@@ -252,7 +255,7 @@ sub recurse_inject {
         local $v->{l} = $v->{l} + 1;
         local $pp{$p} = $ax;
         local $aq[$level + 1] = $aq[$level] * $apx;
-        local $v->{pu}{$p} = 1;
+        local $v->{pu}{$p} = $x;
         local $v->{q} = $v->{q} * $px;
         local $v->{t} = $v->{t} / $x;
         local $used{$p} = $i;
@@ -328,7 +331,7 @@ sub rec2 {
 
             local $v->{l} = $v->{l} + 1;
             local $used{$p} = $i;
-            local $v->{pu}{$p} = 1;
+            local $v->{pu}{$p} = $x;
             $v->{p}[$vlevel] = $p;
             my $px = $zone << ($x - 1);
             my $q = $px;
@@ -429,21 +432,15 @@ sub recurse {
             last if defined($cap) && $p > $cap;
             my $u = $used{$p};
             if (defined $u) {
-                # max(k) < 7^2 + 1 for all n in our range (1..100)
-                next if $p > 5;
-                # Suppress if p is used, as long as it wasn't used p^2 away
-                my $gap = $u - $i;
-                next if $v->{pu}{$p} || ($gap % ($p * $p)) != 0;
-                # Suppress 2^m if 2^m is also used 4 away from us
-                next if $p == 2 && abs($gap) == 4 && do {
-                    my $px = $zone << ($x - 1);
-                    ($v[$u]{q} % ($px << 1)) == $px;
-                };
-                # Still need the inverse: when p^x is allocated to v_i,
-                # should force p^y on v_{i+p^2} for some valid y >= 2.
+                # we've already allocated this prime at least once, is it valid
+                # to allocate it again?
+                # TODO: consider replacing this with pre-allocation of all
+                # repeats
+                next if $p > $max_repeat;
+                next unless valid_power($p, $x, $i, $u);
             }
             local $used{$p} = $i;
-            local $v->{pu}{$p} = 1;
+            local $v->{pu}{$p} = $x;
             my $px = MBI($p) ** ($x - 1);
             $v->{p}[$vlevel] = $p;
             my $q = $v->{q} * $px;
@@ -474,6 +471,38 @@ sub recurse {
     }
     $#{ $v->{p} } = $vlevel - 1;
     return;
+}
+
+#
+# We want to assign p^(x_i - 1) to v_i, but we've already assigned some
+# power of p to v_u. Would that give us a valid combination?
+#
+sub valid_power {
+    my($p, $xi, $i, $u) = @_;
+
+    # never allow the same prime twice at the same spot
+    return 0 if $v[$i]->{pu}{$p};
+
+    # cannot be valid unless gap to previous use is a multiple of p^2
+    my $gap = $u - $i;
+    return 0 if ($gap % ($p * $p)) != 0;
+
+    # broader version of above check
+    my $xu = $v[$u]->{pu}{$p};
+    my $xm = min($xi, $xu);
+    if ($xm > 3) {
+        return 0 if ($gap % (MBI($p) ** ($xm - 1))) != 0;
+    }
+
+    # for p=2, cannot have p^y twice separated by p^y
+    if ($p == 2) {
+        return 0 if $xi == $xu && abs($gap) == 2 ** ($xi - 1);
+    }
+
+    # TODO: if k > 2p^2, may have more than one previous use,
+    # and we need all occurrences to be collectively valid.
+
+    return 1;
 }
 
 sub new_power {
