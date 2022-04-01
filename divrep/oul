@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Math::GMP;
 use Math::Prime::Util qw{
-    factor_exp prime_iterator divisors next_prime
+    factor_exp prime_iterator divisors next_prime valuation
     is_prime is_semiprime is_power
 };
 use Math::Prime::Util::GMP qw{ chinese };
@@ -488,19 +488,26 @@ sub valid_power {
     return 0 if ($gap % ($p * $p)) != 0;
 
     # broader version of above check
+    # $xi and $xu are +1, so we increment valuation to match
+    my $pow = valuation($gap, $p) + 1;
     my $xu = $v[$u]->{pu}{$p};
-    my $xm = min($xi, $xu);
-    if ($xm > 3) {
-        return 0 if ($gap % (MBI($p) ** ($xm - 1))) != 0;
+    if ($xi < $pow) {
+        # 2^2 (8) 2^2 is ok, 2^2 (8) 2^3 is not
+        return 0 unless $xu == $xi;
+    } elsif ($xi > $pow) {
+        # 2^5 (4) 2^2 is ok, 2^5 (4) 2^3 is not
+        return 0 unless $xu == $pow;
+    } else {
+        # 2^2 (4) 2^5 or 3^2 (9) 3^2 are ok, 2^3 (8) 2^2 is not
+        return 0 unless $xu >= $pow;
+        # and 2^2 (4) 2^2 is not
+        return 0 if $p == 2 && $xu == $pow;
     }
 
-    # for p=2, cannot have p^y twice separated by p^y
-    if ($p == 2) {
-        return 0 if $xi == $xu && abs($gap) == 2 ** ($xi - 1);
-    }
-
-    # TODO: if k > 2p^2, may have more than one previous use,
-    # and we need all occurrences to be collectively valid.
+    # TODO: if k > 2p^2, may have more than one previous use, and we need
+    # all occurrences to be collectively valid. I suspect for p=2 it would
+    # be enough if the valuation check above passes for a selection of pairs,
+    # but for eg 3^2 (9) 3^2 (9) 3^2 it's not enough.
 
     return 1;
 }
