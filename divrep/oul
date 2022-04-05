@@ -35,7 +35,7 @@ my $zero = MBI(0);
 my $zone = MBI(1);
 
 my($max, $inject, $debug, $nodb) = (0) x 4;
-my($rrun, $cap, $gain);
+my($rrun, $cap, $gain, $start);
 my $typename = 'o';
 my $maxproc = 6;
 my $seen_best = 0;
@@ -47,6 +47,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($gain = $arg || shift(@ARGV)), next if $arg =~ s{^-g}{};
     ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     ($cap = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
+    ($start = length($arg) ? $arg : shift @ARGV), next if $arg =~ s{^-s}{};
     $inject = 1, next if $arg eq '-i';
     $nodb = 1, next if $arg eq '-n';
     ++$debug, next if $arg eq '-d';
@@ -64,9 +65,13 @@ my $db = $nodb ? undef : Seq::Db->new($type, 0);
 
 my($n, $k, $r, $fh, $t0,  @rstack, $rwalk);
 $max = ston($max) if $max;
-($r, $fh) = recover($rrun) if $rrun;
-($n, $k) = @ARGV unless $rrun;
+if ($rrun) {
+    ($r, $fh) = recover($rrun);
+} else {
+    ($n, $k) = @ARGV;
+}
 $gain //= 1;
+$start //= 0;
 $0 = "oul($n $k)";
 $type->bind($n);
 
@@ -123,10 +128,10 @@ my @minp;
 prep_minp();
 
 ($r, $fh) = prep_run($n, $k, $complete) if $inject && !$rrun;
-report(sprintf "001 %s%s%s%s%s\n",
+report(sprintf "001 %s%s%s%s%s%s\n",
     ($rrun ? 'recover ' : ''),
     $0, ($cap ? " -p$cap" : ""), ($gain > 1 ? " -g$gain" : ""),
-    $max ? " -x$max" : ""
+    ($start ? " -s$start" : ""), ($max ? " -x$max" : ""),
 );
 
 if ($rrun) {
@@ -631,8 +636,7 @@ sub best_rec2 {
 # at least one factor to allocate.
 sub best_v {
     my($i, $vi);
-    # FIXME: hack to place 2^{p-1} somewhere central as first try
-    return $#v >> 1 if $level == 0;
+    return $start if $level == 0;
     for my $j (0 .. $#v) {
         my $vj = $v[$j];
         # skip if no odd prime factor
@@ -764,13 +768,15 @@ sub recover {
         ^ 001 \s+ oul\( (\d+) \s+ (\d+) \)
         (?: \s+ -p(\d+) )?
         (?: \s+ -g(\d+) )?
+        (?: \s+ -s(\d+) )?
         (?: \s+ -x(\d+) )?
         $
     }x or die "Cannot parse header for $path: $head";
     ($n, $k) = ($1, $2);
     $cap = $3 if $3;
     $gain //= $4 if $4; # allow caller to override
-    $max //= $5 if $5; # allow caller to override
+    $start = $5 if defined $5;
+    $max //= $6 if $6; # allow caller to override
 
     my $pos = tell $rfh;
     my $trunc = 0;
