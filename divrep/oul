@@ -563,30 +563,47 @@ sub walk_v {
     }
 
     my @check = do {
+        # Categorize by required tau()
         my(@prime, @semi, @square, @other);
-        for (0 .. $#o) {
-            my $i = $_;
+        for my $i (0 .. $#o) {
             my $t = $t[$i];
             if ($t == 2) {
-                push @prime, sub { is_prime($o[$i]) };
+                push @prime, $i;
             } elsif ($t == 4) {
-                push @semi, sub {
-                    my $root;
-                    return is_semiprime($o[$i])
-                        ? !is_power($o[$i], 2)
-                        : (is_power($o[$i], 3, \$root) && is_prime($root));
-                };
+                push @semi, $i;
             } elsif ($t & 1) {
-                push @square, sub {
-                    my $root;
-                    return 0 unless is_power($o[$i], 2, \$root);
-                    return sqtau($root) == $t[$i];
-                };
+                push @square, $i;
             } else {
-                push @other, sub { tau($o[$i]) == $t };
+                push @other, $i;
             }
         }
-        (@square, @prime, @semi, @other);
+
+        # Sort each category by smallest first (hence largest divisor)
+        @$_ = sort { $q[$b] <=> $q[$a] } @$_ for (
+            \@prime, \@semi, \@square, \@other
+        );
+
+        # Create callbacks for each element, and order the categories
+        # fastest first: squares, primes, semiprimes, others
+        (
+            (map { my $i = $_; sub {
+                my $root;
+                return 0 unless is_power($o[$i], 2, \$root);
+                return sqtau($root) == $t[$i];
+            } } @square),
+            (map { my $i = $_; sub {
+                is_prime($o[$i]);
+            } } @prime),
+            (map { my $i = $_; sub {
+                my $root;
+                return is_semiprime($o[$i])
+                    ? !is_power($o[$i], 2)
+                    : (is_power($o[$i], 3, \$root) && is_prime($root));
+            } } @semi),
+            (map { my $i = $_; my $t = $t[$i]; sub {
+                return tau($o[$i]) == $t;
+            } } @other),
+        );
     };
 
     #
