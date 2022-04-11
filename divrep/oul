@@ -221,8 +221,10 @@ sub desc {
     my($va) = @_;
     return join ' ', map {
         my($p, $x, $l) = @$_{qw{ p x l }};
-        join('.', map "$p->[$_]^@{[ $x->[$_] - 1 ]}", 0 .. $l - 1)
-                || '.';
+        join('.', map {
+            my($pi, $xi) = ($p->[$_], $x->[$_] - 1);
+            ($xi == 1) ? $pi : "$pi^$xi"
+        } 0 .. $l - 1) || '.';
     } @$va;
 }
 
@@ -721,8 +723,8 @@ sub recover {
         ^ 305 ( (?:
             \s+ \.
         |
-            \s+ \d+ \^ \d+
-            (?: \. \d+ \^ \d+ )*
+            \s+ \d+ (?: \^ \d+ )?
+            (?: \. \d+ (?: \^ \d+ )? )*
         ){$k} )
         (?: : \s+ (?:
             t=1 (?# ignore )
@@ -737,6 +739,7 @@ sub recover {
     @rstack = map {
         $_ eq '.' ? [] : [ map [ split /\^/ ], split /\./ ]
     } split /\s+/, $stack;
+    $_->[1] //= 1 for map @$_, @rstack;
     $rwalk = $walk_from;
     $t0 -= $time;
     $inject = 1;
