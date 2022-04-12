@@ -133,11 +133,7 @@ report(sprintf "001 %s%s%s%s%s%s\n",
     ($start ? " -s$start" : ""), ($max ? " -x$max" : ""),
 );
 
-if ($rrun) {
-    recurse_inject();
-} else {
-    recurse();
-}
+recurse($rrun ? 1 : 0);
 finish_run();
 exit 0;
 
@@ -228,66 +224,37 @@ sub desc {
     } @$va;
 }
 
-sub recurse_inject {
-    # ++$countr;
-    my $i = best_v() // return candidate(walk_v($rwalk));
-    my $v = $v[$i];
-    my $vlevel = $v->{l};
-    my $inject = $rstack[$i][$vlevel] // return(
-        $rwalk ? candidate(walk_v($rwalk)) : recurse()
-    );
-    my($p, $x) = @$inject;
-    ++$x;
-    my $fa = $fact{$v->{t}} // die "No factor to inject to";
-    my $fi = (first { $fa->[$_] == $x } 0 .. $#$fa)
-            // die "Factor $x not found in [@$fa]";
-
-    my $px = MBI($p) ** ($x - 1);
-    my($ax, $apx) = new_power($p, $x, $px);
-
-    $v->{p}[$vlevel] = $p;
-    $v->{x}[$vlevel] = $x;
-
-    {
-        local $v->{l} = $v->{l} + 1;
-        local $pp{$p} = $ax;
-        local $aq[$level + 1] = $aq[$level] * $apx;
-        local $v->{pu}{$p} = $x;
-        local $v->{q} = $v->{q} * $px;
-        local $v->{t} = $v->{t} / $x;
-        local $used{$p} = $i;
-        ++$level;
-        recurse_inject();
-        --$level;
-    }
-    $#{ $v->{p} } = $vlevel - 1;
-    recurse({
-        i => $i,
-        v => $v,
-        fa => [ @$fa[$fi .. $#$fa] ],
-        vlevel => $vlevel,
-        prex => 0,
-        p0 => $p,
-    });
-    return;
-}
-
 sub recurse {
-    my($i, $v, $fa, $vlevel, $prex, $p0);
+    my($recover) = @_;
+    my $i = best_v() // return candidate(walk_v());
+    my $v = $v[$i];
+    my $fa = $fact{$v->{t}} // die "No factor to work with for i=$i, t=$v->{t}";
+    my $vlevel = $v->{l};
+    my $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
+    my $p0;
 
-    if (my $reenter = $_[0]) {
-        ($i, $v, $fa, $vlevel, $prex, $p0)
-                = @$reenter{qw{ i v fa vlevel prex p0 }};
+    if ($recover) {
+        my $r = $rstack[$i][$vlevel];
+        if (!$r) {
+            $recover = 0;
+        } else {
+            my($rp, $rx) = @$r;
+            ++$rx;
+            my $fai = first { $fa->[$_] == $rx } 0 .. $#$fa;
+            die "power $rx does not exist in fact[$v->{t}]: [@$fa]"
+                    unless defined $fai;
+            $fa = [ @$fa[$fai .. $#$fa] ] if $fai;
+            $p0 = $rp;
+        }
     } else {
         ++$countr;
-        $i = best_v() // return candidate(walk_v());
-        $v = $v[$i];
-        $fa = $fact{$v->{t}} // return candidate(walk_v());
-        $vlevel = $v->{l};
-        $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
     }
+
+    my $this_recover;
   POWER:
     for my $x (@$fa) {
+        $this_recover = 0;
+
         # CHECKME: for n=54, we should disallow eg x=9 when t=54, since we
         # will already have tried all x=3 and x=6 before that.
         next if $nofact{$x}{$prex} && $vlevel >= $injected[$i];
@@ -297,9 +264,10 @@ sub recurse {
         my $p = ($prex == $x)
             ? $v->{p}[$vlevel - 1]
             : ($minp[$i][$x] //= 1);
-        if ($p0) {
-            $p = $p0;
-            $p0 = undef;
+        if ($recover) {
+            $p = $p0 - 1;   # next_prime() will get us back to it
+            $this_recover = 1;
+            $recover = 0;
         }
         my $tnext = $v->{t} / $x;
 
@@ -373,7 +341,7 @@ sub recurse {
             local $aq[$level + 1] = $aq[$level] * $apx;
             ++$level;
             do_diag(desc(\@v)) if times() >= $diagt;
-            recurse();
+            recurse($this_recover);
             --$level;
         }
     }
@@ -434,6 +402,7 @@ sub new_power {
 sub walk_1 {
     my($i, $val) = @_;
     my @vi;
+    $rwalk = undef; # ignore rwalk recovery for walk_1
     for (0 .. $#v) {
         next if $_ == $i;
         my $v = $v[$_];
@@ -449,7 +418,12 @@ sub walk_1 {
 }
 
 sub walk_v {
-    my($start) = @_;
+    my $start;
+    if ($rwalk) {
+        # recovery: first time only
+        $start = $rwalk;
+        $rwalk = undef;
+    }
 
     my @q = map $_->{q}, @v;
     # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
