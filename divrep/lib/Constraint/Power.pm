@@ -7,6 +7,8 @@ use RootMod qw{ allrootmod };   # will come from Math::Prime::Util when released
 use warnings;
 no warnings qw{ recursion };
 
+my $debug = 0;
+
 #
 # Constraint::Power->new($c, $k, $x, $z, $opt_mpow)
 # - specialization of Constraint, to find values matching the constraints
@@ -28,6 +30,7 @@ sub new {
         'check' => $c->check(),
         'parent' => $c,
     );
+    $debug = $c->debug;
     my $type = $c->type;
     $self->set_type($type);
 
@@ -35,6 +38,8 @@ sub new {
     @$self{qw{ pow_k pow_x pow_z pow_g }} = ($k, $x, $z, gcd($k, $x));
     $self->{'min'} = $type->dtoceily($self, $c->min);
     $self->{'max'} = $type->dtoceily($self, $c->max);
+    $debug && warn sprintf "apply power fix k=%s x=%s z=%s gcd=%s [%s..%s]\n",
+            $k, $x, $z, @$self{qw{ pow_g min max }};
 
     $_ = $self->convert_mod_override($_) for grep ref($_), @$opt_mpow;
     $self->mod_override($_) for @$opt_mpow;
