@@ -214,7 +214,7 @@ sub find_fixed {
     my($fixed_tau, $fixed_mult) = ($zone, $zone);
     my @ffloat = grep {
         my($p, $x) = @$_;
-        is_fixed($p, $x, $c, $n, $fixp) ? do {
+        $self->is_fixed($p, $x, $c, $n, $fixp) ? do {
             # take the fixed power, splice out of the list of remaining
             # floating powers
             $fixed_tau *= $x + 1;
@@ -249,17 +249,8 @@ OUT
 }
 
 sub is_fixed {
-    my($p, $x, $c, $n, $fixp) = @_;
-    $p = Math::GMP->new($p) unless ref $p;
-    if (($fixp % $p) == 0) {
-        return 1;
-    }
-    # if p^x would float, it may still be fixed if p^{x+1} divides n
-    # and 0 (mod p) is disallowed.
-    if (($n % ($p ** ($x + 1))) == 0 && $c->disallowed($p, 0)) {
-        return 1;
-    }
-    return 0;
+    my($self, $p, $x, $c, $n, $fixp) = @_;
+    return (($fixp % $p) == 0) ? 1 : 0;
 }
 
 #

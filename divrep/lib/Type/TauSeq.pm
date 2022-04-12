@@ -89,6 +89,20 @@ sub float_spare {
     return ($float, $spare);
 }
 
+sub is_fixed {
+    my($self, $p, $x, $c, $n, $fixp) = @_;
+    $p = Math::GMP->new($p) unless ref $p;
+    if (($fixp % $p) == 0) {
+        return 1;
+    }
+    # For tauseq() if p^x would float, it may still be fixed if p^{x+1}
+    # divides n and 0 (mod p) is disallowed.
+    if (($n % ($p ** ($x + 1))) == 0 && $c->disallowed($p, 0)) {
+        return 1;
+    }
+    return 0;
+}
+
 sub fix_pell {
     my($self, $n, $fix1, $fix2) = @_;
     my($k1, $x1, $z1) = @$fix1;
