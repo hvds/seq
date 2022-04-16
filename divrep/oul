@@ -35,7 +35,7 @@ my $zero = MBI(0);
 my $zone = MBI(1);
 
 my($max, $inject, $debug, $nodb) = (0) x 4;
-my($rrun, $cap, $gain, $start);
+my($rrun, $cap, $gain, $start, $forcefull);
 my $typename = 'o';
 my $maxproc = 6;
 my $seen_best = 0;
@@ -50,6 +50,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($start = length($arg) ? $arg : shift @ARGV), next if $arg =~ s{^-s}{};
     $inject = 1, next if $arg eq '-i';
     $nodb = 1, next if $arg eq '-n';
+    $forcefull = 1, next if $arg eq '-f';
     ++$debug, next if $arg eq '-d';
     die "Unknown option '$arg'\n";
 }
@@ -272,7 +273,8 @@ sub recurse {
             # If we're down to powers of 2, fall through to the main loop
             # unless we'd be forced to consume _all_ the powers of 2.
             $done = 0, last if (
-                ($x & ($x - 1)) == 0
+                !$forcefull     # use -f to suppress the fallthrough
+                && ($x & ($x - 1)) == 0
                 && $x >= 2 * $xm
             );
             local $known[$im] = $x - $xm;
