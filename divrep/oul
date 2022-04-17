@@ -34,7 +34,7 @@ sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
 
-my($max, $inject, $debug, $nodb) = (0) x 4;
+my($max, $inject, $debug, $nodb, $forcep) = (0) x 5;
 my($rrun, $cap, $gain, $start, $forcefull, $print);
 my $typename = 'o';
 my $maxproc = 6;
@@ -47,6 +47,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($gain = $arg || shift(@ARGV)), next if $arg =~ s{^-g}{};
     ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     ($cap = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
+    ($forcep = $arg || shift(@ARGV)), next if $arg =~ s{-fp}{};
     ($start = length($arg) ? $arg : shift @ARGV), next if $arg =~ s{^-s}{};
     $inject = 1, next if $arg eq '-i';
     $nodb = 1, next if $arg eq '-n';
@@ -125,6 +126,18 @@ my @aq = ($zone);
 # powers of primes included in @aq
 my %pp;
 
+# Each element of %pforce is an arrayref of [ key, batch ]; the key
+# is of the form "x:i1 i2 i3 ..." where x is the highest power of
+# p, and i1, i2 ... are the indices at which we find that power.
+my %pforce;
+do {
+    my $p = 2;
+    while ($p <= $forcep) {
+        prep_forcep($p);
+        $p = next_prime($p);
+    }
+};
+
 my($countr, $countw) = (0, 0);
 
 my @injected = (0) x $k;
@@ -138,7 +151,7 @@ report(sprintf "001 %s%s%s%s%s%s\n",
     ($start ? " -s$start" : ""), ($max ? " -x$max" : ""),
 );
 
-recurse($rrun ? 1 : 0);
+forcep(2, $rrun ? 1 : 0);
 finish_run();
 exit 0;
 
@@ -229,6 +242,25 @@ sub desc {
     } @$va;
 }
 
+# Iterate through all possible settings for primes up to $forcep, then
+# continue with recurse() to fill remaining slots.
+sub forcep {
+    my($p, $recover) = @_;
+    return recurse($recover) if $forcep < $p;
+    my $nextp = next_prime($p);
+    my $pf = $pforce{$p};
+    if ($recover) {
+        # on recovery, we reduce @$pf to the list not yet tried
+        (my($batch), $pf) = recover_forcep($p, $pf);
+        batch_recurse($batch, 1, sub { forcep($nextp, @_) });
+    }
+    for my $force (@$pf) {
+        my $batch = $force->[1];
+        batch_recurse($batch, 0, sub { forcep($nextp, @_) });
+    }
+    return;
+}
+
 sub recurse {
     my($recover) = @_;
     my $i = best_v() // return candidate(walk_v());
@@ -282,7 +314,7 @@ sub recurse {
             next unless valid_set($p, \@known);
             my $batch = try_force($i, $p, $x);
             if ($batch) {
-                batch_recurse($batch, $recover);
+                batch_recurse($batch, $recover, \&recurse);
                 $recover = 0;
                 next;
             }
@@ -376,7 +408,7 @@ sub recurse {
             if ($p < $k && !($i - $p < 0 && $i + $p >= $k)) {
                 my $batch = try_force($i, $p, $x) // next;
                 local $v->{l} = $vlevel;
-                batch_recurse($batch, $this_recover);
+                batch_recurse($batch, $this_recover, \&recurse);
                 $this_recover = 0;
                 next;
             }
@@ -417,7 +449,7 @@ sub recurse {
 }
 
 sub batch_recurse {
-    my($batch, $recover) = @_;
+    my($batch, $recover, $continue) = @_;
     if ($batch->{iforce} < @{ $batch->{force} }) {
         my($i, $p, $x) = @{ $batch->{force}[$batch->{iforce}] };
         local $batch->{iforce} = $batch->{iforce} + 1;
@@ -456,7 +488,7 @@ sub batch_recurse {
         if ($v->{t} == 1) {
             candidate(walk_1($i, $v->{q} - $i));
         } else {
-            batch_recurse($batch, $recover);
+            batch_recurse($batch, $recover, $continue);
         }
         --$level;
     } elsif ($batch->{imin} < @{ $batch->{min} }) {
@@ -474,9 +506,9 @@ sub batch_recurse {
         local $v->{forced} = $forced * $x;
         return if $v->{forced} > $v->{t};
         local $v->{force}{$p} = $x;
-        batch_recurse($batch, $recover);
+        batch_recurse($batch, $recover, $continue);
     } else {
-        return recurse($recover);
+        return $continue->($recover);
     }
     return;
 }
@@ -690,6 +722,64 @@ sub best_v {
         ($i, $vi) = ($j, $vj);
     }
     return $i // undef;
+}
+
+sub prep_forcep {
+    my($p) = @_;
+    my $fact = $fullfact{$n};
+    my($x, $px) = (1, 1);
+    ++$x, $px *= $p while $px < $k;
+
+    my @batch;
+    $pforce{$p} = \@batch;
+
+    for my $i (0 .. $k - 1) {
+        for my $fx (@$fact) {
+            next if $fx < $x;
+            my $batch = try_force($i, $p, $fx) or next;
+            if (@{ $batch->{min} }) {
+                use DDP; p { p => $p, x => $fx, i => $i, batch => $batch };
+                die "invalid batch in prep_forcep";
+            }
+            push @batch, [ "$fx:$i", $batch ];
+        }
+    }
+
+    return if $p == 2 || $n % ($x - 1);
+    --$x;
+    $px /= $p;
+    my $px2 = $px * ($p - 1);
+    for my $i (0 .. $px - 1) {
+        next if $i + $px2 <= $k - 1;
+        my $batch = try_force($i, $p, $x) or next;
+        my $is = join ' ', ($i, map $_->[0], @{ $batch->{min} });
+        push @{ $batch->{force} }, splice @{ $batch->{min} };
+        push @batch, [ "$x:$is", $batch ];
+    }
+    return;
+}
+
+# on recovery, find the batch associated with this forced prime
+sub recover_forcep {
+    my($p, $pf) = @_;
+    my($bestx, @besti) = (0);
+    for my $i (0 .. $k - 1) {
+        my $r = $rstack[$i][ $v[$i]{l} ] // next;
+        my($rp, $rx) = @$r;
+        next unless $rp == $p;
+        if ($rx >= $bestx) {
+            @besti = () if $rx > $bestx;
+            $bestx = $rx;
+            push @besti, $i;
+        }
+    }
+    die "no power of $p to recover from" unless $bestx;
+    my $match = join ':', $bestx, join ' ', @besti;
+    my $which = first { $pf->[$_][0] eq $match } 0 .. $#$pf;
+    die "no pforce match for '$match'" unless defined $which;
+    my $batch = $pf->[$which][1];
+    $pf = [ @$pf[ $which + 1 .. $#$pf ] ];
+    return +($batch, $pf);
 }
 
 # Prepare an element of the @mint array below
