@@ -35,7 +35,7 @@ my $zero = MBI(0);
 my $zone = MBI(1);
 
 my($max, $inject, $debug, $nodb) = (0) x 4;
-my($rrun, $cap, $gain, $start, $forcefull);
+my($rrun, $cap, $gain, $start, $forcefull, $print);
 my $typename = 'o';
 my $maxproc = 6;
 my $seen_best = 0;
@@ -50,6 +50,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($start = length($arg) ? $arg : shift @ARGV), next if $arg =~ s{^-s}{};
     $inject = 1, next if $arg eq '-i';
     $nodb = 1, next if $arg eq '-n';
+    $print = 1, next if $arg eq '-o';
     $forcefull = 1, next if $arg eq '-f';
     ++$debug, next if $arg eq '-d';
     die "Unknown option '$arg'\n";
@@ -558,6 +559,10 @@ sub walk_1 {
         return undef if gcd($vi, $v->{q}) != 1;
         $vi[$_] = $vi;
     }
+    if ($print) {
+        print STDERR $val, "\n";
+        return;
+    }
     return undef unless all {
         tau($vi[$_]) == $v[$_]{t}
     } grep $_ != $i, 0 .. $#v;
@@ -586,7 +591,7 @@ sub walk_v {
         $o[$_] += $qq[$_] * $start for 0 .. $#o;
     }
 
-    my @check = do {
+    my @check = $print ? () : do {
         # Categorize by required tau()
         my(@prime, @semi, @square, @other);
         for my $i (0 .. $#o) {
@@ -643,19 +648,21 @@ sub walk_v {
             do_diag(desc(\@v) . ": $ati / $endi");
         }
 
-        # Return a solution if we find one. Do the gcd checks first,
-        # since they should be much faster than factorization.
+        # Print a candidate or return a solution if we find one.
         #
         # FIXME: maintain $ati and prepare inverses for each assigned
         # prime so the gcd check becomes a simple integer mod check:
         #   all { $ati % $invp[$_] != $invmod[$_] } 0 .. $#o
         # I think we can safely rely on both $ati and assigned primes
         # not to exceed range of exact integer maths.
-        return $o[0] * $q[0] if (
-            all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o
-        ) && (
-            all { $_->() } @check
-        );
+
+        if (all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o) {
+            if ($print) {
+                print STDERR $o[0] * $q[0], "\n";
+            } else {
+                return $o[0] * $q[0] if all { $_->() } @check;
+            }
+        }
 
         # step the candidates by prod q_i
         $o[$_] += $qq[$_] for 0 .. $#o;
