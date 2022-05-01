@@ -757,8 +757,7 @@ sub fill_mintau {
     }
     #
     # Return the least m such that tau(m) = $tau, avoiding the primes p
-    # that have true values in %used (unless they are avoided only
-    # because used in some v_$j, such that $j - $i is a multiple of p).
+    # that have defined values in %used.
     #
     sub mintau {
         my($tau, $i) = @_;
@@ -766,9 +765,7 @@ sub fill_mintau {
         my $vec = 0;
         for my $j (0 .. $#p) {
             my $p = $p[$j];
-            my $k = $used{$p} // next;
-            my $d = $k - $i;
-            $vec |= (1 << $j) if !$d || ($d % $p) != 0;
+            $vec |= (1 << $j) if defined $used{$p};
         }
         for (@{ $mint[$tau] // die "no mint found for $tau" }) {
             my($ok, $r) = @$_;
