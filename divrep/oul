@@ -34,8 +34,8 @@ sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
 
-my($max, $inject, $debug, $nodb) = (0) x 4;
-my($rrun, $cap, $gain, $start);
+my($max, $inject, $debug, $nodb, $forcep) = (0) x 5;
+my($rrun, $cap, $gain, $start, $forcefull, $print);
 my $typename = 'o';
 my $maxproc = 6;
 my $seen_best = 0;
@@ -47,9 +47,12 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($gain = $arg || shift(@ARGV)), next if $arg =~ s{^-g}{};
     ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     ($cap = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
+    ($forcep = $arg || shift(@ARGV)), next if $arg =~ s{-fp}{};
     ($start = length($arg) ? $arg : shift @ARGV), next if $arg =~ s{^-s}{};
     $inject = 1, next if $arg eq '-i';
     $nodb = 1, next if $arg eq '-n';
+    $print = 1, next if $arg eq '-o';
+    $forcefull = 1, next if $arg eq '-f';
     ++$debug, next if $arg eq '-d';
     die "Unknown option '$arg'\n";
 }
@@ -80,9 +83,8 @@ my $max_repeat = int(sqrt($k - 1));
 
 my $nf = [ factor_exp($n) ];
 my $tn = tau($n, $nf);
-my(%fact, %nofact);
+my(%fact, %fullfact, %nofact);
 prep_fact($n);
-my $use_rec2 = use_rec2();
 prep_mintau();
 
 my($diag_delay, $log_delay) = (1, 600);
@@ -109,9 +111,12 @@ my %used;
 #   q => total value attributed
 #   t => tau() not yet accounted for (ie n / tau(q))
 #   l => level: how many entries in p[] and x[] are valid
+#   force{} => lookup { p => x } of forced minimal powers
+#   forced => product of force{p}
 #
 my @v = map +{
     p => [], pu => {}, x => [], q => $zone, t => $n, l => 0,
+    force => {}, forced => 1,
 }, 0 .. $k - 1;
 
 # Recursion level
@@ -120,6 +125,18 @@ my $level = 0;
 my @aq = ($zone);
 # powers of primes included in @aq
 my %pp;
+
+# Each element of %pforce is an arrayref of [ key, batch ]; the key
+# is of the form "x:i1 i2 i3 ..." where x is the highest power of
+# p, and i1, i2 ... are the indices at which we find that power.
+my %pforce;
+do {
+    my $p = 2;
+    while ($p <= $forcep) {
+        prep_forcep($p);
+        $p = next_prime($p);
+    }
+};
 
 my($countr, $countw) = (0, 0);
 
@@ -134,13 +151,7 @@ report(sprintf "001 %s%s%s%s%s%s\n",
     ($start ? " -s$start" : ""), ($max ? " -x$max" : ""),
 );
 
-if ($rrun) {
-    recurse_inject();
-} elsif ($use_rec2) {
-    rec2();
-} else {
-    recurse();
-}
+forcep(2, $rrun ? 1 : 0);
 finish_run();
 exit 0;
 
@@ -224,167 +235,123 @@ sub desc {
     my($va) = @_;
     return join ' ', map {
         my($p, $x, $l) = @$_{qw{ p x l }};
-        join('.', map "$p->[$_]^@{[ $x->[$_] - 1 ]}", 0 .. $l - 1)
-                || '.';
+        join('.', map {
+            my($pi, $xi) = ($p->[$_], $x->[$_] - 1);
+            ($xi == 1) ? $pi : "$pi^$xi"
+        } 0 .. $l - 1) || '.';
     } @$va;
 }
 
-sub recurse_inject {
-    # ++$countr;
-    my $is_rec2 = ($level == 0 && $use_rec2);
-    my $i = ($is_rec2 ? best_rec2() : best_v())
-            // return candidate(walk_v($rwalk));
-    my $v = $v[$i];
-    my $vlevel = $v->{l};
-    my $inject = $rstack[$i][$vlevel] // return(
-        $rwalk ? candidate(walk_v($rwalk)) : $is_rec2 ? rec2() : recurse()
-    );
-    my($p, $x) = @$inject;
-    ++$x;
-    my $fa = $is_rec2
-        ? [ @{ $fact{$v->{t}} }, 4 ]
-        : $fact{$v->{t}} // die "No factor to inject to";
-    my $fi = (first { $fa->[$_] == $x } 0 .. $#$fa)
-            // die "Factor $x not found in [@$fa]";
-    # For recurse() we want to skip to next prime of same power on reentry,
-    # but for rec2() we want to skip to next power: there is only one prime.
-    ++$fi if $is_rec2;
-
-    my $px = MBI($p) ** ($x - 1);
-    my($ax, $apx) = new_power($p, $x, $px);
-
-    $v->{p}[$vlevel] = $p;
-    $v->{x}[$vlevel] = $x;
-
-    {
-        local $v->{l} = $v->{l} + 1;
-        local $pp{$p} = $ax;
-        local $aq[$level + 1] = $aq[$level] * $apx;
-        local $v->{pu}{$p} = $x;
-        local $v->{q} = $v->{q} * $px;
-        local $v->{t} = $v->{t} / $x;
-        local $used{$p} = $i;
-        ++$level;
-        recurse_inject();
-        --$level;
+# Iterate through all possible settings for primes up to $forcep, then
+# continue with recurse() to fill remaining slots.
+sub forcep {
+    my($p, $recover) = @_;
+    return recurse($recover) if $forcep < $p;
+    my $nextp = next_prime($p);
+    my $pf = $pforce{$p};
+    if ($recover) {
+        # on recovery, we reduce @$pf to the list not yet tried
+        (my($batch), $pf) = recover_forcep($p, $pf);
+        batch_recurse($batch, 1, sub { forcep($nextp, @_) });
     }
-    $#{ $v->{p} } = $vlevel - 1;
-    ($is_rec2 ? \&rec2 : \&recurse)->({
-        i => $i,
-        v => $v,
-        fa => [ @$fa[$fi .. $#$fa] ],
-        vlevel => $vlevel,
-        prex => 0,
-        p0 => $p,
-    });
-    return;
-}
-
-#
-# Special case for first recursion step when n=4q, q>3 is odd, k>=4.
-# For this case we know some v_i: k-4 <= i < 4 must have a power 2^{x-1}
-# with x | n, x >= 4.
-#
-# This is also true for q even, but then x=4 is not restrictive enough.
-# TODO: find a way to take advantage of that case.
-#
-sub use_rec2 {
-    return +($k >= 4 && ($n % 8) == 4 && ($n % 3) != 0)
-            ? 1 : 0;
-}
-sub rec2 {
-    my($spike, $i0, $v, $fa, $vlevel);
-    if (my $reenter = $_[0]) {
-        $spike = 1;
-        ($i0, $v, $fa, $vlevel) = @$reenter{qw{ i v fa vlevel }};
-        my $p0 = $reenter->{p0};
-        die "Unexpected prime $p0 in packing area" if $p0 != 2;
-    } else {
-        ++$countr;
-        $spike = 0;
-        $i0 = $k - 4;
-    }
-    for my $i ($i0 .. 3) {
-        if ($spike) {
-            $spike = 0;
-        } else {
-            $v = $v[$i];
-            $fa = [ @{ $fact{$v->{t}} }, 4 ];
-            $vlevel = $v->{l};
-        }
-        my $p = 2;
-      POWER:
-        for my $x (@$fa) {
-            # Try to add another power of 2 to this $v.
-            my $tnext = $v->{t} / $x;
-            $v->{x}[$vlevel] = $x;
-
-            my $mint = mintau($tnext, $i);
-            if ($have_best) {
-                my $lim = $cap // (($best + $i) / $mint)->broot($x - 1);
-                next POWER if $lim < 2;
-                my $walk = ($best + $i) / $aq[$level];
-                candidate(walk_v()), last POWER if $walk * $gain < $lim;
-            }
-
-            if ($tnext == 1) {
-                my $qx = $zone << ($x - 1);
-                next POWER if $have_best && $qx > $best;
-                candidate(walk_1($i, $qx - $i));
-                next POWER;
-            }
-
-            local $v->{l} = $v->{l} + 1;
-            local $used{$p} = $i;
-            local $v->{pu}{$p} = $x;
-            $v->{p}[$vlevel] = $p;
-            my $px = $zone << ($x - 1);
-            my $q = $px;
-            next POWER if $have_best && $q * $mint > $best + $i;
-
-            local $v->{t} = $tnext;
-            local $v->{q} = $q;
-            my($ax, $apx) = new_power($p, $x, $px);
-            local $pp{$p} = $ax;
-            local $aq[$level + 1] = $aq[$level] * $apx;
-            ++$level;
-            do_diag(desc(\@v)) if times() >= $diagt;
-            if ($x != 4) {
-                recurse();
-            } else {
-                # with 2^3 accounted for, force recurse to try p^{n/4-1}
-                recurse({
-                    i => $i,
-                    v => $v,
-                    fa => [ $nf->[1][0] ],
-                    vlevel => 1,
-                    prex => 0,
-                    p0 => $zone,
-                });
-            }
-            --$level;
-        }
-        $#{ $v->{p} } = $vlevel - 1;
+    for my $force (@$pf) {
+        my $batch = $force->[1];
+        batch_recurse($batch, 0, sub { forcep($nextp, @_) });
     }
     return;
 }
 
 sub recurse {
-    my($i, $v, $fa, $vlevel, $prex, $p0);
+    my($recover) = @_;
+    my $i = best_v() // return candidate(walk_v());
+    my $v = $v[$i];
+    my $fa = $fact{$v->{t}} // die "No factor to work with for i=$i, t=$v->{t}";
+    my $vlevel = $v->{l};
+    my $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
+    my $p0;
 
-    if (my $reenter = $_[0]) {
-        ($i, $v, $fa, $vlevel, $prex, $p0)
-                = @$reenter{qw{ i v fa vlevel prex p0 }};
+    if ($v->{forced} > 1) {
+        my $p = min keys %{ $v->{force} };
+        my $xm = delete local $v->{force}{$p};
+        my $forced = $v->{forced} / $xm;
+        local $v->{forced} = $forced;
+        my $pxm = $p ** ($xm - 1);
+        my @known;
+        for (my $j = $i % $pxm; $j < $k; $j += $pxm) {
+            my $xk = $v[$j]{pu}{$p};
+            push @known, defined($xk) ? $xk - $xm : undef;
+        }
+        my $im = int($i / $pxm);
+        $fa = $fullfact{$v->{t}};
+        if ($recover) {
+            my $r = $rstack[$i][$vlevel];
+            if (!$r) {
+                $recover = 0;
+            } else {
+                my($rp, $rx) = @$r;
+                ++$rx;
+                if ($p != $rp) {
+                    die "Forced $p is not recovering $rp ** $rx";
+                }
+                my $fai = first { $fa->[$_] == $rx } 0 .. $#$fa;
+                die "power $rx does not exist in fullfact[$v->{t}]: [@$fa]"
+                        unless defined $fai;
+                $fa = [ @$fa[$fai .. $#$fa] ] if $fai;
+            }
+        }
+        my $done = 1;
+        for my $x (@$fa) {
+            next if $x < $xm;
+            next if $x * $forced > $v->{t};
+            # If we're down to powers of 2, fall through to the main loop
+            # unless we'd be forced to consume _all_ the powers of 2.
+            $done = 0, last if (
+                !$forcefull     # use -f to suppress the fallthrough
+                && ($x & ($x - 1)) == 0
+                && $x >= 2 * $xm
+            );
+            local $known[$im] = $x - $xm;
+            next unless valid_set($p, \@known);
+            my $batch = try_force($i, $p, $x);
+            if ($batch) {
+                batch_recurse($batch, $recover, \&recurse);
+                $recover = 0;
+                next;
+            }
+        }
+        return if $done;
+        # FIXME: when falling through here we'd like to mark somehow that
+        # _at least_ ceil(log_2(xm)) powers of 2 will be consumed by some
+        # p^{2^x-1} factor, restricting what factors are available for other
+        # primes, but we can't simply modify v->{t} since that would cause
+        # walk_*() to look for the wrong thing. Maybe we can find a way
+        # to allocate p^x without walk_* rejecting candidates on the grounds
+        # that v_i / q == 0 (mod p)
+        $fa = $fact{$v->{t}} // return candidate(walk_v());
+    }
+
+    if ($recover) {
+        my $r = $rstack[$i][$vlevel];
+        if (!$r) {
+            $recover = 0;
+        } else {
+            my($rp, $rx) = @$r;
+            ++$rx;
+            my $fai = first { $fa->[$_] == $rx } 0 .. $#$fa;
+            die "power $rx does not exist in fact[$v->{t}]: [@$fa]"
+                    unless defined $fai;
+            $fa = [ @$fa[$fai .. $#$fa] ] if $fai;
+            $p0 = $rp;
+        }
     } else {
         ++$countr;
-        $i = best_v() // return candidate(walk_v());
-        $v = $v[$i];
-        $fa = $fact{$v->{t}} // return candidate(walk_v());
-        $vlevel = $v->{l};
-        $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
     }
+
+    my $this_recover;
   POWER:
     for my $x (@$fa) {
+        $this_recover = 0;
+
         # CHECKME: for n=54, we should disallow eg x=9 when t=54, since we
         # will already have tried all x=3 and x=6 before that.
         next if $nofact{$x}{$prex} && $vlevel >= $injected[$i];
@@ -394,9 +361,10 @@ sub recurse {
         my $p = ($prex == $x)
             ? $v->{p}[$vlevel - 1]
             : ($minp[$i][$x] //= 1);
-        if ($p0) {
-            $p = $p0;
-            $p0 = undef;
+        if ($recover) {
+            $p = $p0 - 1;   # next_prime() will get us back to it
+            $this_recover = 1;
+            $recover = 0;
         }
         my $tnext = $v->{t} / $x;
 
@@ -435,15 +403,16 @@ sub recurse {
         while (1) {
             $p = next_prime($p);
             last if defined($cap) && $p > $cap;
-            my $u = $used{$p};
-            if (defined $u) {
-                # we've already allocated this prime at least once, is it valid
-                # to allocate it again?
-                # TODO: consider replacing this with pre-allocation of all
-                # repeats
-                next if $p > $max_repeat;
-                next unless valid_power($p, $x, $i, $u);
+            next if defined $used{$p};
+            # FIXME: make this a single ($p <= $max_force[$i]) check
+            if ($p < $k && !($i - $p < 0 && $i + $p >= $k)) {
+                my $batch = try_force($i, $p, $x) // next;
+                local $v->{l} = $vlevel;
+                batch_recurse($batch, $this_recover, \&recurse);
+                $this_recover = 0;
+                next;
             }
+
             local $used{$p} = $i;
             local $v->{pu}{$p} = $x;
             my $px = MBI($p) ** ($x - 1);
@@ -470,7 +439,8 @@ sub recurse {
             local $aq[$level + 1] = $aq[$level] * $apx;
             ++$level;
             do_diag(desc(\@v)) if times() >= $diagt;
-            recurse();
+            recurse($this_recover);
+            $this_recover = 0;
             --$level;
         }
     }
@@ -478,43 +448,124 @@ sub recurse {
     return;
 }
 
-#
-# We want to assign p^(x_i - 1) to v_i, but we've already assigned some
-# power of p to v_u. Would that give us a valid combination?
-#
-sub valid_power {
-    my($p, $xi, $i, $u) = @_;
+sub batch_recurse {
+    my($batch, $recover, $continue) = @_;
+    if ($batch->{iforce} < @{ $batch->{force} }) {
+        my($i, $p, $x) = @{ $batch->{force}[$batch->{iforce}] };
+        local $batch->{iforce} = $batch->{iforce} + 1;
+        # apply p^x at v_i
+        my $v = $v[$i];
+        my $vlevel = $v->{l};
+        if ($recover) {
+            my $r = $rstack[$i][$vlevel];
+            if (!$r) {
+                $recover = 0;
+            } else {
+                my($rp, $rx) = @$r;
+                ++$rx;
+                if ($rp != $p || $rx != $x) {
+                    die "forcing $p ** $x but recovery wants $rp ** $rx";
+                }
+            }
+        }
+        my $px = MBI($p) ** ($x - 1);
+        my($ax, $apx) = new_power($p, $x, $px);
 
-    # never allow the same prime twice at the same spot
-    return 0 if $v[$i]->{pu}{$p};
+        # not localized
+        $v->{p}[$vlevel] = $p;
+        $v->{x}[$vlevel] = $x;
 
-    # cannot be valid unless gap to previous use is a multiple of p^2
-    my $gap = $u - $i;
-    return 0 if ($gap % ($p * $p)) != 0;
+        local $v->{l} = $v->{l} + 1;
+        local $pp{$p} = $ax;
+        local $aq[$level + 1] = $aq[$level] * $apx;
+        local $v->{pu}{$p} = $x;
+        local $v->{q} = $v->{q} * $px;
+        local $v->{t} = $v->{t} / $x;
+        local $used{$p} = $i;
 
-    # broader version of above check
-    # $xi and $xu are +1, so we increment valuation to match
-    my $pow = valuation($gap, $p) + 1;
-    my $xu = $v[$u]->{pu}{$p};
-    if ($xi < $pow) {
-        # 2^2 (8) 2^2 is ok, 2^2 (8) 2^3 is not
-        return 0 unless $xu == $xi;
-    } elsif ($xi > $pow) {
-        # 2^5 (4) 2^2 is ok, 2^5 (4) 2^3 is not
-        return 0 unless $xu == $pow;
+        return if $v->{forced} > $v->{t};
+        ++$level;
+        if ($v->{t} == 1) {
+            candidate(walk_1($i, $v->{q} - $i));
+        } else {
+            batch_recurse($batch, $recover, $continue);
+        }
+        --$level;
+    } elsif ($batch->{imin} < @{ $batch->{min} }) {
+        # FIXME: if there's at most one option < $v->{t} available, we
+        # should walk_1() the $v->{t} option then set the remaining one.
+        my($i, $p, $x) = @{ $batch->{min}[$batch->{imin}] };
+        local $batch->{imin} = $batch->{imin} + 1;
+        my $v = $v[$i];
+        my $forced = $v->{forced};
+        if ($v->{force}{$p}) {
+            my $ox = $v->{force}{$p};
+            $forced /= $ox;
+            $x = $ox if $x < $ox;
+        }
+        local $v->{forced} = $forced * $x;
+        return if $v->{forced} > $v->{t};
+        local $v->{force}{$p} = $x;
+        batch_recurse($batch, $recover, $continue);
     } else {
-        # 2^2 (4) 2^5 or 3^2 (9) 3^2 are ok, 2^3 (8) 2^2 is not
-        return 0 unless $xu >= $pow;
-        # and 2^2 (4) 2^2 is not
-        return 0 if $p == 2 && $xu == $pow;
+        return $continue->($recover);
     }
+    return;
+}
 
-    # TODO: if k > 2p^2, may have more than one previous use, and we need
-    # all occurrences to be collectively valid. I suspect for p=2 it would
-    # be enough if the valuation check above passes for a selection of pairs,
-    # but for eg 3^2 (9) 3^2 (9) 3^2 it's not enough.
+sub valid_set {
+    my($p, $known) = @_;
+    my(%seenzero, %seenmore);
+    for (grep defined($known->[$_]), 0 .. $#$known) {
+        my $got = $known->[$_];
+        if ($got) {
+            ++$seenmore{$_ % $p};
+        } else {
+            ++$seenzero{$_ % $p};
+        }
+    }
+    return 0 if keys(%seenzero) >= $p;
+    return 0 if keys(%seenmore) > 1;
+    my($mod, $seen) = each %seenmore;
+    return 1 if ($seen // 0) <= 1;
+    my @higher;
+    for (my $i = $mod; $i < @$known; $i += $p) {
+        push @higher, $known->[$i] - 1;
+    }
+    return valid_set($p, \@higher);
+}
 
-    return 1;
+sub try_force {
+    my($i, $p, $x) = @_;
+
+    my(@force, @min);
+    for my $j (0 .. $k - 1) {
+        my $tj = ($i == $j) ? $x + 1 : valuation($j - $i, $p) + 1;
+        next if $tj == 1;
+        # if already set, it's set to a power we would have picked
+        next if $v[$j]{pu}{$p};
+
+        if ($tj < $x) {
+            # v_j cannot be divisible by p^{tj-1}
+            return undef if $v[$j]{t} % $tj;
+            # o(v_i, p) = x => o(v_j, p) = y if o(j-i, p) = y and y < x
+            push @force, [ $j, $p, $tj ];
+        } elsif ($tj > $x) {
+            # v_j cannot be divisible by p^{x-1}
+            return undef if $v[$j]{t} % $x;
+            # o(v_i, p) = x => o(v_j, p) = x if o(j-i, p) = y and y > x
+            push @force, [ $j, $p, $x ];
+        } else {
+            # o(v_i, p) = x => o(v_j, p) >= x if o(j-i, p) = y and y = x
+            push @min, [ $j, $p, $x ];
+        }
+    }
+    return {
+        force => \@force,
+        min => \@min,
+        iforce => 0,
+        imin => 0,
+    };
 }
 
 sub new_power {
@@ -531,6 +582,7 @@ sub new_power {
 sub walk_1 {
     my($i, $val) = @_;
     my @vi;
+    $rwalk = undef; # ignore rwalk recovery for walk_1
     for (0 .. $#v) {
         next if $_ == $i;
         my $v = $v[$_];
@@ -539,6 +591,10 @@ sub walk_1 {
         return undef if gcd($vi, $v->{q}) != 1;
         $vi[$_] = $vi;
     }
+    if ($print) {
+        print STDERR $val, "\n";
+        return;
+    }
     return undef unless all {
         tau($vi[$_]) == $v[$_]{t}
     } grep $_ != $i, 0 .. $#v;
@@ -546,7 +602,12 @@ sub walk_1 {
 }
 
 sub walk_v {
-    my($start) = @_;
+    my $start;
+    if ($rwalk) {
+        # recovery: first time only
+        $start = $rwalk;
+        $rwalk = undef;
+    }
 
     my @q = map $_->{q}, @v;
     # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
@@ -562,7 +623,7 @@ sub walk_v {
         $o[$_] += $qq[$_] * $start for 0 .. $#o;
     }
 
-    my @check = do {
+    my @check = $print ? () : do {
         # Categorize by required tau()
         my(@prime, @semi, @square, @other);
         for my $i (0 .. $#o) {
@@ -619,33 +680,26 @@ sub walk_v {
             do_diag(desc(\@v) . ": $ati / $endi");
         }
 
-        # Return a solution if we find one. Do the gcd checks first,
-        # since they should be much faster than factorization.
+        # Print a candidate or return a solution if we find one.
         #
         # FIXME: maintain $ati and prepare inverses for each assigned
         # prime so the gcd check becomes a simple integer mod check:
         #   all { $ati % $invp[$_] != $invmod[$_] } 0 .. $#o
         # I think we can safely rely on both $ati and assigned primes
         # not to exceed range of exact integer maths.
-        return $o[0] * $q[0] if (
-            all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o
-        ) && (
-            all { $_->() } @check
-        );
+
+        if (all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o) {
+            if ($print) {
+                print STDERR $o[0] * $q[0], "\n";
+            } else {
+                return $o[0] * $q[0] if all { $_->() } @check;
+            }
+        }
 
         # step the candidates by prod q_i
         $o[$_] += $qq[$_] for 0 .. $#o;
     }
     return;
-}
-
-# override best_v for the first level when use_rec2()
-sub best_rec2 {
-    for (0 .. $#v) {
-        next unless @{ $rstack[$_] };
-        return $_ if $rstack[$_][0][0] == 2;
-    }
-    die "no 2 found";
 }
 
 # find the best entry to progress: the one with the highest tau()
@@ -668,6 +722,64 @@ sub best_v {
         ($i, $vi) = ($j, $vj);
     }
     return $i // undef;
+}
+
+sub prep_forcep {
+    my($p) = @_;
+    my $fact = $fullfact{$n};
+    my($x, $px) = (1, 1);
+    ++$x, $px *= $p while $px < $k;
+
+    my @batch;
+    $pforce{$p} = \@batch;
+
+    for my $i (0 .. $k - 1) {
+        for my $fx (@$fact) {
+            next if $fx < $x;
+            my $batch = try_force($i, $p, $fx) or next;
+            if (@{ $batch->{min} }) {
+                use DDP; p { p => $p, x => $fx, i => $i, batch => $batch };
+                die "invalid batch in prep_forcep";
+            }
+            push @batch, [ "$fx:$i", $batch ];
+        }
+    }
+
+    return if $p == 2 || $n % ($x - 1);
+    --$x;
+    $px /= $p;
+    my $px2 = $px * ($p - 1);
+    for my $i (0 .. $px - 1) {
+        next if $i + $px2 <= $k - 1;
+        my $batch = try_force($i, $p, $x) or next;
+        my $is = join ' ', ($i, map $_->[0], @{ $batch->{min} });
+        push @{ $batch->{force} }, splice @{ $batch->{min} };
+        push @batch, [ "$x:$is", $batch ];
+    }
+    return;
+}
+
+# on recovery, find the batch associated with this forced prime
+sub recover_forcep {
+    my($p, $pf) = @_;
+    my($bestx, @besti) = (0);
+    for my $i (0 .. $k - 1) {
+        my $r = $rstack[$i][ $v[$i]{l} ] // next;
+        my($rp, $rx) = @$r;
+        next unless $rp == $p;
+        if ($rx >= $bestx) {
+            @besti = () if $rx > $bestx;
+            $bestx = $rx;
+            push @besti, $i;
+        }
+    }
+    die "no power of $p to recover from" unless $bestx;
+    my $match = join ':', $bestx, join ' ', @besti;
+    my $which = first { $pf->[$_][0] eq $match } 0 .. $#$pf;
+    die "no pforce match for '$match'" unless defined $which;
+    my $batch = $pf->[$which][1];
+    $pf = [ @$pf[ $which + 1 .. $#$pf ] ];
+    return +($batch, $pf);
 }
 
 # Prepare an element of the @mint array below
@@ -739,16 +851,12 @@ sub fill_mintau {
         $smallp{$_} = 1 for grep $_ < $k, @p;
 
         # Prepare all possible mintau() for all relevant tau
-        $mint[$_] = fill_mintau($_, \@p) for (
-            divisors($maxt),
-            ($use_rec2 ? $n / 4 : ()),
-        );
+        $mint[$_] = fill_mintau($_, \@p) for divisors($maxt);
         return;
     }
     #
     # Return the least m such that tau(m) = $tau, avoiding the primes p
-    # that have true values in %used (unless they are avoided only
-    # because used in some v_$j, such that $j - $i is a multiple of p).
+    # that have defined values in %used.
     #
     sub mintau {
         my($tau, $i) = @_;
@@ -756,9 +864,7 @@ sub fill_mintau {
         my $vec = 0;
         for my $j (0 .. $#p) {
             my $p = $p[$j];
-            my $k = $used{$p} // next;
-            my $d = $k - $i;
-            $vec |= (1 << $j) if !$d || ($d % $p) != 0;
+            $vec |= (1 << $j) if defined $used{$p};
         }
         for (@{ $mint[$tau] // die "no mint found for $tau" }) {
             my($ok, $r) = @$_;
@@ -832,8 +938,8 @@ sub recover {
         ^ 305 ( (?:
             \s+ \.
         |
-            \s+ \d+ \^ \d+
-            (?: \. \d+ \^ \d+ )*
+            \s+ \d+ (?: \^ \d+ )?
+            (?: \. \d+ (?: \^ \d+ )? )*
         ){$k} )
         (?: : \s+ (?:
             t=1 (?# ignore )
@@ -848,6 +954,7 @@ sub recover {
     @rstack = map {
         $_ eq '.' ? [] : [ map [ split /\^/ ], split /\./ ]
     } split /\s+/, $stack;
+    $_->[1] //= 1 for map @$_, @rstack;
     $rwalk = $walk_from;
     $t0 -= $time;
     $inject = 1;
@@ -1063,7 +1170,10 @@ sub factor_iterator {
 sub prep_fact {
     my($n) = @_;
     for my $d (divisors($n)) {
-        next if 0 == ($d & ($d - 1));   # skip powers of 2
+        if (0 == ($d & ($d - 1))) {
+            $fullfact{$d} = [ reverse divisors($d) ];
+            next;
+        }
         my $df = [ factor_exp($d) ];
         my $dp = $df->[-1][0];
 
@@ -1077,6 +1187,10 @@ sub prep_fact {
             $nofact{$d}{$_} = 1 for grep $_ > $d,
                     map $_ * $dp, divisors($n / ($dp * $d));
         }
+
+        my $d2 = $d / $dp;
+        $d2 /= $dp while 0 == $d2 % $dp;
+        $fullfact{$d} = [ @{ $fact{$d} }, @{ $fullfact{$d2} } ];
     }
 }
 
