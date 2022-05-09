@@ -728,7 +728,7 @@ sub prep_forcep {
     my($p) = @_;
     my $fact = $fullfact{$n};
     my($x, $px) = (1, 1);
-    ++$x, $px *= $p while $px < $k;
+    ++$x, $px *= $p while $px * $p < $k;
 
     my @batch;
     $pforce{$p} = \@batch;
@@ -736,6 +736,7 @@ sub prep_forcep {
     for my $i (0 .. $k - 1) {
         for my $fx (@$fact) {
             next if $fx < $x;
+            next if $fx == $x && ($i >= $px || $i + $px < $k);
             my $batch = try_force($i, $p, $fx) or next;
             if (@{ $batch->{min} }) {
                 use DDP; p { p => $p, x => $fx, i => $i, batch => $batch };
@@ -746,14 +747,14 @@ sub prep_forcep {
     }
 
     return if $p == 2 || $n % ($x - 1);
-    --$x;
-    $px /= $p;
     my $px2 = $px * ($p - 1);
     for my $i (0 .. $px - 1) {
         next if $i + $px2 <= $k - 1;
         my $batch = try_force($i, $p, $x) or next;
-        my $is = join ' ', ($i, map $_->[0], @{ $batch->{min} });
-        push @{ $batch->{force} }, splice @{ $batch->{min} };
+        my @min = splice @{ $batch->{min} };
+        next unless @min;
+        my $is = join ' ', ($i, map $_->[0], @min);
+        push @{ $batch->{force} }, @min;
         push @batch, [ "$x:$is", $batch ];
     }
     return;
