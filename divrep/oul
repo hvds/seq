@@ -774,6 +774,7 @@ sub recover_forcep {
         }
     }
     die "no power of $p to recover from" unless $bestx;
+    ++$bestx;
     my $match = join ':', $bestx, join ' ', @besti;
     my $which = first { $pf->[$_][0] eq $match } 0 .. $#$pf;
     die "no pforce match for '$match'" unless defined $which;
