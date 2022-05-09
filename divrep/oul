@@ -12,7 +12,7 @@ use Algorithm::Loops qw{ NestedLoops };
 use lib 'lib';
 use Type;
 use Seq::Db;
-use ModFunc qw/ gcd /;
+use ModFunc qw{ gcd allsqrtmod };
 
 local $SIG{FPE} = sub { use Carp; confess("Division by zero") };
 
@@ -609,23 +609,27 @@ sub walk_v {
         $rwalk = undef;
     }
 
+    # allocated values
     my @q = map $_->{q}, @v;
+
     # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
     my $m = MBI(chinese(map [ -$_, $q[$_] ], 0 .. $#q));
     return if $have_best && $m > $best;
 
+    # unallocated tau
     my @t = map $_->{t}, @v;
+
+    # gcd(@q)
     my $aq = $aq[$level];
+
+    # Given o_i + k . qq_i == m + i (mod aq), need tau(o_i) == t_i
     my @qq = map $aq / $_, @q;
     my @o = map +($m + $_) / $q[$_], 0 .. $#q;
 
-    if ($start) {
-        $o[$_] += $qq[$_] * $start for 0 .. $#o;
-    }
-
+    my @square;
     my @check = $print ? () : do {
         # Categorize by required tau()
-        my(@prime, @semi, @square, @other);
+        my(@prime, @semi, @other);
         for my $i (0 .. $#o) {
             my $t = $t[$i];
             if ($t == 2) {
@@ -667,12 +671,67 @@ sub walk_v {
         );
     };
 
+    # TODO: when Pell solver available, use it if @square > 1
+    # TODO: when allrootmod() available, check for higher forced power
+    #   as gcd(map $_ - 1, divisors($t))
+    if (@square) {
+        my $sqi = $square[0];
+        my($o, $q, $qq, $t) = ($o[$sqi], $q[$sqi], $qq[$sqi], $t[$sqi]);
+        # remove the unneeded @check entry for this $i
+        shift @check;
+
+        # We need to find r: r^2 = o_i + j . qq_i
+        my @sqmod = sort { $a <=> $b } allsqrtmod($o, $qq);
+        return unless @sqmod;
+
+        my($rcycle, $rindex) = (0, 0);
+        my $atip = 0;
+        if ($start) {
+            $o[$_] += $qq[$_] * $start for 0 .. $#o;
+            $atip = $start;
+            $rcycle = $start / $qq;
+            $start %= $qq;
+            $rindex = (first { $sqmod[$_] >= $start } 0 .. $#sqmod)
+                    // do { ++$rcycle; 0 };
+        }
+        # CHECKME: might we get r: r^2 < o_i for initial values?
+        my $endr = $have_best ? (($best + $sqi) / $q)->bsqrt : undef;
+        my $endi = $have_best ? $best / $aq : 0;
+        my $qqr = $rcycle * $qq;
+        while (1) {
+            my $r = $sqmod[$rindex] + $qqr;
+            last if defined($endr) && $r > $endr;
+            ++$countw;
+            next if gcd($r, $qq) != 1;
+            next unless sqtau($r) == $t;
+            my $ati = ($r * $r - $o) / $qq;
+            do_diag(desc(\@v) . ": $ati / $endi") if times() >= $diagt;
+
+            $o[$_] += $qq[$_] * ($ati - $atip) for 0 .. $#o;
+            $atip = $ati;
+            if (all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o) {
+                if ($print) {
+                    print STDERR $o[0] * $q[0], "\n";
+                } else {
+                    return $o[0] * $q[0] if all { $_->() } @check;
+                }
+            }
+        } continue {
+            ++$rindex;
+            $qqr += $qq, $rindex = 0 if $rindex >= @sqmod;
+        }
+        return;
+    }
+
     #
     # This is the core loop, for long runs we expect to spend the bulk
     # of our time here (probably in factorization for the tau() checks).
     #
+    if ($start) {
+        $o[$_] += $qq[$_] * $start for 0 .. $#o;
+    }
     my $end = $have_best ? $best / $q[0] : undef;
-    my $endi = ($end // 0) / $qq[0];
+    my $endi = $have_best ? $best / $aq : 0;
     while (!defined($end) || $o[0] <= $end) {
         ++$countw;
         if (times() >= $diagt) {
