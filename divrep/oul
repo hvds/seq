@@ -340,7 +340,7 @@ sub recurse {
             my($rp, $rx) = @$r;
             ++$rx;
             my $fai = first { $fa->[$_] == $rx } 0 .. $#$fa;
-            die "power $rx does not exist in fact[$v->{t}]: [@$fa]"
+            die "power $rp^$rx does not exist at $i in fact[$v->{t}]: [@$fa]"
                     unless defined $fai;
             $fa = [ @$fa[$fai .. $#$fa] ] if $fai;
             $p0 = $rp;
