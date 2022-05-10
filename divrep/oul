@@ -583,8 +583,7 @@ sub new_power {
     # assign nothing if we've seen a higher p^x before
     return +($op, 1) if $op >= $x;
     # else assign the difference
-    my $ax = $x - $op;
-    return +($ax, MBI($p) ** $ax);
+    return +($x, MBI($p) ** ($x - $op));
 }
 
 sub walk_1 {
