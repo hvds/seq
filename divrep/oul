@@ -95,6 +95,7 @@ $max ||= f()->f unless $nodb;       # set from db if not specified
 
 my $best = $max || undef;
 my $have_best = $best ? 1 : 0;
+our $have_square = 0;
 
 # Ensure the Run object is marked 'partial' if not a full run
 my $complete = defined($cap) ? 0 : 1;
@@ -175,6 +176,7 @@ sub inject {
     $v->{pu}{$p} = $x;
     $v->{q} = $v->{q} * $px;
     $v->{t} = $v->{t} / $x;
+    $have_square = 1 if $v->{t} & 1;
     $used{$p} = $i;
     ++$level;
     ++$injected[$i];
@@ -367,6 +369,7 @@ sub recurse {
             $recover = 0;
         }
         my $tnext = $v->{t} / $x;
+        local $have_square = 1 if $tnext & 1;
 
         # We can get slightly better accuracy by recalculating this each
         # time in the loop below, at least for small $p, but the cost
@@ -376,6 +379,10 @@ sub recurse {
             my $lim = $cap // (($best + $i) / $v->{q} / $mint)->broot($x - 1);
             next POWER if $lim < $p + 1;
             my $walk = ($best + $i) / $aq[$level];
+            if ($have_square) {
+                my $lim2 = $lim * $lim >> scalar keys %used;
+                $lim = $lim2 if $lim < $lim2;
+            }
             candidate(walk_v()), last POWER if $walk * $gain < $lim;
         }
 
@@ -481,6 +488,7 @@ sub batch_recurse {
         local $v->{pu}{$p} = $x;
         local $v->{q} = $v->{q} * $px;
         local $v->{t} = $v->{t} / $x;
+        local $have_square = 1 if $v->{t} & 1;
         local $used{$p} = $i;
 
         return if $v->{forced} > $v->{t};
