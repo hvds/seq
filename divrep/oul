@@ -9,10 +9,12 @@ use Math::Prime::Util qw{
 use Math::Prime::Util::GMP qw{ chinese };
 use List::Util qw{ first sum0 all min };
 use Algorithm::Loops qw{ NestedLoops };
+
 use lib 'lib';
 use Type;
 use Seq::Db;
 use ModFunc qw{ gcd allsqrtmod };
+use Math::Pell ();  # will fully qualify use
 
 local $SIG{FPE} = sub { use Carp; confess("Division by zero") };
 
@@ -176,7 +178,7 @@ sub inject {
     $v->{pu}{$p} = $x;
     $v->{q} = $v->{q} * $px;
     $v->{t} = $v->{t} / $x;
-    $have_square = 1 if $v->{t} & 1;
+    ++$have_square if $v->{t} & 1;
     $used{$p} = $i;
     ++$level;
     ++$injected[$i];
@@ -369,7 +371,7 @@ sub recurse {
             $recover = 0;
         }
         my $tnext = $v->{t} / $x;
-        local $have_square = 1 if $tnext & 1;
+        local $have_square = $have_square + 1 if $tnext & 1;
 
         # We can get slightly better accuracy by recalculating this each
         # time in the loop below, at least for small $p, but the cost
@@ -380,8 +382,15 @@ sub recurse {
             next POWER if $lim < $p + 1;
             my $walk = ($best + $i) / $aq[$level];
             if ($have_square) {
+                # If we fix a square, expect to actually walk sqrt($walk)
+                # times number of roots mod $aq, typically 2**k if there
+                # are k primes dividing $aq.
                 my $lim2 = $lim * $lim >> scalar keys %used;
                 $lim = $lim2 if $lim < $lim2;
+
+                # If we fix multiple squares force the walk immediately:
+                # solving the Pell equation won't be beaten by further recurse.
+                $walk = 0 if $have_square > 1;
             }
             candidate(walk_v()), last POWER if $walk * $gain < $lim;
         }
@@ -490,7 +499,7 @@ sub batch_recurse {
         local $v->{pu}{$p} = $x;
         local $v->{q} = $v->{q} * $px;
         local $v->{t} = $v->{t} / $x;
-        local $have_square = 1 if $v->{t} & 1;
+        local $have_square = $have_square + 1 if $v->{t} & 1;
         local $used{$p} = $i;
 
         return if $v->{forced} > $v->{t};
@@ -688,6 +697,46 @@ sub walk_v {
         my($o, $q, $qq, $t) = ($o[$sqi], $q[$sqi], $qq[$sqi], $t[$sqi]);
         # remove the unneeded @check entry for this $i
         shift @check;
+
+        if (@square > 1) {
+            my $sqj = $square[1];
+            my($oj, $qj, $qqj, $tj) = ($o[$sqj], $q[$sqj], $qq[$sqj], $t[$sqj]);
+            shift @check;
+            my $limit = $have_best ? ($best / $q)->bsqrt : undef;
+            # q_i x^2 - q_j y^2 + (j - i) = 0
+            my $pell = Math::Pell::with_limit(sub {
+                Math::Pell::full($q, 0, -$qj, 0, 0, $sqj - $sqi);
+            }, $limit);
+            my $atip = 0;
+            my $pc = 0;
+            while (1) {
+                my($x, $y) = $pell->();
+                return unless defined $x;
+                my $x2 = $x * $x;
+                return if $have_best && $x2 * $q - $sqi > $best;
+                ++$countw;
+                ++$pc;
+                do_diag(desc(\@v) . ": P$pc") if times() >= $diagt;
+                next unless $x2 % $qq == $o;
+                my $y2 = $y * $y;
+                next unless $y2 % $qqj == $oj;
+                next if gcd($x, $qq) != 1;
+                next if gcd($y, $qqj) != 1;
+                next unless sqtau($x) == $t;
+                next unless sqtau($y) == $tj;
+                my $ati = ($x2 - $o) / $qq;
+                next unless $ati == ($y2 - $oj) / $qqj;
+                $o[$_] += $qq[$_] * ($ati - $atip) for 0 .. $#o;
+                $atip = $ati;
+                if (all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o) {
+                    if ($print) {
+                        print STDERR $o[0] * $q[0], "\n";
+                    } else {
+                        return $o[0] * $q[0] if all { $_->() } @check;
+                    }
+                }
+            }
+        }
 
         # We need to find r: r^2 = o_i + j . qq_i
         my @sqmod = sort { $a <=> $b } allsqrtmod($o, $qq);
