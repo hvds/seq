@@ -475,6 +475,8 @@ sub batch_recurse {
                 }
             }
         }
+        return if $v->{t} % $x;
+
         my $px = MBI($p) ** ($x - 1);
         my($ax, $apx) = new_power($p, $x, $px);
 
