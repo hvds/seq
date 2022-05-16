@@ -178,7 +178,7 @@ sub inject {
     $v->{pu}{$p} = $x;
     $v->{q} = $v->{q} * $px;
     $v->{t} = $v->{t} / $x;
-    ++$have_square if $v->{t} & 1;
+    ++$have_square if ($v->{t} & 1) && !($x & 1);
     $used{$p} = $i;
     ++$level;
     ++$injected[$i];
@@ -371,7 +371,6 @@ sub recurse {
             $recover = 0;
         }
         my $tnext = $v->{t} / $x;
-        local $have_square = $have_square + 1 if $tnext & 1;
 
         # We can get slightly better accuracy by recalculating this each
         # time in the loop below, at least for small $p, but the cost
@@ -395,6 +394,7 @@ sub recurse {
             candidate(walk_v()), last POWER if $walk * $gain < $lim;
         }
 
+        local $have_square = $have_square + 1 if ($tnext & 1) && !($x & 1);
         $v->{x}[$vlevel] = $x;
         local $v->{l} = $vlevel + 1;
 
@@ -499,7 +499,7 @@ sub batch_recurse {
         local $v->{pu}{$p} = $x;
         local $v->{q} = $v->{q} * $px;
         local $v->{t} = $v->{t} / $x;
-        local $have_square = $have_square + 1 if $v->{t} & 1;
+        local $have_square = $have_square + 1 if ($v->{t} & 1) && !($x & 1);
         local $used{$p} = $i;
 
         return if $v->{forced} > $v->{t};
