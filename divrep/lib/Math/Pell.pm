@@ -829,7 +829,9 @@ sub _pell_fund_sol {
         return +(undef, $cf->[0]);
     }
     my $conv = convergents($cf, $cfr);
-    for (1 .. @$cf + @$cfr) {
+    # not sure how far we have to go in the worst case, but D=58 needs
+    # @$cf + @$cfr * 2 - 1
+    for (1 .. @$cf + @$cfr * 2) {
         my($p, $q) = $conv->();
         return +($p, $q) if $p * $p - $D * $q * $q == 1;
     }
