@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Math::GMP;
 use Math::Prime::Util qw{
-    factor_exp prime_iterator divisors next_prime valuation
+    factor_exp prime_iterator divisors next_prime valuation prime_count
     is_prime is_semiprime is_power
 };
 use Math::Prime::Util::GMP qw{ chinese };
@@ -967,9 +967,13 @@ sub fill_mintau {
         my $max_alloc = $cop * $k - 1;
 
         # We need at most 1 per factor of a factorization, plus 1 for
-        # each allocation.
-        my $need = $cp + $max_alloc;
+        # each allocation, plus 1 per forced prime (which can be used
+        # without filling a normal allocation).
+        my $need = $cp + $max_alloc + prime_count($forcep);
         @p = nprimes($need, 0);
+
+        # Forced primes are always allocated, so never part of mintau.
+        @p = grep $_ > $forcep, @p;
 
         # A prime p allocated at i + xp is not suppressed at i.
         $smallp{$_} = 1 for grep $_ < $k, @p;
