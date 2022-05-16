@@ -13,7 +13,7 @@ use Algorithm::Loops qw{ NestedLoops };
 use lib 'lib';
 use Type;
 use Seq::Db;
-use ModFunc qw{ gcd allsqrtmod };
+use ModFunc qw{ gcd allsqrtmod allrootmod };
 use Math::Pell ();  # will fully qualify use
 
 local $SIG{FPE} = sub { use Carp; confess("Division by zero") };
@@ -689,9 +689,6 @@ sub walk_v {
         );
     };
 
-    # TODO: when Pell solver available, use it if @square > 1
-    # TODO: when allrootmod() available, check for higher forced power
-    #   as gcd(map $_ - 1, divisors($t))
     if (@square) {
         my $sqi = $square[0];
         my($o, $q, $qq, $t) = ($o[$sqi], $q[$sqi], $qq[$sqi], $t[$sqi]);
@@ -738,9 +735,11 @@ sub walk_v {
             }
         }
 
-        # We need to find r: r^2 = o_i + j . qq_i
-        my @sqmod = sort { $a <=> $b } allsqrtmod($o, $qq);
-        return unless @sqmod;
+        my $x = gcd(map $_ - 1, divisors($t[$sqi]));
+
+        # We need to find r: r^x = o_i + j . qq_i
+        my @xmod = sort { $a <=> $b } allrootmod($o, $x, $qq);
+        return unless @xmod;
 
         my($rcycle, $rindex) = (0, 0);
         my $atip = 0;
@@ -749,22 +748,24 @@ sub walk_v {
             $atip = $start;
             $rcycle = $start / $qq;
             $start %= $qq;
-            $rindex = (first { $sqmod[$_] >= $start } 0 .. $#sqmod)
+            $rindex = (first { $xmod[$_] >= $start } 0 .. $#xmod)
                     // do { ++$rcycle; 0 };
         }
-        # CHECKME: might we get r: r^2 < o_i for initial values?
-        my $endr = $have_best ? (($best + $sqi) / $q)->bsqrt : undef;
+        # CHECKME: might we get r: r^x < o_i for initial values?
+        my $endr = $have_best ? (($best + $sqi) / $q)->broot($x) : undef;
         my $endi = $have_best ? $best / $aq : 0;
         my $qqr = $rcycle * $qq;
         while (1) {
-            my $r = $sqmod[$rindex] + $qqr;
+            my $r = $xmod[$rindex] + $qqr;
             last if defined($endr) && $r > $endr;
             ++$countw;
             next if gcd($r, $qq) != 1;
-            next unless sqtau($r) == $t;
-            my $ati = ($r * $r - $o) / $qq;
-            do_diag(desc(\@v) . ": $ati / $endi") if times() >= $diagt;
-
+            if (times() >= $diagt) {
+                my $ati = ($r ** $x - $o) / $qq;
+                do_diag(desc(\@v) . ": $ati / $endi");
+            }
+            next unless xtau($r, $x) == $t;
+            my $ati = ($r ** $x - $o) / $qq;
             $o[$_] += $qq[$_] * ($ati - $atip) for 0 .. $#o;
             $atip = $ati;
             if (all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o) {
@@ -776,7 +777,7 @@ sub walk_v {
             }
         } continue {
             ++$rindex;
-            $qqr += $qq, $rindex = 0 if $rindex >= @sqmod;
+            $qqr += $qq, $rindex = 0 if $rindex >= @xmod;
         }
         return;
     }
@@ -1350,6 +1351,14 @@ sub sqtau {
     $fact //= [ factor_exp($n) ];
     my $k = 1;
     $k *= 2 * $_->[1] + 1 for @$fact;
+    return $k;
+}
+
+sub xtau {
+    my($n, $x, $fact) = @_;
+    $fact //= [ factor_exp($n) ];
+    my $k = 1;
+    $k *= $x * $_->[1] + 1 for @$fact;
     return $k;
 }
 
