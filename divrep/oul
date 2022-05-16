@@ -830,6 +830,8 @@ sub best_v {
         my $vj = $v[$j];
         # skip if no odd prime factor
         next unless $fact{$vj->{t}};
+        # skip prime powers when capped
+        next if $cap && ($vj->{t} & 1) && is_prime($vj->{t});
 
         if ($vi) {
             # doesn't have higher tau
