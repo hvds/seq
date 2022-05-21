@@ -541,6 +541,10 @@ sub gen_pell {
     return pell($D) if $N == 1;
     return neg_pell($D) if $N == -1;
 
+    my($Df, $sq) = _sqfree($D);
+    return _linear_filter(gen_pell($Df, $N), $zone, $zero, $sq, $zero)
+            if $sq > 1;
+
     my $neg = ($N < 0) ? 1 : 0;
     my $aN = abs($N);
 
