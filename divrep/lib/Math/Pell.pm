@@ -162,7 +162,7 @@ sub _swap_filter {
     my $limit = $want_limit;
     return sub {
         my($x, $y) = $r->();
-        return +(undef, undef) unless defined($x);
+        return +(undef, undef) unless defined $x;
         return +(undef, undef) if defined($limit) && abs($y) > $limit;
         return +($y, $x);
     };
@@ -546,8 +546,10 @@ sub gen_pell {
 
     # If D is not a quadratic residue (mod |N|), there can be no solution.
     my $q = sqrtmod($D, $aN) // return _fail();
+    my $q2 = $aN - $q;
+    $q2 = undef if $q == 0 || $q == $q2;
     my @match;
-    for my $P_0 ($q, ($q ? $aN - $q : ())) {
+    for my $P_0 ($q, grep defined, $q2) {
         my @best;
         my($cf, $cfr) = cf($D, $P_0, $zone, $aN);
         my $conv = convergents($cf, $cfr);
@@ -575,8 +577,8 @@ sub gen_pell {
         # exactly 0 or 1 fundamental solutions per $P_0.
         push @match, [ @best ] if @best;
     }
-    @match = sort { $a->[0] <=> $b->[0] } @match;
     return _fail() unless @match;
+    @match = sort { $a->[0] <=> $b->[0] } @match;
     my($e, $f) = _pell_fund_sol($D);
     my $i = 0;
     my $limit = $want_limit;
@@ -916,7 +918,7 @@ sub convergents {
 
 =head2 _sqfree ( $n )
 
-Given a non-zero integer C<n> returns the pair C<(n/k, k)>, where C<k>
+Given a non-zero integer C<n> returns the pair C<(n/k^2, k)>, where C<k>
 is the greatest square that divides C<n>.
 
 =cut
