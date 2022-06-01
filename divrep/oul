@@ -39,8 +39,8 @@ sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
 
-my($max, $inject, $debug, $nodb, $forcep) = (0) x 5;
-my($rrun, $cap, $gain, $start, $forcefull, $print);
+my($max, $inject, $debug, $nodb) = (0) x 4;
+my($rrun, $cap, $gain, $start, $forcefull, $print, $forcep);
 my $typename = 'o';
 my $maxproc = 6;
 my $seen_best = 0;
@@ -80,6 +80,7 @@ if ($rrun) {
 }
 $gain //= 1;
 $start //= 0;
+$forcep //= $k;
 $0 = "oul($n $k)";
 $type->bind($n);
 
