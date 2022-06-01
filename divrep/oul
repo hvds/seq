@@ -1059,6 +1059,8 @@ sub recover {
             }
         } elsif ($which eq '001') {
             # previous recovery is ok
+        } elsif ($which eq '000') {
+            # comments are ok
         } else {
             die "Unexpected log line in $path: $log{$which}";
         }
