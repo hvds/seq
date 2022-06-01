@@ -1,4 +1,4 @@
-#!/opt/maths/bin/perl
+#!/opt/maths-GMP/bin/perl
 use strict;
 use warnings;
 use Math::GMP;
@@ -18,6 +18,8 @@ use RootMod qw{ allsqrtmod allrootmod };
 use Math::Pell ();  # will fully qualify use
 
 local $SIG{FPE} = sub { use Carp; confess("Division by zero") };
+
+*is_tau = Math::Prime::Util::GMP->can('is_tau') // \&_is_tau;
 
 =head1 oul - find min value of oneseq(n, k)
 
@@ -615,7 +617,7 @@ sub walk_1 {
         return;
     }
     return undef unless all {
-        tau($vi[$_]) == $v[$_]{t}
+        is_tau($vi[$_], $v[$_]{t})
     } grep $_ != $i, 0 .. $#v;
     return $val;
 }
@@ -669,25 +671,9 @@ sub walk_v {
 
         # Create callbacks for each element, and order the categories
         # fastest first: squares, primes, semiprimes, others
-        (
-            (map { my $i = $_; sub {
-                my $root;
-                return 0 unless is_power($o[$i], 2, \$root);
-                return sqtau($root) == $t[$i];
-            } } @square),
-            (map { my $i = $_; sub {
-                is_prime($o[$i]);
-            } } @prime),
-            (map { my $i = $_; sub {
-                my $root;
-                return is_semiprime($o[$i])
-                    ? !is_power($o[$i], 2)
-                    : (is_power($o[$i], 3, \$root) && is_prime($root));
-            } } @semi),
-            (map { my $i = $_; my $t = $t[$i]; sub {
-                return tau($o[$i]) == $t;
-            } } @other),
-        );
+        (map { my $i = $_; my $t = $t[$i]; sub {
+            return is_tau($o[$i], $t);
+        } } @square, @prime, @semi, @other);
     };
 
     if (@square) {
@@ -761,12 +747,13 @@ sub walk_v {
             last if defined($endr) && $r > $endr;
             ++$countw;
             next if gcd($r, $qq) != 1;
+            my $rx = $r ** $x;
             if (times() >= $diagt) {
-                my $ati = ($r ** $x - $o) / $qq;
+                my $ati = ($rx - $o) / $qq;
                 do_diag(desc(\@v) . ": $ati / $endi");
             }
-            next unless xtau($r, $x) == $t;
-            my $ati = ($r ** $x - $o) / $qq;
+            next unless is_tau($rx, $t);
+            my $ati = ($rx - $o) / $qq;
             $o[$_] += $qq[$_] * ($ati - $atip) for 0 .. $#o;
             $atip = $ati;
             if (all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o) {
@@ -1349,6 +1336,20 @@ sub tau {
     my $k = 1;
     $k *= $_->[1] + 1 for @$fact;
     return $k;
+}
+
+sub _is_tau {
+    my($n, $t) = @_;
+    my $root;
+    return $t & 1 ? do {
+        return 0 unless is_power($n, 2, \$root);
+        return sqtau($root) == $t;
+    } : $t == 2 ? is_prime($n)
+    : $t == 4 ? do {
+        is_semiprime($n)
+            ? !is_power($n, 2)
+            : (is_power($n, 3, \$root) && is_prime($root))
+    } : (tau($n) == $t);
 }
 
 sub sqtau {
