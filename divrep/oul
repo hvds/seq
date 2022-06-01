@@ -40,7 +40,7 @@ my $zero = MBI(0);
 my $zone = MBI(1);
 
 my($max, $inject, $debug, $nodb) = (0) x 4;
-my($rrun, $cap, $gain, $start, $forcefull, $print, $forcep);
+my($rrun, $cap, $gain, $start, $forcefull, $print);
 my $typename = 'o';
 my $maxproc = 6;
 my $seen_best = 0;
@@ -52,7 +52,6 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($gain = $arg || shift(@ARGV)), next if $arg =~ s{^-g}{};
     ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     ($cap = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
-    ($forcep = $arg || shift(@ARGV)), next if $arg =~ s{-fp}{};
     ($start = length($arg) ? $arg : shift @ARGV), next if $arg =~ s{^-s}{};
     $inject = 1, next if $arg eq '-i';
     $nodb = 1, next if $arg eq '-n';
@@ -80,7 +79,6 @@ if ($rrun) {
 }
 $gain //= 1;
 $start //= 0;
-$forcep //= $k;
 $0 = "oul($n $k)";
 $type->bind($n);
 
@@ -141,7 +139,7 @@ my @rq = ($zero);
 my %pforce;
 do {
     my $p = 2;
-    while ($p <= $forcep) {
+    while ($p <= $k) {
         prep_forcep($p);
         $p = next_prime($p);
     }
@@ -257,11 +255,11 @@ sub desc {
     } @$va;
 }
 
-# Iterate through all possible settings for primes up to $forcep, then
+# Iterate through all possible settings for primes up to $k, then
 # continue with recurse() to fill remaining slots.
 sub forcep {
     my($p, $recover) = @_;
-    return recurse($recover) if $forcep < $p;
+    return recurse($recover) if $p > $k;
     my $nextp = next_prime($p);
     my $pf = $pforce{$p};
     if ($recover) {
@@ -976,11 +974,11 @@ sub fill_mintau {
         # We need at most 1 per factor of a factorization, plus 1 for
         # each allocation, plus 1 per forced prime (which can be used
         # without filling a normal allocation).
-        my $need = $cp + $max_alloc + prime_count($forcep);
+        my $need = $cp + $max_alloc + prime_count($k);
         @p = nprimes($need, 0);
 
         # Forced primes are always allocated, so never part of mintau.
-        @p = grep $_ > $forcep, @p;
+        @p = grep $_ > $k, @p;
 
         # A prime p allocated at i + xp is not suppressed at i.
         $smallp{$_} = 1 for grep $_ < $k, @p;
