@@ -13,7 +13,8 @@ use Algorithm::Loops qw{ NestedLoops };
 use lib 'lib';
 use Type;
 use Seq::Db;
-use ModFunc qw{ gcd allsqrtmod allrootmod };
+use ModFunc qw{ gcd };
+use RootMod qw{ allsqrtmod allrootmod };
 use Math::Pell ();  # will fully qualify use
 
 local $SIG{FPE} = sub { use Carp; confess("Division by zero") };

@@ -9,7 +9,7 @@ use List::Util qw{ any };
 use Math::Prime::Util::GMP;
 
 use lib 'lib';
-use ModFunc qw{ allsqrtmod };
+use RootMod qw{ allsqrtmod };
 
 use Exporter qw{ import };
 our @EXPORT_OK = qw{
