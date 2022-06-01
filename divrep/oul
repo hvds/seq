@@ -116,12 +116,9 @@ my %used;
 #   q => total value attributed
 #   t => tau() not yet accounted for (ie n / tau(q))
 #   l => level: how many entries in p[] and x[] are valid
-#   force{} => lookup { p => x } of forced minimal powers
-#   forced => product of force{p}
 #
 my @v = map +{
     p => [], pu => {}, x => [], q => $zone, t => $n, l => 0,
-    force => {}, forced => 1,
 }, 0 .. $k - 1;
 
 # Recursion level
@@ -283,66 +280,6 @@ sub recurse {
     my $prex = $vlevel ? $v->{x}[$vlevel - 1] : 0;
     my $p0;
 
-    if ($v->{forced} > 1) {
-        my $p = min keys %{ $v->{force} };
-        my $xm = delete local $v->{force}{$p};
-        my $forced = $v->{forced} / $xm;
-        local $v->{forced} = $forced;
-        my $pxm = $p ** ($xm - 1);
-        my @known;
-        for (my $j = $i % $pxm; $j < $k; $j += $pxm) {
-            my $xk = $v[$j]{pu}{$p};
-            push @known, defined($xk) ? $xk - $xm : undef;
-        }
-        my $im = int($i / $pxm);
-        $fa = $fullfact{$v->{t}};
-        if ($recover) {
-            my $r = $rstack[$i][$vlevel];
-            if (!$r) {
-                $recover = 0;
-            } else {
-                my($rp, $rx) = @$r;
-                ++$rx;
-                if ($p != $rp) {
-                    die "Forced $p is not recovering $rp ** $rx";
-                }
-                my $fai = first { $fa->[$_] == $rx } 0 .. $#$fa;
-                die "power $rx does not exist in fullfact[$v->{t}]: [@$fa]"
-                        unless defined $fai;
-                $fa = [ @$fa[$fai .. $#$fa] ] if $fai;
-            }
-        }
-        my $done = 1;
-        for my $x (@$fa) {
-            next if $x < $xm;
-            next if $x * $forced > $v->{t};
-            # If we're down to powers of 2, fall through to the main loop
-            # unless we'd be forced to consume _all_ the powers of 2.
-            $done = 0, last if (
-                !$forcefull     # use -f to suppress the fallthrough
-                && ($x & ($x - 1)) == 0
-                && $x >= 2 * $xm
-            );
-            local $known[$im] = $x - $xm;
-            next unless valid_set($p, \@known);
-            my $batch = try_force($i, $p, $x);
-            if ($batch) {
-                batch_recurse($batch, $recover, \&recurse);
-                $recover = 0;
-                next;
-            }
-        }
-        return if $done;
-        # FIXME: when falling through here we'd like to mark somehow that
-        # _at least_ ceil(log_2(xm)) powers of 2 will be consumed by some
-        # p^{2^x-1} factor, restricting what factors are available for other
-        # primes, but we can't simply modify v->{t} since that would cause
-        # walk_*() to look for the wrong thing. Maybe we can find a way
-        # to allocate p^x without walk_* rejecting candidates on the grounds
-        # that v_i / q == 0 (mod p)
-        $fa = $fact{$v->{t}} // return candidate(walk_v());
-    }
-
     if ($recover) {
         my $r = $rstack[$i][$vlevel];
         if (!$r) {
@@ -429,15 +366,6 @@ sub recurse {
             $p = next_prime($p);
             last if defined($cap) && $p > $cap;
             next if defined $used{$p};
-            # FIXME: make this a single ($p <= $max_force[$i]) check
-            if ($p < $k && !($i - $p < 0 && $i + $p >= $k)) {
-                my $batch = try_force($i, $p, $x) // next;
-                local $v->{l} = $vlevel;
-                batch_recurse($batch, $this_recover, \&recurse);
-                $this_recover = 0;
-                next;
-            }
-
             local $used{$p} = $i;
             local $v->{pu}{$p} = $x;
             my $px = MBI($p) ** ($x - 1);
@@ -479,6 +407,11 @@ sub recurse {
 
 sub batch_recurse {
     my($batch, $recover, $continue) = @_;
+    if (@{ $batch->{min} }) {
+        use DDP;
+        p $batch;
+        die "Cannot recurse with unspecified min value";
+    }
     if ($batch->{iforce} < @{ $batch->{force} }) {
         my($i, $p, $x) = @{ $batch->{force}[$batch->{iforce}] };
         local $batch->{iforce} = $batch->{iforce} + 1;
@@ -519,7 +452,6 @@ sub batch_recurse {
         local $have_square = $have_square + 1 if ($v->{t} & 1) && !($x & 1);
         local $used{$p} = $i;
 
-        return if $v->{forced} > $v->{t};
         ++$level;
         if ($v->{t} == 1) {
             candidate(walk_1($i, $v->{q} - $i));
@@ -527,22 +459,6 @@ sub batch_recurse {
             batch_recurse($batch, $recover, $continue);
         }
         --$level;
-    } elsif ($batch->{imin} < @{ $batch->{min} }) {
-        # FIXME: if there's at most one option < $v->{t} available, we
-        # should walk_1() the $v->{t} option then set the remaining one.
-        my($i, $p, $x) = @{ $batch->{min}[$batch->{imin}] };
-        local $batch->{imin} = $batch->{imin} + 1;
-        my $v = $v[$i];
-        my $forced = $v->{forced};
-        if ($v->{force}{$p}) {
-            my $ox = $v->{force}{$p};
-            $forced /= $ox;
-            $x = $ox if $x < $ox;
-        }
-        local $v->{forced} = $forced * $x;
-        return if $v->{forced} > $v->{t};
-        local $v->{force}{$p} = $x;
-        batch_recurse($batch, $recover, $continue);
     } else {
         return $continue->($recover);
     }
@@ -601,7 +517,6 @@ sub try_force {
         force => \@force,
         min => \@min,
         iforce => 0,
-        imin => 0,
     };
 }
 
