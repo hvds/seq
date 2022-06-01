@@ -40,7 +40,7 @@ my $zero = MBI(0);
 my $zone = MBI(1);
 
 my($max, $inject, $debug, $nodb) = (0) x 4;
-my($rrun, $cap, $gain, $start, $forcefull, $print);
+my($rrun, $cap, $gain, $start, $print);
 my $typename = 'o';
 my $maxproc = 6;
 my $seen_best = 0;
@@ -56,7 +56,6 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     $inject = 1, next if $arg eq '-i';
     $nodb = 1, next if $arg eq '-n';
     $print = 1, next if $arg eq '-o';
-    $forcefull = 1, next if $arg eq '-f';
     ++$debug, next if $arg eq '-d';
     die "Unknown option '$arg'\n";
 }
