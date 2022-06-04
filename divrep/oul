@@ -132,6 +132,8 @@ my $level = 0;
 my @aq = ($zone);
 # powers of primes included in @aq
 my %pp;
+# CRT of (-i % q) parallel to @aq
+my @rq = ($zero);
 
 # Each element of %pforce is an arrayref of [ key, batch ]; the key
 # is of the form "x:i1 i2 i3 ..." where x is the highest power of
@@ -179,6 +181,11 @@ sub inject {
     $v->{l} = $v->{l} + 1;
     $pp{$p} = $ax;
     $aq[$level + 1] = $aq[$level] * $apx;
+    $rq[$level + 1] = ($apx == 1)
+        ? $rq[$level]
+        : chinese([ $rq[$level], $aq[$level] ], [ -$i, $px ]);
+    # must fail if $have_best && $rq[$level + 1] > $best
+
     $v->{pu}{$p} = $x;
     $v->{q} = $v->{q} * $px;
     $v->{t} = $v->{t} / $x;
@@ -457,6 +464,10 @@ sub recurse {
             my($ax, $apx) = new_power($p, $x, $px);
             local $pp{$p} = $ax;
             local $aq[$level + 1] = $aq[$level] * $apx;
+            local $rq[$level + 1] = ($apx == 1)
+                ? $rq[$level]
+                : chinese([ $rq[$level], $aq[$level] ], [ -$i, $px ]);
+            next if $have_best && $rq[$level + 1] > $best;
             ++$level;
             do_diag(desc(\@v)) if times() >= $diagt;
             recurse($this_recover);
@@ -500,6 +511,10 @@ sub batch_recurse {
         local $v->{l} = $v->{l} + 1;
         local $pp{$p} = $ax;
         local $aq[$level + 1] = $aq[$level] * $apx;
+        local $rq[$level + 1] = ($apx == 1)
+            ? $rq[$level]
+            : chinese([ $rq[$level], $aq[$level] ], [ -$i, $px ]);
+        return if $have_best && $rq[$level + 1] > $best;
         local $v->{pu}{$p} = $x;
         local $v->{q} = $v->{q} * $px;
         local $v->{t} = $v->{t} / $x;
@@ -562,7 +577,8 @@ sub try_force {
     my($i, $p, $x) = @_;
 
     my(@force, @min);
-    for my $j (0 .. $k - 1) {
+    # set p^x at i first, then the rest
+    for my $j ($i, grep $_ != $i, 0 .. $k - 1) {
         my $tj = ($i == $j) ? $x + 1 : valuation($j - $i, $p) + 1;
         next if $tj == 1;
         # if already set, it's set to a power we would have picked
@@ -634,9 +650,8 @@ sub walk_v {
     # allocated values
     my @q = map $_->{q}, @v;
 
-    # find m: 2^x | m (mod (2p)^x), 3^x | m+diff (mod (2p)^x)
-    my $m = MBI(chinese(map [ -$_, $q[$_] ], 0 .. $#q));
-    return if $have_best && $m > $best;
+    # m was found by CRT such that m + i == 0 (mod q_i) for all i
+    my $m = MBI($rq[$level]);
 
     # unallocated tau
     my @t = map $_->{t}, @v;
