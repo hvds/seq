@@ -467,9 +467,9 @@ sub recurse {
             local $rq[$level + 1] = ($apx == 1)
                 ? $rq[$level]
                 : chinese([ $rq[$level], $aq[$level] ], [ -$i, $px ]);
-            next if $have_best && $rq[$level + 1] > $best;
             ++$level;
             do_diag(desc(\@v)) if times() >= $diagt;
+            --$level, next if $have_best && $rq[$level] > $best;
             recurse($this_recover);
             $this_recover = 0;
             --$level;
