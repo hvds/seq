@@ -578,7 +578,7 @@ sub walk_v {
     my @o = map +($m + $_) / $q[$_], 0 .. $#q;
 
     my @square;
-    my @check = $print ? () : do {
+    my @order = $print ? () : do {
         # Categorize by required tau()
         my(@prime, @semi, @other);
         for my $i (0 .. $#o) {
@@ -599,23 +599,20 @@ sub walk_v {
             \@prime, \@semi, \@square, \@other
         );
 
-        # Create callbacks for each element, and order the categories
-        # fastest first: squares, primes, semiprimes, others
-        (map { my $i = $_; my $t = $t[$i]; sub {
-            return is_tau($o[$i], $t);
-        } } @square, @prime, @semi, @other);
+        # order categories fastest first: squares, primes, semiprimes, others
+        (@square, @prime, @semi, @other);
     };
 
     if (@square) {
         my $sqi = $square[0];
         my($o, $q, $qq, $t) = ($o[$sqi], $q[$sqi], $qq[$sqi], $t[$sqi]);
-        # remove the unneeded @check entry for this $i
-        shift @check;
+        # remove the unneeded @order entry for this $i
+        shift @order;
 
         if (@square > 1) {
             my $sqj = $square[1];
             my($oj, $qj, $qqj, $tj) = ($o[$sqj], $q[$sqj], $qq[$sqj], $t[$sqj]);
-            shift @check;
+            shift @order;
             my $limit = $have_best ? ($best / $q)->bsqrt : undef;
             # q_i x^2 - q_j y^2 + (j - i) = 0
             my $pell = Math::Pell::with_limit(sub {
@@ -646,7 +643,8 @@ sub walk_v {
                     if ($print) {
                         print STDERR $o[0] * $q[0], "\n";
                     } else {
-                        return $o[0] * $q[0] if all { $_->() } @check;
+                        return $o[0] * $q[0]
+                                if all { is_tau($o[$_], $t[$_]) } @order;
                     }
                 }
             }
@@ -690,7 +688,8 @@ sub walk_v {
                 if ($print) {
                     print STDERR $o[0] * $q[0], "\n";
                 } else {
-                    return $o[0] * $q[0] if all { $_->() } @check;
+                    return $o[0] * $q[0] 
+                            if all { is_tau($o[$_], $t[$_]) } @order;
                 }
             }
         } continue {
@@ -728,7 +727,8 @@ sub walk_v {
             if ($print) {
                 print STDERR $o[0] * $q[0], "\n";
             } else {
-                return $o[0] * $q[0] if all { $_->() } @check;
+                return $o[0] * $q[0] 
+                        if all { is_tau($o[$_], $t[$_]) } @order;
             }
         }
 
