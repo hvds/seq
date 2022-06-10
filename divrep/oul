@@ -711,7 +711,7 @@ sub walk_v {
     # This is the core loop, for long runs we expect to spend the bulk
     # of our time here (probably in factorization for the is_tau() checks).
     #
-    my $end = $have_best ? $best / $aq : undef;
+    my $end = $have_best ? ($best - $m) / $aq : undef;
     my $endi = $end // 0;
     for (my $ati = $start // 0; !defined($end) || $ati <= $end; ++$ati) {
         ++$countw;
