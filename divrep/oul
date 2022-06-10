@@ -378,6 +378,8 @@ sub recurse {
                 if (!$have_pb || $best < $pb) {
                     ($have_pb, $pb) = ($have_best, $best);
                     my $lim = $cap // (($best + $i) / $v->{q} / $mint)->broot($x - 1);
+                    # FIXME: this check mostly duplicates the check above,
+                    # so we could avoid the broot() entirely
                     next POWER if $lim < $p;
                     my $walk = ($best + $i) / $aq[$level];
                     candidate(walk_v()), last POWER if $walk * $gain < $lim;
