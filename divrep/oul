@@ -4,7 +4,7 @@ use warnings;
 use Math::GMP;
 use Math::Prime::Util qw{
     factor_exp prime_iterator divisors next_prime valuation prime_count
-    is_prime is_semiprime is_power
+    is_prime is_semiprime is_power divmod
 };
 use Math::Prime::Util::GMP qw{ chinese };
 use List::Util qw{ first sum0 all min };
@@ -699,41 +699,36 @@ sub walk_v {
         return;
     }
 
+    my @inv = map {
+        my $i = $_;
+        map {
+            my $inv = divmod(-$o[$i], $qq[$i], $_);
+            defined($inv) ? [ $inv, $_ ] : ();
+        } keys %{ $v[$i]{pu} };
+    } 0 .. $#v;
+
     #
     # This is the core loop, for long runs we expect to spend the bulk
-    # of our time here (probably in factorization for the tau() checks).
+    # of our time here (probably in factorization for the is_tau() checks).
     #
-    if ($start) {
-        $o[$_] += $qq[$_] * $start for 0 .. $#o;
-    }
-    my $end = $have_best ? $best / $q[0] : undef;
-    my $endi = $have_best ? $best / $aq : 0;
-    while (!defined($end) || $o[0] <= $end) {
+    my $end = $have_best ? $best / $aq : undef;
+    my $endi = $end // 0;
+    for (my $ati = $start // 0; !defined($end) || $ati <= $end; ++$ati) {
         ++$countw;
         if (times() >= $diagt) {
-            my $ati = $o[0] / $qq[0];
             do_diag(desc(\@v) . ": $ati / $endi");
         }
 
         # Print a candidate or return a solution if we find one.
-        #
-        # FIXME: maintain $ati and prepare inverses for each assigned
-        # prime so the gcd check becomes a simple integer mod check:
-        #   all { $ati % $invp[$_] != $invmod[$_] } 0 .. $#o
-        # I think we can safely rely on both $ati and assigned primes
-        # not to exceed range of exact integer maths.
-
-        if (all { $o[$_]->bgcd($q[$_]) == 1 } 0 .. $#o) {
+        if (all { $ati % $_->[1] != $_->[0] } @inv) {
             if ($print) {
-                print STDERR $o[0] * $q[0], "\n";
+                print STDERR ($qq[0] * $ati + $o[0]) * $q[0], "\n";
             } else {
-                return $o[0] * $q[0] 
-                        if all { is_tau($o[$_], $t[$_]) } @order;
+                return ($o[0] + $qq[0] * $ati) * $q[0] if all {
+                    is_tau($qq[$_] * $ati + $o[$_], $t[$_])
+                } @order;
             }
         }
-
-        # step the candidates by prod q_i
-        $o[$_] += $qq[$_] for 0 .. $#o;
     }
     return;
 }
