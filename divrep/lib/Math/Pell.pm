@@ -932,7 +932,7 @@ sub _sqfree {
     my $k = $zone;
     for (factor_exp(abs($n))) {
         my($p, $e) = @$_;
-        $k *= $p ** ($e >> 1) if $e > 1;
+        $k *= (_z($p))[0] ** ($e >> 1) if $e > 1;
     }
     return +($n / $k / $k, $k);
 }
