@@ -540,7 +540,7 @@ sub walk_1 {
         my $v = $v[$_];
         my($vi, $mod) = ($val + $_)->bdiv($v->{q});
         return undef if $mod;
-        return undef if gcd($vi, $v->{q}) != 1;
+        return undef if $vi->bgcd($v->{q}) != 1;
         $vi[$_] = $vi;
     }
     if ($print) {
@@ -631,15 +631,15 @@ sub walk_v {
                 next unless $x2 % $qq == $o;
                 my $y2 = $y * $y;
                 next unless $y2 % $qqj == $oj;
-                next if gcd($x, $qq) != 1;
-                next if gcd($y, $qqj) != 1;
+                next if $x->bgcd($qq) != 1;
+                next if $y->bgcd($qqj) != 1;
                 next unless sqtau($x) == $t;
                 next unless sqtau($y) == $tj;
                 my $ati = ($x2 - $o) / $qq;
                 next unless $ati == ($y2 - $oj) / $qqj;
                 $o[$_] += $qq[$_] * ($ati - $atip) for 0 .. $#o;
                 $atip = $ati;
-                if (all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o) {
+                if (all { $o[$_]->bgcd($q[$_]) == 1 } 0 .. $#o) {
                     if ($print) {
                         print STDERR $o[0] * $q[0], "\n";
                     } else {
@@ -674,7 +674,7 @@ sub walk_v {
             my $r = $xmod[$rindex] + $qqr;
             last if defined($endr) && $r > $endr;
             ++$countw;
-            next if gcd($r, $qq) != 1;
+            next if $r->bgcd($qq) != 1;
             my $rx = $r ** $x;
             if (times() >= $diagt) {
                 my $ati = ($rx - $o) / $qq;
@@ -684,7 +684,7 @@ sub walk_v {
             my $ati = ($rx - $o) / $qq;
             $o[$_] += $qq[$_] * ($ati - $atip) for 0 .. $#o;
             $atip = $ati;
-            if (all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o) {
+            if (all { $o[$_]->bgcd($q[$_]) == 1 } 0 .. $#o) {
                 if ($print) {
                     print STDERR $o[0] * $q[0], "\n";
                 } else {
@@ -723,7 +723,7 @@ sub walk_v {
         # I think we can safely rely on both $ati and assigned primes
         # not to exceed range of exact integer maths.
 
-        if (all { gcd($o[$_], $q[$_]) == 1 } 0 .. $#o) {
+        if (all { $o[$_]->bgcd($q[$_]) == 1 } 0 .. $#o) {
             if ($print) {
                 print STDERR $o[0] * $q[0], "\n";
             } else {
