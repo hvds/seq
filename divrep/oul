@@ -577,6 +577,16 @@ sub walk_v {
     my @qq = map $aq / $_, @q;
     my @o = map +($m + $_) / $q[$_], 0 .. $#q;
 
+    # For all p: p | q_i, $ati == (-o_i / Q_i) mod p is disallowed.
+    # We assume $ati and all assigned p fit in a perl UV.
+    my @inv = map {
+        my $i = $_;
+        map {
+            my $inv = divmod(-$o[$i], $qq[$i], $_);
+            defined($inv) ? [ $inv, $_ ] : ();
+        } keys %{ $v[$i]{pu} };
+    } 0 .. $#v;
+
     my @square;
     my @order = $print ? () : do {
         # Categorize by required tau()
@@ -618,7 +628,6 @@ sub walk_v {
             my $pell = Math::Pell::with_limit(sub {
                 Math::Pell::full($q, 0, -$qj, 0, 0, $sqj - $sqi);
             }, $limit);
-            my $atip = 0;
             my $pc = 0;
             while (1) {
                 my($x, $y) = $pell->();
@@ -637,15 +646,13 @@ sub walk_v {
                 next unless sqtau($y) == $tj;
                 my $ati = ($x2 - $o) / $qq;
                 next unless $ati == ($y2 - $oj) / $qqj;
-                $o[$_] += $qq[$_] * ($ati - $atip) for 0 .. $#o;
-                $atip = $ati;
-                if (all { $o[$_]->bgcd($q[$_]) == 1 } 0 .. $#o) {
-                    if ($print) {
-                        print STDERR $o[0] * $q[0], "\n";
-                    } else {
-                        return $o[0] * $q[0]
-                                if all { is_tau($o[$_], $t[$_]) } @order;
-                    }
+                next unless all { $ati % $_->[1] != $_->[0] } @inv;
+                if ($print) {
+                    print STDERR $q[0] * ($qq[0] * $ati + $o[0]), "\n";
+                } else {
+                    return $q[0] * ($o[0] + $qq[0] * $ati) if all {
+                        is_tau($qq[$_] * $ati + $o[$_], $t[$_])
+                    } @order;
                 }
             }
         }
@@ -657,10 +664,7 @@ sub walk_v {
         return unless @xmod;
 
         my($rcycle, $rindex) = (0, 0);
-        my $atip = 0;
         if ($start) {
-            $o[$_] += $qq[$_] * $start for 0 .. $#o;
-            $atip = $start;
             $rcycle = $start / $qq;
             $start %= $qq;
             $rindex = (first { $xmod[$_] >= $start } 0 .. $#xmod)
@@ -668,29 +672,28 @@ sub walk_v {
         }
         # CHECKME: might we get r: r^x < o_i for initial values?
         my $endr = $have_best ? (($best + $sqi) / $q)->broot($x) : undef;
-        my $endi = $have_best ? $best / $aq : 0;
+        my $endi = $have_best ? ($best - $m) / $aq : 0;
         my $qqr = $rcycle * $qq;
         while (1) {
             my $r = $xmod[$rindex] + $qqr;
             last if defined($endr) && $r > $endr;
             ++$countw;
-            next if $r->bgcd($qq) != 1;
             my $rx = $r ** $x;
+            my $ati = ($rx - $o) / $qq;
             if (times() >= $diagt) {
-                my $ati = ($rx - $o) / $qq;
                 do_diag(desc(\@v) . ": $ati / $endi");
             }
+            next unless all { $ati % $_->[1] != $_->[0] } @inv;
+            # This is a bit wasteful, would be nice to have a 3-arg is_tau
+            # and say is_tau($r, $t, $x).
             next unless is_tau($rx, $t);
-            my $ati = ($rx - $o) / $qq;
-            $o[$_] += $qq[$_] * ($ati - $atip) for 0 .. $#o;
-            $atip = $ati;
-            if (all { $o[$_]->bgcd($q[$_]) == 1 } 0 .. $#o) {
-                if ($print) {
-                    print STDERR $o[0] * $q[0], "\n";
-                } else {
-                    return $o[0] * $q[0] 
-                            if all { is_tau($o[$_], $t[$_]) } @order;
-                }
+
+            if ($print) {
+                print STDERR $q[0] * ($qq[0] * $ati + $o[0]), "\n";
+            } else {
+                return $q[0] * ($o[0] + $qq[0] * $ati) if all {
+                    is_tau($qq[$_] * $ati + $o[$_], $t[$_])
+                } @order;
             }
         } continue {
             ++$rindex;
@@ -698,14 +701,6 @@ sub walk_v {
         }
         return;
     }
-
-    my @inv = map {
-        my $i = $_;
-        map {
-            my $inv = divmod(-$o[$i], $qq[$i], $_);
-            defined($inv) ? [ $inv, $_ ] : ();
-        } keys %{ $v[$i]{pu} };
-    } 0 .. $#v;
 
     #
     # This is the core loop, for long runs we expect to spend the bulk
@@ -722,9 +717,9 @@ sub walk_v {
         # Print a candidate or return a solution if we find one.
         if (all { $ati % $_->[1] != $_->[0] } @inv) {
             if ($print) {
-                print STDERR ($qq[0] * $ati + $o[0]) * $q[0], "\n";
+                print STDERR $q[0] * ($qq[0] * $ati + $o[0]), "\n";
             } else {
-                return ($o[0] + $qq[0] * $ati) * $q[0] if all {
+                return $q[0] * ($o[0] + $qq[0] * $ati) if all {
                     is_tau($qq[$_] * $ati + $o[$_], $t[$_])
                 } @order;
             }
