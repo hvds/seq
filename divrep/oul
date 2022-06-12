@@ -144,8 +144,6 @@ do {
 my($countr, $countw) = (0, 0);
 
 my @injected = (0) x $k;
-my @minp;
-prep_minp();
 
 ($r, $fh) = prep_run($n, $k, $complete) if $inject && !$rrun;
 report(sprintf "001 %s%s%s%s%s%s\n",
@@ -309,7 +307,7 @@ sub recurse {
         # or only greater primes if same power as previous power.
         my $p = ($prex == $x)
             ? $v->{p}[$vlevel - 1]
-            : ($minp[$i][$x] //= 1);
+            : $k;
         if ($recover) {
             $p = $p0 - 1;   # next_prime() will get us back to it
             $this_recover = 1;
@@ -1128,20 +1126,6 @@ OUT
                     // die "cannot find TauG entry for n=$n";
         };
     }
-}
-
-sub prep_minp {
-    # ensure top layer exists
-    @minp = map [], 1 .. $k;
-    return if $k < 5 || ($n % 3) == 0;
-
-    # suppress 2^x | v_i if x > 2 and (i + 4 < k or i - 4 >= 0)
-    my @d = grep $_ > 3, divisors($n);
-    for (0 .. $k - 1) {
-        next if $_ + 4 >= $k && $_ - 4 < 0;
-        @{ $minp[$_] }[@d] = (2) x @d;
-    }
-    return;
 }
 
 {
