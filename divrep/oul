@@ -7,7 +7,7 @@ use Math::Prime::Util qw{
     is_prime is_semiprime is_power divmod
 };
 use Math::Prime::Util::GMP qw{ chinese };
-use List::Util qw{ first sum0 all min };
+use List::Util qw{ first sum0 all min max };
 use Algorithm::Loops qw{ NestedLoops };
 
 use lib 'lib';
@@ -89,6 +89,7 @@ my $tn = tau($n, $nf);
 my(%fact, %fullfact, %nofact);
 prep_fact($n);
 prep_mintau();
+my @maxforce = prep_maxforce();
 
 my($diag_delay, $log_delay) = (1, 600);
 $t0 = 0 unless $rrun;
@@ -307,7 +308,7 @@ sub recurse {
         # or only greater primes if same power as previous power.
         my $p = ($prex == $x)
             ? $v->{p}[$vlevel - 1]
-            : $k;
+            : $maxforce[$i];
         if ($recover) {
             $p = $p0 - 1;   # next_prime() will get us back to it
             $this_recover = 1;
@@ -750,6 +751,15 @@ sub best_v {
     return $i // undef;
 }
 
+sub prep_maxforce {
+    if ($n & 3) {
+        # every p^1 will force a square, so force all primes to k
+        return ($k) x $k;
+    }
+    # force p^x only where there are two positions p apart
+    return map max($k - $_ - 1, $_), 0 .. $k - 1;
+}
+
 sub prep_forcep {
     my($p) = @_;
     my $fact = $fullfact{$n};
@@ -761,6 +771,8 @@ sub prep_forcep {
         $complete = 0;
     }
 
+    my $keep_single = ($n & 3) ? 1 : 0;
+    my $skipped = 0;
     my @batch;
     $pforce{$p} = \@batch;
 
@@ -773,11 +785,15 @@ sub prep_forcep {
                 use DDP; p { p => $p, x => $fx, i => $i, batch => $batch };
                 die "invalid batch in prep_forcep";
             }
-            push @batch, [ "$fx:$i", $batch ];
+            if ($keep_single || @{ $batch->{force} } > 1) {
+                push @batch, [ "$fx:$i", $batch ];
+            } else {
+                $skipped = 1;
+            }
         }
     }
 
-    return if $p == 2 || $x == 1 || $n % ($x - 1);
+    goto final if $p == 2 || $x == 1 || $n % ($x - 1);
     my $px2 = $px * ($p - 1);
     for my $i (0 .. $px - 1) {
         next if $i + $px2 <= $k - 1;
@@ -786,8 +802,15 @@ sub prep_forcep {
         next unless @min;
         my $is = join ' ', ($i, map $_->[0], @min);
         push @{ $batch->{force} }, @min;
-        push @batch, [ "$x:$is", $batch ];
+        if ($keep_single || @{ $batch->{force} } > 1) {
+            push @batch, [ "$x:$is", $batch ];
+        } else {
+            $skipped = 1;
+        }
     }
+  final:
+    push @batch, [ "", { force => [], min => [], iforce => 0 } ]
+            if $skipped;
     return;
 }
 
@@ -805,6 +828,9 @@ sub recover_forcep {
             push @besti, $i;
         }
     }
+    return +($pf->[-1][1], []) if $pf->[-1][0] eq '' && (
+        !$bestx || (@besti == 1 && $maxforce[$besti[0]] < $p)
+    );
     die "no power of $p to recover from" unless $bestx;
     ++$bestx;
     my $match = join ':', $bestx, join ' ', @besti;
