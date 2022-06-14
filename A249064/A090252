@@ -1,0 +1,253 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use Math::Prime::Util qw{ next_prime factor_exp };
+use Math::GMP;
+
+use lib '../lib';
+use H::Heap;
+$| = 1;
+
+my $MAX_INT = ~0;
+my $MAX_SQ = int(sqrt($MAX_INT));
+
+=head1 A090252
+
+A090252 is the lexically first sequence of positive integers such that
+each element a(n) is coprime to the next n elements.
+
+The vast majority of the elements are the primes, in order; we therefore
+record only the composite values.
+
+Let m(n) be max(a(i): 1 <= i <= n). The list of disallowed primes is then
+expected to consist of a) 0 or 1 small primes < m(n), b) a small but growing
+set of disjoint primes > sqrt(m(n)), and c) a contiguous range of primes
+greater than those in (b). So we record those (a) and (c) in constant
+memory, and (b) in a heap.
+
+=cut
+
+my %comp_index; # n => a(n) where a(n) composite
+my %comp_value; # a(n) => 1 where a(n) composite
+my $n = 1;
+# The next prime that will be used
+my $next_used = 2;
+# The next prime that will become free
+my $next_free = 2;
+
+# The available small prime, or undef
+my $small;
+my $heap = H::Heap->new(q{ $a <=> $b });
+# Start and end  of p > sqrt(m(n)) range, or undef if range is empty
+my($min, $max);
+
+sub NOVAL () { 0 }
+sub TOOBIG () { 1 }
+sub REUSED () { 2 }
+sub GOOD () { 3 }
+
+sub S () { 1 } sub S2 () { 2 } sub H () { 4 } sub H2 () { 8 } sub R () { 16 }
+sub U () { 32 } sub F () { 64 }
+
+my $best;
+
+while (1) {
+    ++$n;
+    my $small2; # transient second available small prime
+    my $freed = ''; # for diagnostics
+    if ($n & 1) {
+        # factors of a(n/2) newly become available
+        if (my $free = delete $comp_index{$n >> 1}) {
+            # it's a composite
+            my($f, $g, $h) = map $_->[0], factor_exp($free);
+            die "Got 3 factors at $n for $free" if $h;
+            $freed = join ',', grep defined, ($f, $g);
+            if ($g) {
+                if (square($g) > $next_used) {
+                    $heap->insert($g);
+                    if ($small) {
+                        ($small, $small2) = ($small < $f)
+                            ? ($small, $f) : ($f, $small);
+                    } else {
+                        $small = $f;
+                    }
+                } else {
+# FIXME, must use a stack of smalls
+#if ($small) {($f,$g,$h) = sort { $a <=> $b } ($small, $f, $g); $heap->insert($h)}
+                    fail("free $f $g running") if $small;
+                    ($small, $small2) = ($f, $g);
+                }
+            } else {
+                if ($small) {
+                    ($small, $small2) = ($small < $f)
+                        ? ($small, $f) : ($f, $small);
+                } else {
+                    $small = $f;
+                }
+            }
+        } elsif ($n > 3) {
+            $min //= $next_free;
+            $max = $next_free;
+            $next_free = next_prime($next_free);
+        }
+    }
+
+    # Given s < s' < sqrt(u) < h < h' < m < u, we want the least unused of
+    # s^k; s'^k; ss' < sh < sh' < sm; s'h < s'h' < s'm; u
+    # h^2 < hh' < (h'^2, hm) < m^2
+    # and fail on s^2s', ss'h, shh'
+    $best = {
+        value => $next_used,
+        prime => 1,
+        free => U,
+    };
+    my $h = $heap->peek;
+    my $h2 = $heap->peek2;
+    if ($small2 && $h && $small2 > $h) {
+        fail("S2 > H $small2 $h");
+    }
+
+    my $t;
+    my $dosh = 1;
+    if ($small2) {
+        trypow($small2, S2);
+        if (try(prod($small, $small2), S | S2) == REUSED) {
+            if ($h) {
+                $t = try(prod($small2, $h), S2 | H);
+                if ($t == REUSED) {
+                    if (try(prod($small2, $h2), S2 | H2) == REUSED) {
+                        fail("S2 $small2 x (H $h, H2 $h2) both reused");
+                    }
+                }
+            }
+            if (!$h || ($t == REUSED && !$h2)) {
+                if (try(prod($small2, $min), S2 | R) == REUSED) {
+                    fail("S2 $small2 x R $min reused");
+                }
+            }
+            try(prod($small, prod($small, $small2)), S | S2 | F,
+                    "s^2s' $small $small2");
+            if ($h) {
+                try(prod($small, prod($small2, $h)), S | S2 | H | F,
+                        "ss'h $small $small2 $h");
+            }
+        } else {
+            $dosh = 0;  # no need to try sr > sh' > sh > ss'
+        }
+    }
+    if ($small) {
+        trypow($small, S);
+        my $doshh = ($dosh && $h && $h2) ? 1 : 0;
+        if ($dosh) {
+            $t = try(prod($small, $h), S | H);
+            if ($t == REUSED) {
+                if (try(prod($small, $h2), S | H2) == REUSED) {
+                    fail("S $small x (H $h, H2 $h2) both reused");
+                }
+            }
+            if (!$h || ($t == REUSED && !$h2)) {
+                if (try(prod($small, $min), S | R) == REUSED) {
+                    fail("S $small x R $min reused");
+                }
+            }
+        }
+        # FIXME: avoid this when sh' (or hh'?) is not reused
+        if ($small && $h && $h2) {
+            try(prod($small, prod($h, $h2)), S | H | H2 | F,
+                    "shh' $small $h $h2");
+        }
+    }
+    if (try(square($h), H) == REUSED) {
+        if ($h2) {
+            if (try(prod($h, $h2), H | H2) == REUSED) {
+                fail("HH2 $h $h2 reused");
+            }
+        } else {
+            if (try(prod($h, $min), H | R) == REUSED) {
+                fail("HR $h $min reused");
+            }
+        }
+    }
+    if (!$h && try(square($min), R) == REUSED) {
+        fail("R $min^2 reused");
+    }
+    
+    # now act on best
+    my $r = $best->{free};
+    fail($best->{msg}) if $r & F;
+    if ($r & R) {
+        $min = next_prime($min);
+        ($min, $max) = (undef, undef) if $min > $max;
+    }
+    if ($r & H2) {
+        if ($r & H) {
+            $heap->fetch;
+        } else {
+            my $temp = $heap->fetch;
+            $heap->fetch;
+            $heap->insert($temp);
+        }
+    }
+    $heap->fetch if $r & H;
+    $small2 = undef if $r & S2;
+    ($small, $small2) = ($small2, undef) if $r & S;
+
+    fail("S2 $small2 not used") if $small2;
+    if ($r & U) {
+#       printf "%s\t%s\t%s\t%s%s\n", $n, $freed, $next_used,
+#               ($small ? "$small, " : ""), ($min ? "$min..$max" : "");
+        $next_used = next_prime($next_used) if $r & U;
+    } else {
+        my $v = $best->{value};
+        die "At $n attempt to reuse comp $v" if $comp_value{$v};
+        $comp_value{$v} = 1;
+        $comp_index{$n} = $v;
+        printf "%s\t%s\t%s\t%sH%s[%s] R%s\n", $n, $freed, $v,
+                ($small ? "$small " : ""),
+                $heap->peek // '', $heap->size,
+                ($min ? "$min..$max" : "");
+    }
+}
+
+sub try {
+    my($value, $free, $msg) = @_;
+    return NOVAL unless $value;
+    return TOOBIG unless $value < $best->{value};
+    return REUSED if $comp_value{$value};
+    %$best = (value => $value, free => $free, msg => $msg);
+    return GOOD;
+}
+
+sub fail {
+    my($s) = @_;
+    die sprintf "At %s, %s with small=%s, heap=%s[%s], range=%s\n",
+        $n, $s, $small, $heap->peek // '', $heap->size,
+        $min ? "$min..$max" : "";
+}
+
+sub square {
+    my($n) = @_;
+    return undef unless defined $n;
+    return $n * $n if ref $n;
+    return $n * $n if $n <= $MAX_SQ;
+    return Math::GMP->new($n) * $n;
+}
+
+sub prod {
+    my($x, $y) = @_;
+    return undef unless defined($x) && defined($y);
+    return $x * $y if ref($x) || ref($y);
+    return $x * $y if $MAX_INT / $x > $y;
+    return Math::GMP->new($x) * $y;
+}
+
+sub trypow {
+    my($p, $free) = @_;
+    my $ilim = $MAX_INT / $p;
+    my $n = $p;
+    while (1) {
+        $n = (($n < $ilim || $n > $MAX_INT) ? $n : Math::GMP->new($n)) * $p;
+        my $t = try($n, $free);
+        return $t unless $t == REUSED;
+    }
+}
