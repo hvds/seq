@@ -24,6 +24,10 @@ Returns a new empty heap object for the supplied comparator.
 The comparator should be an eval-able string that compares two items
 in C<$a> and C<$b>, and returns values corresponding to those of C<< <=> >>.
 
+=item size ( )
+
+Returns the number of items in the heap.
+
 =item insert ( object )
 
 Inserts the specified I<object> into the heap. Returns nothing.
@@ -32,6 +36,16 @@ Inserts the specified I<object> into the heap. Returns nothing.
 
 Removes and returns the least item from the heap. If the heap is empty,
 returns C<undef>.
+
+=item peek ( )
+
+Returns the least item from the heap, without removing it. If the heap
+is empty, returns C<undef>.
+
+=item peek2 ( )
+
+Returns the second least item from the heap. If the heap does not have
+at least 2 items, returns C<undef>.
 
 =back
 
@@ -54,6 +68,11 @@ sub new {
 	bless [], $subclass;
 }
 
+sub size {
+    my($self) = @_;
+    return scalar @$self;
+}
+
 sub insert {
 	my($self, $new) = @_;
 	my $node = @$self;
@@ -67,9 +86,20 @@ sub insert {
 	return;
 }
 
+sub peek {
+    my($self) = @_;
+    return $self->[0];
+}
+
+sub peek2 {
+    my($self) = @_;
+    return $self->[1] if @$self < 3;
+    return $self->cmp_cv(@$self[1, 2]) < 0 ? $self->[1] : $self->[2];
+}
+
 sub fetch {
 	my($self) = @_;
-	return unless @$self;
+	return undef unless @$self;
 	my $value = $self->[0];
 	my $switch = pop @$self;
 	$self->[0] = $switch if @$self;
