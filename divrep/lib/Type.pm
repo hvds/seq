@@ -159,6 +159,8 @@ sub fprio {
 # Most types have constant func_target, but not all
 sub func_matches {
     my($self, $k, $result) = @_;
+    # May have bail out string such as ">12" or "12x"
+    return 0 if $result =~ /[^0-9]/;
     my $target = $self->func_target($k) // die "No target set in $self";
     return $target == $result;
 }

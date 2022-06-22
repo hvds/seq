@@ -255,7 +255,7 @@ sub finalize {
     for (@{ $line{211} // [] }) {
         my($s, $t) = m{
             ^ 211 \s+ Sequence \s+ (\d+) :
-            \s+ (\d+) \s+ = \s+ \Q$funcname\E
+            \s+ (\w+) \s+ = \s+ \Q$funcname\E
         }x or return $self->failed("Can't parse 211 result: '$_'");
         $best = $s + 1 if $type->func_matches($s, $t);
     }
