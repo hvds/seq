@@ -153,6 +153,7 @@ report(sprintf "001 %s%s%s%s%s%s\n",
     ($start ? " -s$start" : ""), ($max ? " -x$max" : ""),
 );
 
+my @forced = @injected;
 forcep(2, $rrun ? 1 : 0);
 finish_run();
 exit 0;
@@ -302,7 +303,7 @@ sub recurse {
 
         # CHECKME: for n=54, we should disallow eg x=9 when t=54, since we
         # will already have tried all x=3 and x=6 before that.
-        next if $nofact{$x}{$prex} && $vlevel >= $injected[$i];
+        next if $nofact{$x}{$prex} && $vlevel >= $forced[$i];
 
         # Try to add another factor to this $v. Check all primes if different,
         # or only greater primes if same power as previous power.
@@ -451,6 +452,7 @@ sub batch_recurse {
         local $v->{t} = $v->{t} / $x;
         local $have_square = $have_square + 1 if ($v->{t} & 1) && !($x & 1);
         local $used{$p} = $i;
+        local $forced[$i] = $forced[$i] + 1;
 
         ++$level;
         if ($v->{t} == 1) {
