@@ -21,6 +21,8 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     $typename = $1, next if $arg =~ /^-y(.*)/;
     $filter = chain_sig($filter, $1 || shift(@ARGV)), next
             if $arg =~ /^-s(.*)/;
+    $filter = chain_fact($filter, $1 || shift(@ARGV)), next
+            if $arg =~ /^-f(.*)/;
     $filter = chain_min($filter, $1 || shift(@ARGV)), next
             if $arg =~ /^-n(.*)/;
     $filter = chain_max($filter, $1 || shift(@ARGV)), next
@@ -196,6 +198,11 @@ sub chain_min {
 sub chain_max {
     my($next, $max) = @_;
     return sub { $_[0] <= $max && $next->($_[0]) };
+}
+
+sub chain_fact {
+    my($next, $fact) = @_;
+    return sub { ($_[0] % $fact) == 0 && $next->($_[0]) };
 }
 
 sub chain_sig {
