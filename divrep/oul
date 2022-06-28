@@ -308,7 +308,7 @@ sub recurse {
         # Try to add another factor to this $v. Check all primes if different,
         # or only greater primes if same power as previous power.
         my $p = ($prex == $x)
-            ? $v->{p}[$vlevel - 1]
+            ? max($v->{p}[$vlevel - 1], $maxforce[$i])
             : $maxforce[$i];
         if ($recover) {
             $p = $p0 - 1;   # next_prime() will get us back to it
