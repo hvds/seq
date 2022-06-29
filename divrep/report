@@ -10,6 +10,7 @@ use Type;
 
 my($debug, $opt_composite, $opt_table, $opt_run) = (0, 0, 0, 0);
 my $typename = 't';
+my $nfilter;
 my $filter = sub { 1 };
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift(@ARGV);
@@ -33,6 +34,8 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
             if $arg =~ /^-tp(.*)/;
     $filter = chain_mod($filter, $1, $2), next
             if $arg =~ /^-m(\d+)=([0-9,]+)$/;
+    ($nfilter, $filter) = ($filter, sub { 1 }), next
+            if $arg eq '-k';
     die "Unknown option '$arg'";
 }
 my($n, $k) = @ARGV;
@@ -48,7 +51,9 @@ my $db = Seq::Db->new($type, 0);
 use Data::Dumper;
 local $Data::Dumper::Indent = $Data::Dumper::Sortkeys = 1;
 
-if ($opt_table || !$n) {
+if ($nfilter) {
+    report_all();
+} elsif ($opt_table || !$n) {
     report_g();
 } elsif (!$k) {
     report_f();
@@ -58,6 +63,21 @@ if ($opt_table || !$n) {
     report_run();
 }
 exit 0;
+
+sub report_all {
+    for my $g ($db->resultset('TauG')->search(
+        undef, { order_by => 'n' }
+    )->all) {
+        my $n = $g->n;
+        next unless $nfilter->($n);
+        for my $f (@{ $g->fall($db) }) {
+            my $k = $f->k;
+            next unless $filter->($k);
+            _report_fk($g, $f);
+        }
+    }
+    return;
+}
 
 sub report_g {
     # tau(n) only relevant for tauseq, addseq
