@@ -4,7 +4,7 @@ use warnings;
 use Math::GMP;
 use Math::Prime::Util qw{
     factor_exp prime_iterator divisors next_prime valuation prime_count
-    is_prime is_semiprime is_power divmod
+    is_prime is_semiprime is_power divmod sqrtmod
 };
 use Math::Prime::Util::GMP qw{ chinese };
 use List::Util qw{ first sum0 all min max };
@@ -38,6 +38,7 @@ a user-specified maximum, or no limit).
 sub MBI { return Math::GMP->new(@_) }
 my $zero = MBI(0);
 my $zone = MBI(1);
+my $ztwo = MBI(2);
 
 my($max, $inject, $debug, $nodb) = (0) x 4;
 my($rrun, $cap, $gain, $start, $print);
@@ -100,6 +101,7 @@ $max ||= f()->f unless $nodb;       # set from db if not specified
 my $best = $max || undef;
 my $have_best = $best ? 1 : 0;
 our $have_square = 0;
+our $known_square;   # [ i, m ] -> v_i = mx^2 for some x
 
 # Ensure the Run object is marked 'partial' if not a full run
 my $complete = defined($cap) ? 0 : 1;
@@ -183,7 +185,10 @@ sub inject {
     $v->{pu}{$p} = $x;
     $v->{q} = $v->{q} * $px;
     $v->{t} = $v->{t} / $x;
-    ++$have_square if ($v->{t} & 1) && !($x & 1);
+    if (($v->{t} & 1) && !($x & 1)) {
+        $known_square //= [ $i, extract_square($i) // die "no square" ];
+        ++$have_square;
+    }
     $used{$p} = $i;
     ++$level;
     ++$injected[$i];
@@ -339,7 +344,15 @@ sub recurse {
             candidate(walk_v()), last POWER if $walk * $gain < $lim;
         }
 
-        local $have_square = $have_square + 1 if ($tnext & 1) && !($x & 1);
+        my $this_square = ($tnext & 1) && !($x & 1);
+        my $msquare = ($this_square && !$known_square)
+                ? extract_square($i) // next
+                : 0;
+        local $have_square = $have_square + 1 if $this_square;
+        my($check_diff, $check_mult) = $known_square
+            ? ($known_square->[0] - $i, $known_square->[1])
+            : (0, 0);
+
         $v->{x}[$vlevel] = $x;
         local $v->{l} = $vlevel + 1;
 
@@ -385,6 +398,14 @@ sub recurse {
                     candidate(walk_v()), last POWER if $walk * $gain < $lim;
                 }
             }
+
+            # optimized check_residue for known $i != $j, $p ~| $d, $p ~| v_j
+            (times() >= $diagt && do_diag(desc(\@v))), next if (
+                $check_diff && !defined(sqrtmod(
+                    divmod($check_diff, $check_mult, $px), $px
+                ))
+            );
+            local $known_square = [ $i, $msquare * $p ] if $msquare;
 
             local $v->{t} = $tnext;
             local $v->{q} = $q;
@@ -436,6 +457,8 @@ sub batch_recurse {
         my $px = MBI($p) ** ($x - 1);
         my($ax, $apx) = new_power($p, $x, $px);
 
+        return if $known_square && !check_residue($i, $p, $x, @$known_square);
+
         # not localized
         $v->{p}[$vlevel] = $p;
         $v->{x}[$vlevel] = $x;
@@ -450,7 +473,10 @@ sub batch_recurse {
         local $v->{pu}{$p} = $x;
         local $v->{q} = $v->{q} * $px;
         local $v->{t} = $v->{t} / $x;
-        local $have_square = $have_square + 1 if ($v->{t} & 1) && !($x & 1);
+        my $this_square = ($v->{t} & 1) && !($x & 1);
+        local $have_square = $have_square + 1 if $this_square;
+        local $known_square = [ $i, extract_square($i) // return ]
+                if $this_square && !$known_square;
         local $used{$p} = $i;
         local $forced[$i] = $forced[$i] + 1;
 
@@ -465,6 +491,64 @@ sub batch_recurse {
         return $continue->($recover);
     }
     return;
+}
+
+# return true if allocating p^x at v_i is consistent with the known square
+sub check_residue {
+    my($i, $p, $x, $j, $m) = @_;
+    my $d = $j - $i or return 1;
+    --$x;
+    my $y = valuation($d, $p);
+    if ($v[$j]->{pu}{$p}) {
+        return 0 unless $y;
+        if (!($m % $p)) {
+            $m /= $p;
+            $d /= $p;
+            --$y;
+            --$x;
+        }
+    }
+
+    if ($y == 0) {
+        my $px = ($p == 2) ? $ztwo ** $x : $p;
+        my $e = divmod($d, $m, $px);
+        return defined(sqrtmod($e, $px)) ? 1 : 0;
+    }
+    if ($x > $y) {
+        # v_j = p^y . m . ?
+        return 0 if $y & 1;
+        my $pxy = ($p == 2) ? $ztwo ** ($x - $y) : $p;
+        my $e = divmod($d / $p ** $y, $m, $pxy);
+        return defined(sqrtmod($e, $pxy)) ? 1 : 0;
+    } elsif ($x < $y) {
+        # v_j = p^x . m . ?
+        return 0 if $x & 1;
+        my $pyx = ($p == 2) ? 1 << ($y - $x) : $p;
+        my $e = divmod($d / $p ** $y, $m, $pyx);
+        return defined(sqrtmod($e, $pyx)) ? 1 : 0;
+    } else {
+        # v_j = p^{x+?} . m . ?, punt on this
+        return 1;
+    }
+}
+
+# given that v_i is known to have a square residue, return m such that
+# v_i = mx^2 for some x, or undef if existing allocations are incompatible.
+sub extract_square {
+    my($i) = @_;
+    my $v = $v[$i];
+    my $m = $zone;
+    for (0 .. $v->{l} - 1) {
+        $m *= $v->{p}[$_] if !($v->{x}[$_] & 1);
+    }
+    for my $j (0 .. $#v) {
+        next if $j == $i;
+        $v = $v[$j];
+        for (0 .. $v->{l} - 1) {
+            return unless check_residue($j, $v->{p}[$_], $v->{x}[$_], $i, $m);
+        }
+    }
+    return $m;
 }
 
 sub valid_set {
