@@ -1,0 +1,246 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use Math::GMP;
+use Math::Prime::Util::GMP qw{ trial_factor is_prime is_power divisors gcd };
+use List::Util qw{ first };
+use lib 'lib';
+use Type;
+use Seq::Db;
+
+sub MBI { return Math::GMP->new(@_) }
+my $zero = MBI(0);
+
+my $typename = 'o';
+my $dryrun = 0;
+my $full = 0;
+my $hlim = 16000;   # same as default trial_factor limit for factor_exp
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    ($typename = $arg || shift(@ARGV)), next if $arg =~ s{^-y}{};
+    ($hlim = $arg || shift(@ARGV)), next if $arg =~ s{^-l}{};
+    $dryrun = 1, next if $arg eq '-n';
+    $full = 1, next if $arg eq '-f';
+    die "Unknown option '$arg'\n";
+}
+$| = 1;
+my($n, $k, $d) = @ARGV;
+$d = MBI(ston($d));
+
+my $type = Type->new($typename);
+$type->bind_owner('upperlim');
+$type->bind($n);
+my $db = $dryrun ? undef : Seq::Db->new($type, 0);
+my $r = $dryrun ? undef : do {
+    Seq::TauG->genTo($db, $n);
+    my $g = $db->resultset('TauG')->find({ n => $n })
+            // die "cannot find TauG entry for n=$n";
+    my $f = Seq::TauF->forceFor($g, $db, $k);
+    my $ar = Seq::Run->gen($f, $db, {
+        optn => $d,
+        optx => $d,
+        optc => 0,
+        priority => 0,
+    });
+    $ar->partial(1) unless $full;
+    $ar->running(1);
+    $ar->update;
+    $ar;
+};
+
+my $path = $dryrun ? undef : $r->logpath($type);
+my $fh;
+unless ($dryrun) {
+    print "path $path\n";
+    open($fh, '>', $path) or die "$path: $!";
+    $fh->autoflush(1);
+}
+
+tee("100 $0 -y$typename $n $k $d\n");
+my $wi = length($k+1);
+my $wt = length($n) + 1;
+my($good, $allgood) = (1, 0);
+for (my $i = 0; $good; ++$i) {
+    my($ok, $t, $f) = tf($d + $i);
+    $allgood = 1 if $i == $k && $good;
+    $good = 0 unless $ok;
+    tee(sprintf "211 Sequence %*s: %*s = tau(%s = %s)\n",
+            $wi, $i, $wt, $t, $d + $i, $f);
+}
+tee(sprintf "%s f(%s, %s) %s %s  (%.3fs)\n",
+    ($allgood ? '200' : '500'), $n, $k, ($allgood ? '=' : '>'), $d, 0 + times()
+);
+
+unless ($dryrun) {
+    close($fh);
+    $r->finalize($db);
+}
+exit 0;
+
+sub tee {
+    my $s = join '', @_;
+    print $s;
+    print $fh $s unless $dryrun;
+    return;
+}
+
+sub ston {
+    my($s) = @_;
+    $s =~ s/,//g;
+    $s =~ s{e(\d+)}{"0" x $1}ie;
+    return MBI($s);
+}
+
+sub _fact {
+    my($ff, $fl, $pc, $e) = @_;
+    my $exp = ($e // 0) > 1 ? "^$e" : '';
+    return join '.', @$ff, $fl ? $pc . length($fl) . $exp : ();
+}
+
+sub tf {
+    my($f) = @_;
+    my $t = 1;
+    my @fact;
+
+    # trial_factor
+    {
+        my $lim = $hlim // 16000;
+        my @f = trial_factor($f, $lim);
+        $f = MBI(pop @f);
+        while (1) {
+            my($p, $f2) = trial_factor($f, $lim);
+            push @f, $p;
+            last unless $f2;
+            $f = MBI($f2);
+        }
+        my($p, $x) = (0, 0);
+        for (@f) {
+            ++$x, next if $_ == $p;
+            $t *= $x + 1;
+            push @fact, $x == 0 ? () : $x == 1 ? $p : "$p^$x";
+            ($p, $x) = ($_, 1);
+        }
+        if ($x > 1 || is_prime($x)) {
+            $t *= $x + 1;
+            push @fact, $x == 1 ? $p : "$p^$x";
+            $f = 1;
+        } else {
+            $f = MBI($p);
+        }
+    }
+
+    my $e = 1;
+    my $trial = 0;
+    while (1) {
+#use DDP; p [ try => $t, $e, $f ];
+        return (0, "${t}x", _fact(\@fact, $f, 'C'))
+                if $n % $t;
+        return ($t == $n, $t, _fact(\@fact))
+                if $f == 1;
+        return (0, "${t}x", _fact(\@fact, $f, is_prime($f) ? 'P' : 'C', $e))
+                if $t >= $n;
+        if (is_prime($f)) {
+            $t *= $e + 1;
+            return ($t == $n, $t, _fact(\@fact, $f, 'P', $e));
+        }
+        if (my $x = is_power($f)) {
+            $e *= $x;
+            $f = $f->broot($x);
+            next;
+        }
+        my $t2 = $n / $t;
+        if ($t2 & 1) {
+            my $t2g = _gf($t2);
+            return (0, "${t}x", _fact(\@fact, $f, "N{$t2g}", $e))
+                    if $e % $t2g;
+        }
+        return (0, ">$n", _fact(\@fact, $f, 'C', $e))
+                if $t2 < ($e + 1) ** 2;
+
+        while (1) {
+            my($f2, $x) = trial($f, $trial++);
+#use DDP; p [ trial => $f2, $x ];
+            next unless $f2;
+            my $ex = $e * $x;
+            $f /= ($x == 1) ? $f2 : MBI($f2) ** $x;
+            push @fact, $ex == 1 ? $f2 : "$f2^$ex";
+            $t *= $ex + 1;
+            last;
+        }
+    }
+    # not reached
+}
+
+use Math::Prime::Util::GMP qw{
+    pminus1_factor squfof_factor ecm_factor qs_factor pbrent_factor holf_factor
+};
+use feature qw{ state };
+sub trial {
+    my($n, $t) = @_;
+    my $b = $n->sizeinbase_gmp(2);
+    our $B1;
+    my @trial = (
+        sub { pminus1_factor($_[0], 5_000, 5_000) },
+        sub { squfof_factor($_[0], 400_000) },
+        sub { pminus1_factor($_[0], 10_000, 100_000) },
+        sub { squfof_factor($_[0], 1_000_000) },
+        sub { pminus1_factor($_[0], 20_000, 200_000) },
+        sub { ecm_factor($_[0], 200, 4) },
+        sub { ecm_factor($_[0], 600, 20) },
+        sub { ecm_factor($_[0], 2_000, 10) },
+        sub { pminus1_factor($_[0], 200_000, 3_000_000) },
+        sub {
+            ($B1, my $curves) = ($b < 100) ? (5_000, 20)
+                : ($b < 128) ? (10_000, 2)
+                : ($b < 160) ? (20_000, 2)
+                : ($b < 192) ? (30_000, 20)
+                : ($b < 224) ? (40_000, 40)
+                : ($b < 256) ? (80_000, 40)
+                : ($b < 512) ? (160_000, 80)
+                : (320_000, 160);
+            ecm_factor($_[0], $B1, $curves);
+        },
+        sub { qs_factor($_[0]) },
+        sub { ecm_factor($_[0], 2 * $B1, 20) },
+        sub { pbrent_factor($_[0], 1, 1 << 20) },
+        sub { ecm_factor($_[0], 4 * $B1, 20) },
+        sub { ecm_factor($_[0], 8 * $B1, 20) },
+        sub { holf_factor($_[0], 1 << 20) },
+        sub { pminus1_factor($_[0], 5_000_000, 100_000_000) },
+        sub { ecm_factor($_[0], 32 * $B1, 40) },
+        sub { pbrent_factor($_[0], 2, 1 << 29) },
+        sub { ecm_factor($_[0], $B1 << 4, 100) },
+        sub { ecm_factor($_[0], $B1 << 5, 100) },
+        sub { ecm_factor($_[0], $B1 << 6, 100) },
+        sub { ecm_factor($_[0], $B1 << 7, 100) },
+        sub { ecm_factor($_[0], $B1 << 8, 100) },
+        sub { ecm_factor($_[0], $B1 << 9, 100) },
+        sub { ecm_factor($_[0], $B1 << 10, 100) },
+        sub { ecm_factor($_[0], $B1 << 11, 100) },
+        sub { ecm_factor($_[0], $B1 << 12, 100) },
+        sub { ecm_factor($_[0], $B1 << 13, 100) },
+    );
+    my $cb = $trial[$t] or die "give up on $n";
+    my @f = $cb->($n);
+#use DDP; p \@f;
+    return 0 if @f == 1;
+    my $f = first { is_prime($_) } @f;
+    if ($f) {
+        my $x = 1;
+        $n /= $f;
+        ++$x, $n /= $f while ($n % $f) == 0;
+        return ($f, $x);
+    }
+    # maybe fully factorize the smallest number, and return its largest prime?
+    # but given we have at least C_1 * C_2, would really like to check if
+    # that's consistent with outstanding tau().
+    ...
+}
+
+sub _gf {
+    my($n) = @_;
+    my $g = 0;
+    $g = gcd($g, $_ - 1) for divisors($n);
+    return $g;
+}
