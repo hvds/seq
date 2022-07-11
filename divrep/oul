@@ -45,6 +45,7 @@ my($rrun, $cap, $gain, $start, $print);
 my $typename = 'o';
 my $maxproc = 6;
 my $seen_best = 0;
+my $force_all = 0;
 
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
@@ -53,6 +54,7 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     ($gain = $arg || shift(@ARGV)), next if $arg =~ s{^-g}{};
     ($rrun = $arg || shift(@ARGV)), next if $arg =~ s{^-r}{};
     ($cap = $arg || shift(@ARGV)), next if $arg =~ s{^-p}{};
+    ($force_all = $arg || shift(@ARGV)), next if $arg =~ s{^-f}{};
     ($start = length($arg) ? $arg : shift @ARGV), next if $arg =~ s{^-s}{};
     $inject = 1, next if $arg eq '-i';
     $nodb = 1, next if $arg eq '-n';
@@ -858,6 +860,7 @@ sub prep_forcep {
     }
 
     my $keep_single = ($n & 3) ? 1 : 0;
+    $keep_single = 1 if $p <= $force_all;
     my $skipped = 0;
     my @batch;
     $pforce{$p} = \@batch;
