@@ -630,7 +630,7 @@ sub walk_1 {
         $vi[$_] = $vi;
     }
     if ($print) {
-        print STDERR $val, "\n";
+        printf STDERR "%s: %s\n", $val, join ' ', map $_->{t}, @v;
         return;
     }
     return undef unless all {
@@ -655,6 +655,7 @@ sub walk_v {
 
     # unallocated tau
     my @t = map $_->{t}, @v;
+    my $printout = $print ? join(' ', @t) : '';
 
     # gcd(@q)
     my $aq = $aq[$level];
@@ -734,7 +735,8 @@ sub walk_v {
                 next unless $ati == ($y2 - $oj) / $qqj;
                 next unless all { $ati % $_->[1] != $_->[0] } @inv;
                 if ($print) {
-                    print STDERR $q[0] * ($qq[0] * $ati + $o[0]), "\n";
+                    printf STDERR "%s: %s\n",
+                            $q[0] * ($qq[0] * $ati + $o[0]), $printout;
                 } else {
                     return $q[0] * ($o[0] + $qq[0] * $ati) if all {
                         is_tau($qq[$_] * $ati + $o[$_], $t[$_])
@@ -776,7 +778,8 @@ sub walk_v {
             next unless is_tau($rx, $t);
 
             if ($print) {
-                print STDERR $q[0] * ($qq[0] * $ati + $o[0]), "\n";
+                printf STDERR "%s: %s\n",
+                        $q[0] * ($qq[0] * $ati + $o[0]), $printout;
             } else {
                 return $q[0] * ($o[0] + $qq[0] * $ati) if all {
                     is_tau($qq[$_] * $ati + $o[$_], $t[$_])
@@ -804,7 +807,8 @@ sub walk_v {
         # Print a candidate or return a solution if we find one.
         if (all { $ati % $_->[1] != $_->[0] } @inv) {
             if ($print) {
-                print STDERR $q[0] * ($qq[0] * $ati + $o[0]), "\n";
+                printf STDERR "%s: %s\n",
+                        $q[0] * ($qq[0] * $ati + $o[0]), $printout;
             } else {
                 return $q[0] * ($o[0] + $qq[0] * $ati) if all {
                     is_tau($qq[$_] * $ati + $o[$_], $t[$_])
