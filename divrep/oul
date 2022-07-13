@@ -43,7 +43,6 @@ my $ztwo = MBI(2);
 my($max, $inject, $debug, $nodb) = (0) x 4;
 my($rrun, $cap, $gain, $start, $print);
 my $typename = 'o';
-my $maxproc = 6;
 my $seen_best = 0;
 my $force_all = 0;
 
