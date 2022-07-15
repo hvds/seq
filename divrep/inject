@@ -105,11 +105,10 @@ sub tf {
 
     # trial_factor
     {
-        my $lim = $hlim // 16000;
-        my @f = trial_factor($f, $lim);
+        my @f = trial_factor($f, $hlim);
         $f = MBI(pop @f);
         while (1) {
-            my($p, $f2) = trial_factor($f, $lim);
+            my($p, $f2) = trial_factor($f, $hlim);
             push @f, $p;
             last unless $f2;
             $f = MBI($f2);
