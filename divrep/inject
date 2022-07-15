@@ -121,7 +121,7 @@ sub tf {
             push @fact, $x == 0 ? () : $x == 1 ? $p : "$p^$x";
             ($p, $x) = ($_, 1);
         }
-        if ($x > 1 || is_prime($x)) {
+        if ($x > 1 || is_prime($p)) {
             $t *= $x + 1;
             push @fact, $x == 1 ? $p : "$p^$x";
             $f = 1;
