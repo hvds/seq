@@ -133,10 +133,10 @@ sub tf {
     my $trial = 0;
     while (1) {
 #use DDP; p [ try => $t, $e, $f ];
-        return (0, "${t}x", _fact(\@fact, $f, 'C'))
-                if $n % $t;
         return ($t == $n, $t, _fact(\@fact))
                 if $f == 1;
+        return (0, "${t}x", _fact(\@fact, $f, 'C'))
+                if $n % $t;
         return (0, "${t}x", _fact(\@fact, $f, is_prime($f) ? 'P' : 'C', $e))
                 if $t >= $n;
         if (is_prime($f)) {
