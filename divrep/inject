@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use Math::GMP;
+use Math::Prime::Util qw{ factor_exp };
 use Math::Prime::Util::GMP qw{ trial_factor is_prime is_power divisors gcd };
 use List::Util qw{ first };
 use lib 'lib';
@@ -139,6 +140,9 @@ sub tf {
                 if $n % $t;
         return (0, "${t}x", _fact(\@fact, $f, is_prime($f) ? 'P' : 'C', $e))
                 if $t >= $n;
+        my $rough = roughness($n / $t);
+        return (0, "!$n", _fact(\@fact, $f, "R_{$rough}"))
+                if (MBI($hlim) + 1) ** $rough > $f;
         if (is_prime($f)) {
             $t *= $e + 1;
             return ($t == $n, $t, _fact(\@fact, $f, 'P', $e));
@@ -242,4 +246,17 @@ sub _gf {
     my $g = 0;
     $g = gcd($g, $_ - 1) for divisors($n);
     return $g;
+}
+
+# given t = prod p_i^e_i, let r(t) = sum e_i.(p_i - 1); then tau(n) = t
+# implies n has at least one prime factor <= n^(1 / r(t)); equivalently,
+# if n is n^(1 / r(t))-rough, tau(n) != t.
+sub roughness {
+    my($tau) = @_;
+    my $s = 0;
+    for (factor_exp($tau)) {
+        my($p, $e) = @$_;
+        $s += $e * ($p - 1);
+    }
+    return $s;
 }
