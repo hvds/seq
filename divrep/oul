@@ -749,7 +749,6 @@ sub walk_v {
         my @xmod = sort { $a <=> $b } allrootmod($o, $x, $qq);
         return unless @xmod;
 
-        # CHECKME: do these counters need to be bigints?
         my($rcycle, $rindex) = ($zero, 0);
         if ($start) {
             $rcycle = $start / $qq;
