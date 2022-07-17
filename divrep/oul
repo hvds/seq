@@ -750,7 +750,7 @@ sub walk_v {
         return unless @xmod;
 
         # CHECKME: do these counters need to be bigints?
-        my($rcycle, $rindex) = (0, 0);
+        my($rcycle, $rindex) = ($zero, 0);
         if ($start) {
             $rcycle = $start / $qq;
             $start %= $qq;
@@ -796,7 +796,7 @@ sub walk_v {
     #
     my $end = $have_best ? ($best - $m) / $aq : undef;
     my $endi = $end // 0;
-    for (my $ati = $start // 0; !defined($end) || $ati <= $end; ++$ati) {
+    for (my $ati = $start // $zero; !defined($end) || $ati <= $end; ++$ati) {
         ++$countw;
         if (times() >= $diagt) {
             do_diag(desc(\@v) . ": $ati / $endi");
@@ -1108,7 +1108,7 @@ sub recover {
         $_ eq '.' ? [] : [ map [ split /\^/ ], split /\./ ]
     } split /\s+/, $stack;
     $_->[1] //= 1 for map @$_, @rstack;
-    $rwalk = $walk_from;
+    $rwalk = MBI($walk_from);
     $t0 -= $time;
     $inject = 1;
 
