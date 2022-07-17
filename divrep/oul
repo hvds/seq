@@ -40,7 +40,7 @@ my $zero = MBI(0);
 my $zone = MBI(1);
 my $ztwo = MBI(2);
 
-my($max, $inject, $debug, $nodb) = (0) x 4;
+my($min, $max, $inject, $debug, $nodb) = (0) x 5;
 my($rrun, $cap, $gain, $print);
 my $typename = 'o';
 my $seen_best = 0;
@@ -71,6 +71,8 @@ $type->bind_owner('upperlim');
 my $db = $nodb ? undef : Seq::Db->new($type, 0);
 
 my($n, $k, $r, $fh, $t0,  @rstack, $rwalk);
+($min, $max) = split /:/, $max if $max =~ /:/;
+$min = ston($min) if $min;
 $max = ston($max) if $max;
 if ($rrun) {
     ($r, $fh) = recover($rrun);
@@ -148,10 +150,12 @@ my($countr, $countw) = (0, 0);
 my @injected = (0) x $k;
 
 ($r, $fh) = prep_run($n, $k, $complete) if $inject && !$rrun;
-report(sprintf "001 %s%s%s%s%s\n",
+report(sprintf "001 %s%s%s%s -x%s\n",
     ($rrun ? 'recover ' : ''),
-    $0, ($cap ? " -p$cap" : ""), ($gain > 1 ? " -g$gain" : ""),
-    ($max ? " -x$max" : ""),
+    $0,
+    ($cap ? " -p$cap" : ""),
+    ($gain > 1 ? " -g$gain" : ""),
+    join(':', map $_ || "", ($min, $max)),
 );
 
 my @forced = @injected;
@@ -619,6 +623,7 @@ sub walk_1 {
     my($i, $val) = @_;
     my @vi;
     $rwalk = undef; # ignore rwalk recovery for walk_1
+    return if $val < $min;
     for (0 .. $#v) {
         next if $_ == $i;
         my $v = $v[$_];
@@ -657,6 +662,7 @@ sub walk_v {
 
     # gcd(@q)
     my $aq = $aq[$level];
+    $start //= 1 + ($min - $m - 1) / $aq if $min;
 
     # Given o_i + k . qq_i == m + i (mod aq), need tau(o_i) == t_i
     my @qq = map $aq / $_, @q;
@@ -1043,13 +1049,14 @@ sub recover {
         ^ 001 \s+ oul\( (\d+) \s+ (\d+) \)
         (?: \s+ -p(\d+) )?
         (?: \s+ -g(\d+) )?
-        (?: \s+ -x(\d+) )?
+        (?: \s+ -x(?:(\d*):)?(\d*) )?
         $
     }x or die "Cannot parse header for $path: $head";
     ($n, $k) = ($1, $2);
     $cap = $3 if $3;
     $gain //= $4 if $4; # allow caller to override
-    $max //= MBI($5) if $5; # allow caller to override
+    $min //= MBI($5) if $5; # allow caller to override
+    $max //= MBI($6) if $6; # allow caller to override
 
     my $pos = tell $rfh;
     my $trunc = 0;
