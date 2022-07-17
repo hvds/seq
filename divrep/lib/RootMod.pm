@@ -14,15 +14,19 @@ use Math::Prime::Util qw{
     invmod divmod kronecker
 };
 use Math::GMP ();
+sub MBI { defined($_[0]) ? Math::GMP->new(@_) : undef }
 
 # allsqrtmod() and allrootmod() and associated functions adapted from
-# implementations in Math::Prime::Util::PP
-
-*allrootmod = Math::Prime::Util->can('allrootmod') // \&_allrootmod;
-*allsqrtmod = Math::Prime::Util->can('allsqrtmod') // \&_allsqrtmod;
+# implementations in Math::Prime::Util::PP. The local implementation
+# is guaranteed to return bigints, but the MPU versions are not.
+*allrootmod = Math::Prime::Util->can('allrootmod')
+    ? sub { map MBI($_), Math::Prime::Util::allrootmod(@_) }
+    : \&_allrootmod;
+*allsqrtmod = Math::Prime::Util->can('allsqrtmod')
+    ? sub { map MBI($_), Math::Prime::Util::allsqrtmod(@_) }
+    : \&_allsqrtmod;
 
 sub _numeric { $a <=> $b }
-sub MBI { defined($_[0]) ? Math::GMP->new(@_) : undef }
 my $zero = MBI(0);
 my $zone = MBI(1);
 my $ztwo = MBI(2);
