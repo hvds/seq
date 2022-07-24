@@ -17,6 +17,9 @@ use ModFunc qw{ gcd };
 use RootMod qw{ allsqrtmod allrootmod };
 use Math::Pell ();  # will fully qualify use
 
+use lib '../lib';
+use H::Diag qw{ diag keep_diag };
+
 local $SIG{FPE} = sub { use Carp; confess("Division by zero") };
 
 *is_tau = Math::Prime::Util::GMP->can('is_tau') // \&_is_tau;
@@ -196,23 +199,6 @@ sub inject {
     ++$level;
     ++$injected[$i];
     return;
-}
-
-{
-    my $s; BEGIN { $s = '' }
-    sub diag {
-        print "\x08 \x08" x length($s);
-        ($s) = @_;
-        print $s;
-        return;
-    }
-    sub keep_diag {
-        if (length $s) {
-            print "\n";
-            $s = '';
-        }
-        return;
-    }
 }
 
 sub report {

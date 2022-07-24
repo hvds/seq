@@ -6,8 +6,12 @@ use Math::Prime::Util qw{ is_prime next_prime divisors factor_exp };
 use Algorithm::Loops qw{ NextPermuteNum NestedLoops };
 use POSIX qw{ :sys_wait_h };
 use Memoize;
+
 use lib 'lib';
 use Type;
+
+use lib '../lib';
+use H::Diag qw{ diag };
 
 =head1 upperlim - constrain upper limit of f(n, k)
 
@@ -128,14 +132,6 @@ while (1) {
 }
 exit 0;
 
-{
-    my $s; BEGIN { $s = '' }
-    sub diag {
-        print "\x08 \x08" x length($s);
-        ($s) = @_;
-        print $s;
-    }
-}
 sub wait_for {
     my($pids) = @_;
     my $pid = waitpid(-1, 0);
