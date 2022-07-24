@@ -837,8 +837,8 @@ sub prep_maxforce {
         # every p^1 will force a square, so force all primes to k
         return ($k) x $k;
     }
-    # force p^x only where there are two positions p apart
-    return map max($k - $_ - 1, $_), 0 .. $k - 1;
+    # force p^x only where there are two positions p apart, or forced
+    return map max($k - $_ - 1, $_, $force_all), 0 .. $k - 1;
 }
 
 sub prep_forcep {
@@ -867,7 +867,7 @@ sub prep_forcep {
                 use DDP; p { p => $p, x => $fx, i => $i, batch => $batch };
                 die "invalid batch in prep_forcep";
             }
-            if ($keep_single || @{ $batch->{force} } > 1) {
+            if ($keep_single || ($fx > 2 && @{ $batch->{force} } > 1)) {
                 push @batch, [ "$fx:$i", $batch ];
             } else {
                 $skipped = 1;
@@ -884,7 +884,7 @@ sub prep_forcep {
         next unless @min;
         my $is = join ' ', ($i, map $_->[0], @min);
         push @{ $batch->{force} }, @min;
-        if ($keep_single || @{ $batch->{force} } > 1) {
+        if ($keep_single || ($x > 2 && @{ $batch->{force} } > 1)) {
             push @batch, [ "$x:$is", $batch ];
         } else {
             $skipped = 1;
