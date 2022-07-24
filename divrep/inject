@@ -235,9 +235,19 @@ sub trial {
         ++$x, $n /= $f while ($n % $f) == 0;
         return ($f, $x);
     }
+    $_ = MBI($_) for @f;
     # maybe fully factorize the smallest number, and return its largest prime?
     # but given we have at least C_1 * C_2, would really like to check if
     # that's consistent with outstanding tau().
+    for my $t2 (0 .. $#trial) {
+        for my $n2 (@f) {
+            my($p, $x) = trial($n2, $t2) or next;
+            $x = 1;
+            $n /= $p;
+            ++$x, $n /= $p while ($n % $p) == 0;
+            return ($p, $x);
+        }
+    }
     ...
 }
 
