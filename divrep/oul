@@ -743,9 +743,10 @@ sub walk_v {
 
         my($rcycle, $rindex) = ($zero, 0);
         if ($start) {
-            $rcycle = $start / $qq;
-            $start %= $qq;
-            $rindex = (first { $xmod[$_] >= $start } 0 .. $#xmod)
+            my $startr = ($start * $qq + $o)->broot($x);
+            $rcycle = $startr / $qq;
+            $startr %= $qq;
+            $rindex = (first { $xmod[$_] >= $startr } 0 .. $#xmod)
                     // do { ++$rcycle; 0 };
         }
         # CHECKME: might we get r: r^x < o_i for initial values?
