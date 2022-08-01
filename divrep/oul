@@ -86,9 +86,6 @@ $gain //= 1;
 $0 = "oul($n $k)";
 $type->bind($n);
 
-# When k >= p^2 + 1, it is possible to assign more than one power of p.
-my $max_repeat = int(sqrt($k - 1));
-
 my $nf = [ factor_exp($n) ];
 my $tn = tau($n, $nf);
 my(%fact, %fullfact, %nofact);
