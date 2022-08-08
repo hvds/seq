@@ -1351,8 +1351,10 @@ void recurse(void) {
                 uint bi = cur_level->bi + 1;
                 if (bi >= fp->count)
                     goto derecurse;
-                if (fp->batch[bi].x == 0)
+                if (fp->batch[bi].x == 0) {
+                    cur_level->is_forced = 0;
                     goto unforced;
+                }
                 if (!apply_batch(fp, bi))   /* ++level */
                     goto continue_recurse;
                 if (times(NULL) >= diagt)
