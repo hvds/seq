@@ -233,7 +233,8 @@ void diag_walk_v(ulong ati, ulong end) {
     clock_t t1 = times(NULL);
 
     prep_show_v();  /* into diag_buf */
-    diag("%s: %lu / %lu", diag_buf, ati, end);
+    if (!(debug && ati))
+        diag("%s: %lu / %lu", diag_buf, ati, end);
     if (debug)
         keep_diag();
     diagt = t1 + diag_delay;
