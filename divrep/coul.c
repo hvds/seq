@@ -264,6 +264,16 @@ void diag_walk_v(ulong ati, ulong end) {
     }
 }
 
+void candidate(mpz_t c) {
+    keep_diag();
+    clock_t t1 = times(NULL);
+    report("202 Candidate %Zu (%.2fs)\n", c, seconds(t1));
+    if (mpz_cmp(c, max) <= 0) {
+        mpz_set(max, c);
+        ++seen_best;
+    }
+}
+
 void free_levels(void) {
     for (uint i = 0; i < k * maxfact + 1; ++i) {
         t_level *l = &levels[i];
@@ -426,15 +436,15 @@ void recover(void) {
     }
     if (last202) {
         int start, end;
-        mpz_t candidate;
+        mpz_t cand;
         if (EOF == sscanf(last202, "202 Candidate %n%*[0-9]%n (%*[0-9.]s)\n",
                 &start, &end))
             fail("error parsing 202 line '%s'", last202);
         last202[end] = 0;
-        mpz_init_set_str(candidate, &last202[start], 10);
-        if (mpz_sgn(max) == 0 || mpz_cmp(max, candidate) > 0)
-            mpz_set(max, candidate);
-        mpz_clear(candidate);
+        mpz_init_set_str(cand, &last202[start], 10);
+        if (mpz_sgn(max) == 0 || mpz_cmp(max, cand) > 0)
+            mpz_set(max, cand);
+        mpz_clear(cand);
         free(last202);
     }
     if (last305) {
@@ -1065,16 +1075,6 @@ ulong next_prime(ulong cur) {
     keep_diag();
     report("002 next_prime overflow\n");
     exit(1);
-}
-
-void candidate(mpz_t c) {
-    keep_diag();
-    clock_t t1 = times(NULL);
-    report("202 Candidate %Zu (%.2fs)\n", c, seconds(t1));
-    if (mpz_cmp(c, max) <= 0) {
-        mpz_set(max, c);
-        ++seen_best;
-    }
 }
 
 bool test_prime(mpz_t qq, mpz_t o, ulong ati) {
