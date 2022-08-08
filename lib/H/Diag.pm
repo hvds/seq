@@ -41,7 +41,7 @@ be shown on a new line.
 my $s = '';
 
 sub diag {
-    # FIXME: can we do this in one go with something like "^D^K"?
+    # FIXME: can we do this in one go with something like "^A^K"?
     print "\x08 \x08" x length($s);
     ($s) = @_;
     local $| = 1;

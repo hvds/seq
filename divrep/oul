@@ -643,8 +643,9 @@ sub walk_v {
     my @t = map $_->{t}, @v;
     my $printout = $print ? join(' ', @t) : '';
 
-    # gcd(@q)
+    # lcm(@q)
     my $aq = $aq[$level];
+    # start at ceil((min - m)/aq)
     $start //= 1 + ($min - $m - 1) / $aq if $min;
 
     # Given o_i + k . qq_i == m + i (mod aq), need tau(o_i) == t_i
