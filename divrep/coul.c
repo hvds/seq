@@ -1052,7 +1052,8 @@ ulong next_prime(ulong cur) {
 
 void candidate(mpz_t c) {
     keep_diag();
-    report("202 Candidate %Zu\n", c);
+    clock_t t1 = times(NULL);
+    report("202 Candidate %Zu (%.2fs)\n", c, seconds(t1));
     if (mpz_cmp(c, max) <= 0) {
         mpz_set(max, c);
         ++seen_best;
