@@ -1086,6 +1086,11 @@ void walk_v(mpz_t start) {
 
     ++countw;
 
+    mpz_sub(Z(wv_end), max, *m);
+    mpz_fdiv_q(Z(wv_end), Z(wv_end), *aq);
+    if (mpz_sgn(Z(wv_end)) < 0)
+        return;
+
     if (mpz_sgn(start)) {
         mpz_set(Z(wv_ati), start);
     } else {
@@ -1126,10 +1131,6 @@ void walk_v(mpz_t start) {
     }
 #endif
 
-    mpz_sub(Z(wv_end), max, *m);
-    mpz_fdiv_q(Z(wv_end), Z(wv_end), *aq);
-    if (mpz_sgn(Z(wv_end)) < 0)
-        return;
     if (!mpz_fits_ulong_p(Z(wv_end)))
         fail("TODO: walk_v.end > 2^64");
     ulong end = mpz_get_ui(Z(wv_end));
