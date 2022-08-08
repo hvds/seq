@@ -776,6 +776,132 @@ void set_cap(char *s) {
     }
 }
 
+/* Return p if no inverse exists.
+ * TODO: mod to ulong, use the fast 64-bit mulmod from MPU-mulmod.h.
+ */
+ulong small_divmod(mpz_t za, mpz_t zb, ulong p) {
+    mpz_set_ui(Z(sdm_p), p);
+    mpz_mod_ui(Z(sdm_r), zb, p);
+    if (!mpz_invert(Z(sdm_r), Z(sdm_r), Z(sdm_p)))
+        return p;
+    mpz_mul(Z(sdm_r), Z(sdm_r), za);
+    mpz_mod_ui(Z(sdm_r), Z(sdm_r), p);
+    return mpz_get_ui(Z(sdm_r));
+}
+
+bool test_prime(mpz_t qq, mpz_t o, ulong ati) {
+    mpz_mul_ui(Z(wv_cand), qq, ati);
+    mpz_add(Z(wv_cand), Z(wv_cand), o);
+    return _GMP_is_prob_prime(Z(wv_cand));
+}
+
+bool test_other(mpz_t qq, mpz_t o, ulong ati, uint t) {
+    mpz_mul_ui(Z(wv_cand), qq, ati);
+    mpz_add(Z(wv_cand), Z(wv_cand), o);
+    return is_tau(Z(wv_cand), t);
+}
+
+void walk_v(mpz_t start) {
+    mpz_t *q[k];
+    mpz_t *m = &levels[level - 1].rq;
+    uint t[k];
+    mpz_t *aq = &levels[level - 1].aq;
+    t_mod inv[maxfact * k];
+    uint inv_count = 0;
+    uint need_prime[k];
+    uint need_square[k];
+    uint need_other[k];
+    uint npc = 0, nqc = 0, noc = 0;
+
+    ++countw;
+
+    mpz_sub(Z(wv_end), max, *m);
+    mpz_fdiv_q(Z(wv_end), Z(wv_end), *aq);
+    if (mpz_sgn(Z(wv_end)) < 0)
+        return;
+
+    if (mpz_sgn(start)) {
+        mpz_set(Z(wv_ati), start);
+    } else {
+        mpz_sub(Z(wv_ati), min, *m);
+        mpz_cdiv_q(Z(wv_ati), Z(wv_ati), *aq);
+    }
+
+    for (uint vi = 0; vi < k; ++vi) {
+        t_value *vp = &value[vi];
+        q[vi] = vp->vlevel ? &vp->alloc[vp->vlevel - 1].q : ZP(zone);
+        t[vi] = vp->vlevel ? vp->alloc[vp->vlevel - 1].t : n;
+        mpz_divexact(wv_qq[vi], *aq, *q[vi]);
+        mpz_add_ui(wv_o[vi], *m, vi);
+        mpz_divexact(wv_o[vi], wv_o[vi], *q[vi]);
+        for (uint ai = 0; ai < vp->vlevel; ++ai) {
+            t_allocation *ap = &vp->alloc[ai];
+            ulong inverse = small_divmod(wv_o[vi], wv_qq[vi], ap->p);
+            if (inverse < ap->p) {
+                t_mod *ip = &inv[inv_count++];
+                ip->v = (inverse) ? ap->p - inverse : 0;
+                ip->m = ap->p;
+            }
+        }
+        if (t[vi] == 2)
+            need_prime[npc++] = vi;
+        else if (t[vi] & 1)
+            need_square[nqc++] = vi;
+/*      else if (t[vi] == 4)
+            need_semiprime[nsc++] = vi;
+*/
+        else
+            need_other[noc++] = vi;
+    }
+
+#if 0
+    if (nqc) {
+        /* TODO: special case square walk */
+    }
+#endif
+
+    if (!mpz_fits_ulong_p(Z(wv_end)))
+        fail("TODO: walk_v.end > 2^64");
+    ulong end = mpz_get_ui(Z(wv_end));
+    for (ulong ati = mpz_get_ui(Z(wv_ati)); ati <= end; ++ati) {
+        ++countwi;
+        if (times(NULL) >= diagt)
+            diag_walk_v(ati, end);
+        for (uint ii = 0; ii < inv_count; ++ii) {
+            t_mod *ip = &inv[ii];
+            if (ati % ip->m == ip->v)
+                goto next_ati;
+        }
+        /* TODO: bail and print somewhere here if 'opt_print' */
+        /* note: we have no squares */
+        /* TODO: remove me once we handle squares */
+        for (uint i = 0; i < nqc; ++i) {
+            uint vi = need_square[i];
+            if (!test_other(wv_qq[vi], wv_o[vi], ati, t[vi]))
+                goto next_ati;
+        }
+        for (uint i = 0; i < npc; ++i) {
+            uint vi = need_prime[i];
+            if (!test_prime(wv_qq[vi], wv_o[vi], ati))
+                goto next_ati;
+        }
+        /* TODO: test these in parallel, with optional printme cutoff */
+        for (uint i = 0; i < noc; ++i) {
+            uint vi = need_other[i];
+            if (!test_other(wv_qq[vi], wv_o[vi], ati, t[vi]))
+                goto next_ati;
+        }
+        /* have candidate: calculate and apply it */
+        mpz_mul_ui(Z(wv_cand), wv_qq[0], ati);
+        mpz_add(Z(wv_cand), Z(wv_cand), wv_o[0]);
+        mpz_mul(Z(wv_cand), Z(wv_cand), *q[0]);
+        candidate(Z(wv_cand));
+        return;
+      next_ati:
+        ;
+    }
+}
+
 /* return TRUE if a is a quadratic residue mod m
  * TODO: since we don't need the root, can we speed this up?
  */
@@ -1052,19 +1178,6 @@ ulong limit_p(uint vi, uint x, uint nextt) {
     return 0;
 }
 
-/* TODO: mod to ulong, use the fast 64-bit mulmod from MPU-mulmod.h.
- * Return p if no inverse exists.
- */
-ulong small_divmod(mpz_t za, mpz_t zb, ulong p) {
-    mpz_set_ui(Z(sdm_p), p);
-    mpz_mod_ui(Z(sdm_r), zb, p);
-    if (!mpz_invert(Z(sdm_r), Z(sdm_r), Z(sdm_p)))
-        return p;
-    mpz_mul(Z(sdm_r), Z(sdm_r), za);
-    mpz_mod_ui(Z(sdm_r), Z(sdm_r), p);
-    return mpz_get_ui(Z(sdm_r));
-}
-
 /* TODO: use MPU code for ulong next_prime */
 ulong next_prime(ulong cur) {
     mpz_set_ui(Z(np_p), cur);
@@ -1075,119 +1188,6 @@ ulong next_prime(ulong cur) {
     keep_diag();
     report("002 next_prime overflow\n");
     exit(1);
-}
-
-bool test_prime(mpz_t qq, mpz_t o, ulong ati) {
-    mpz_mul_ui(Z(wv_cand), qq, ati);
-    mpz_add(Z(wv_cand), Z(wv_cand), o);
-    return _GMP_is_prob_prime(Z(wv_cand));
-}
-
-bool test_other(mpz_t qq, mpz_t o, ulong ati, uint t) {
-    mpz_mul_ui(Z(wv_cand), qq, ati);
-    mpz_add(Z(wv_cand), Z(wv_cand), o);
-    return is_tau(Z(wv_cand), t);
-}
-
-void walk_v(mpz_t start) {
-    mpz_t *q[k];
-    mpz_t *m = &levels[level - 1].rq;
-    uint t[k];
-    mpz_t *aq = &levels[level - 1].aq;
-    t_mod inv[maxfact * k];
-    uint inv_count = 0;
-    uint need_prime[k];
-    uint need_square[k];
-    uint need_other[k];
-    uint npc = 0, nqc = 0, noc = 0;
-
-    ++countw;
-
-    mpz_sub(Z(wv_end), max, *m);
-    mpz_fdiv_q(Z(wv_end), Z(wv_end), *aq);
-    if (mpz_sgn(Z(wv_end)) < 0)
-        return;
-
-    if (mpz_sgn(start)) {
-        mpz_set(Z(wv_ati), start);
-    } else {
-        mpz_sub(Z(wv_ati), min, *m);
-        mpz_cdiv_q(Z(wv_ati), Z(wv_ati), *aq);
-    }
-
-    for (uint vi = 0; vi < k; ++vi) {
-        t_value *vp = &value[vi];
-        q[vi] = vp->vlevel ? &vp->alloc[vp->vlevel - 1].q : ZP(zone);
-        t[vi] = vp->vlevel ? vp->alloc[vp->vlevel - 1].t : n;
-        mpz_divexact(wv_qq[vi], *aq, *q[vi]);
-        mpz_add_ui(wv_o[vi], *m, vi);
-        mpz_divexact(wv_o[vi], wv_o[vi], *q[vi]);
-        for (uint ai = 0; ai < vp->vlevel; ++ai) {
-            t_allocation *ap = &vp->alloc[ai];
-            ulong inverse = small_divmod(wv_o[vi], wv_qq[vi], ap->p);
-            if (inverse < ap->p) {
-                t_mod *ip = &inv[inv_count++];
-                ip->v = (inverse) ? ap->p - inverse : 0;
-                ip->m = ap->p;
-            }
-        }
-        if (t[vi] == 2)
-            need_prime[npc++] = vi;
-        else if (t[vi] & 1)
-            need_square[nqc++] = vi;
-/*      else if (t[vi] == 4)
-            need_semiprime[nsc++] = vi;
-*/
-        else
-            need_other[noc++] = vi;
-    }
-
-#if 0
-    if (nqc) {
-        /* TODO: special case square walk */
-    }
-#endif
-
-    if (!mpz_fits_ulong_p(Z(wv_end)))
-        fail("TODO: walk_v.end > 2^64");
-    ulong end = mpz_get_ui(Z(wv_end));
-    for (ulong ati = mpz_get_ui(Z(wv_ati)); ati <= end; ++ati) {
-        ++countwi;
-        if (times(NULL) >= diagt)
-            diag_walk_v(ati, end);
-        for (uint ii = 0; ii < inv_count; ++ii) {
-            t_mod *ip = &inv[ii];
-            if (ati % ip->m == ip->v)
-                goto next_ati;
-        }
-        /* TODO: bail and print somewhere here if 'opt_print' */
-        /* note: we have no squares */
-        /* TODO: remove me once we handle squares */
-        for (uint i = 0; i < nqc; ++i) {
-            uint vi = need_square[i];
-            if (!test_other(wv_qq[vi], wv_o[vi], ati, t[vi]))
-                goto next_ati;
-        }
-        for (uint i = 0; i < npc; ++i) {
-            uint vi = need_prime[i];
-            if (!test_prime(wv_qq[vi], wv_o[vi], ati))
-                goto next_ati;
-        }
-        /* TODO: test these in parallel, with optional printme cutoff */
-        for (uint i = 0; i < noc; ++i) {
-            uint vi = need_other[i];
-            if (!test_other(wv_qq[vi], wv_o[vi], ati, t[vi]))
-                goto next_ati;
-        }
-        /* have candidate: calculate and apply it */
-        mpz_mul_ui(Z(wv_cand), wv_qq[0], ati);
-        mpz_add(Z(wv_cand), Z(wv_cand), wv_o[0]);
-        mpz_mul(Z(wv_cand), Z(wv_cand), *q[0]);
-        candidate(Z(wv_cand));
-        return;
-      next_ati:
-        ;
-    }
 }
 
 bool apply_batch(t_forcep *fp, uint bi) {
