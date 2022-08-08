@@ -1195,7 +1195,7 @@ bool apply_batch(t_forcep *fp, uint bi) {
     return 1;
 }
 
-bool prep_unforced_x(ulong p) {
+uint prep_unforced_x(ulong p) {
     t_level *cur_level = &levels[level];
     uint ti = cur_level->ti;
 
@@ -1249,7 +1249,7 @@ bool prep_unforced_x(ulong p) {
         && mpz_get_ui(Z(r_walk)) < limp - p
     ) {
         walk_v(Z(zero));
-        return 0;
+        return 1;
     }
     cur_level->p = p;
     cur_level->x = x;
@@ -1257,7 +1257,7 @@ bool prep_unforced_x(ulong p) {
     cur_level->max_at = seen_best;
     /* TODO: do some constant alloc stuff in advance */
     /* TODO: special case for nextt == 1 */
-    return 1;
+    return 2;
 }
 
 /* we emulate recursive calls via the levels[] array */
@@ -1319,8 +1319,14 @@ void recurse(void) {
             t_level *cur_level = &levels[level];
             if (cur_level->di >= divisors[cur_level->ti].highdiv)
                 goto derecurse;
-            if (!prep_unforced_x(0))
-                goto continue_unforced_x;
+            switch (prep_unforced_x(0)) {
+                /* nothing to do for this x */
+                case 0: goto continue_unforced_x;
+                /* nothing to do for any x */
+                case 1: goto derecurse;
+                /* ok, continue for this x */
+                case 2: ;
+            }
             ++level;
             ++value[cur_level->vi].vlevel;
             goto continue_recurse;
