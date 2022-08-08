@@ -199,7 +199,7 @@ void report(char *format, ...) {
     keep_diag();
     va_list ap;
     va_start(ap, format);
-    gmp_vfprintf(stderr, format, ap);
+    gmp_vfprintf(stdout, format, ap);
     va_end(ap);
 
     if (rfp) {
