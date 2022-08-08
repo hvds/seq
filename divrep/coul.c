@@ -29,6 +29,7 @@ typedef enum {
     sqm_t, sqm_q, sqm_b, sqm_z, sqm_x,  /* sqrtmod_t */
     uc_minusvi,                 /* update_chinese */
     wv_ati, wv_end, wv_cand,    /* walk_v */
+    w1_v, w1_j, w1_r,           /* walk_1 */
     lp_x, lp_mint,              /* limit_p */
     r_walk,                     /* recurse */
 
@@ -902,6 +903,35 @@ void walk_v(mpz_t start) {
     }
 }
 
+void walk_1(uint vi) {
+    t_value *vip = &value[vi];
+    t_allocation *aip = &vip->alloc[vip->vlevel - 1];
+    mpz_sub_ui(Z(w1_v), aip->q, vi);
+
+    if (mpz_cmp(Z(w1_v), min) < 0)
+        return;
+    for (uint vj = 0; vj < k; ++vj) {
+        if (vi == vj)
+            continue;
+        t_value *vjp = &value[vj];
+        t_allocation *ajp = (vjp->vlevel) ? &vjp->alloc[vjp->vlevel - 1] : NULL;
+        mpz_add_ui(Z(w1_j), Z(w1_v), vj);
+        if (ajp) {
+            mpz_fdiv_qr(Z(w1_j), Z(w1_r), Z(w1_j), ajp->q);
+            if (mpz_sgn(Z(w1_r)) != 0)
+                return;
+            mpz_gcd(Z(w1_r), Z(w1_j), ajp->q);
+            if (mpz_cmp(Z(w1_r), Z(zone)) != 0)
+                return;
+        }
+        /* TODO: stash these in an array, test them in order */
+        if (!is_tau(Z(w1_j), ajp ? ajp->t : n))
+            return;
+    }
+    candidate(Z(w1_v));
+    return;
+}
+
 /* return TRUE if a is a quadratic residue mod m
  * TODO: since we don't need the root, can we speed this up?
  */
@@ -1022,6 +1052,10 @@ bool apply_allocv(uint vi, ulong p, uint x, mpz_t px) {
         mpz_mul(cur->q, prev->q, px);
     else
         mpz_set(cur->q, px);
+    if (cur->t == 1) {
+        walk_1(vi);
+        return 0;
+    }
 
     if ((cur->t & 1) && !(prevt & 1))
         if (!alloc_square(vi))
@@ -1103,6 +1137,7 @@ void insert_stack(void) {
         }
         if (maxx == 0)
             fail("no forced prime %u found", p);
+        /* CHECKME: this returns 0 if t=1 */
         if (!apply_alloc(mini, p, maxx))
             fail("could not apply_alloc(%u, %lu, %u)", mini, p, maxx);
         t_level *lp = &levels[level];
@@ -1140,6 +1175,7 @@ void insert_stack(void) {
         --rs->count;
         uint p = rs->ppow[rs->count].p;
         uint x = rs->ppow[rs->count].e + 1;
+        /* CHECKME: this returns 0 if t=1 */
         if (!apply_alloc(vi, p, x))
             fail("could not apply_alloc(%u, %lu, %u)", vi, p, x);
     }
@@ -1404,8 +1440,8 @@ void recurse(void) {
                 for (uint li = 1; li < level; ++li)
                     if (p == levels[li].p)
                         goto redo_unforced;
+                /* note: this returns 0 if t=1 */
                 if (!apply_alloc(cur_level->vi, p, cur_level->x)) {
-                    /* is this an error? */
                     if (times(NULL) >= diagt)
                         diag_plain();
                     goto continue_recurse;
