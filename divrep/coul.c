@@ -1211,9 +1211,8 @@ bool prep_unforced_x(ulong p) {
     uint prevx = ap ? ap->x : 0;
     if (p == 0 && x <= prevx && (ti % prevx) == 0) {
         if (x < prevx)
-            return 0;       /* skip this x, we already did the reverse */
-        t_level *prev_level = &levels[level - 1];
-        p = prev_level->p;  /* skip smaller p, we already did the reverse */
+            return 0;   /* skip this x, we already did the reverse */
+        p = ap->p;      /* skip smaller p, we already did the reverse */
     } else if (p == 0)
         p = maxforce[vi];
     /* else we're continuing from known p */
