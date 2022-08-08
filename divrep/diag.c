@@ -16,7 +16,6 @@ void diag_reset(void) {
     }
 }
 
-/* WARNING: needs to be async-signal-safe */
 void keep_diag(void) {
     if (diag_size)
         write(1, "\n", 1);
@@ -39,6 +38,7 @@ int diag_fail(char *msg) {
     return 0;
 }
 
+/* needs to be async-signal-safe */
 void diag_fatal(char *msg) {
     write(2, msg, strlen(msg));
     exit(1);
@@ -56,7 +56,9 @@ void diag_TSTP(int sig) {
 
     savedErrno = errno;                 /* In case we change 'errno' here */
 
-    keep_diag();
+    /* no need to keep_diag(), we'll get a newline for free */
+    diag_size = 0;
+
     if (signal(SIGTSTP, SIG_DFL) == SIG_ERR)
         diag_fatal("signal");           /* Set handling to default */
 
