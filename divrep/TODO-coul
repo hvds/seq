@@ -1,0 +1,33 @@
+FIXME: can skip power x if previous power on this v_i implies we would
+already have done the reverse, regardless whether the previous power was
+for a forced prime. We should do this only if it was for an unforced
+prime.
+
+TODO (high priority):
+- calculate and use mintau()
+- special-case tau=1
+- special case square in walk_v
+- test "other" tau cases in parallel, one factor_one() step at a time
+- tweak optimization options in the Makefile
+
+TODO (lower priority):
+- maintain a dummy alloc[0] on values[], to save lots of special handling
+  - this may remove the need for m[] and t[] in walk_v()
+- special case Pell in walk_v
+- cache max prime used to short-circuit "used" check
+  - use it also to implement minp
+- on recover, parse 001 line to check consistency of critical options
+- check_residue can be much faster in (almost?) all cases
+- reimplement small_divmod()
+- reimplement next_prime()
+- cater for end value > 2^64 in walk_v, if needed
+- add support for -o
+  - build it over parallel is_tau() checks, so it can be configurable
+- prep the simple_valuation() checks for apply_batch()
+- for unforced primes, do constant apply_alloc() work in advance
+- avoid recursing when best_v() will find nothing
+- check if we can speed up has_sqrtmod()
+- for cases like n=54, t=54 we should disallow eg x=9, since we will already
+  have tried all x=3 and x=6 before that
+- work out how to get the Math::Prime::Util::GMP code we need more portably
+
