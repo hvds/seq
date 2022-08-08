@@ -870,6 +870,7 @@ bool apply_allocv(uint vi, ulong p, uint x, mpz_t px) {
         mpz_mul(cur->q, prev->q, px);
     else
         mpz_set(cur->q, px);
+
     if ((cur->t & 1) && !(prevt & 1))
         if (!alloc_square(vi))
             return 0;
@@ -1175,6 +1176,7 @@ void walk_v(mpz_t start) {
 
 bool apply_batch(t_forcep *fp, uint bi) {
     assert(fp->count > bi);
+    t_value *vp;
     t_level *lp = &levels[level];
     lp->is_forced = 1;
     lp->bi = bi;
@@ -1182,15 +1184,26 @@ bool apply_batch(t_forcep *fp, uint bi) {
     t_forcebatch *bp = &fp->batch[bi];
     if (!apply_alloc(bp->vi, fp->p, bp->x))
         return 0;
+    /* check if we overshot */
+    vp = &value[bp->vi];
+    if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
+        return 0;
+
     /* TODO: prep this */
     for (uint i = fp->p; i <= bp->vi; i += fp->p) {
         uint x = simple_valuation(i, fp->p) + 1;
         if (!apply_secondary(lp, bp->vi - i, fp->p, x))
             return 0;
+        vp = &value[bp->vi - i];
+        if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
+            return 0;
     }
     for (uint i = fp->p; bp->vi + i < k; i += fp->p) {
         uint x = simple_valuation(i, fp->p) + 1;
         if (!apply_secondary(lp, bp->vi + i, fp->p, x))
+            return 0;
+        vp = &value[bp->vi + i];
+        if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
             return 0;
     }
     return 1;
