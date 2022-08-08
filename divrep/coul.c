@@ -18,6 +18,11 @@
 #include "utility.h"
 #include "primality.h"
 
+/* primary parameters - we are searching for D(n, k), the least d such
+ * that tau(d + i) = n for all 0 <= i < k.
+ */
+uint n, k;
+
 typedef enum {
     zero, zone,                 /* constants */
     res_m, res_e, res_px,       /* check_residue */
@@ -113,7 +118,6 @@ typedef struct s_level {
         uint max_at;/* which max value used for limp calculation */
     /* end union */
     uint x;
-    uint *vlevel;   /* number of allocations in each value, if forced */
     mpz_t aq;   /* running LCM of allocated p^x */
     mpz_t rq;   /* running CRT of (-i) % p^x */
     uint have_square;
@@ -137,9 +141,23 @@ typedef struct s_value {
 } t_value;
 t_value *value = NULL;
 
+/* allocations in each value before applying nth forced prime */
+uint *vlevels = NULL;
+uint vl_forced = 0;
+static inline uint *VLP(uint level) { return &vlevels[level * k]; }
+static inline void STOREVL(uint vli) {
+    uint *vlp = VLP(vli);
+    for (uint vi = 0; vi < k; ++vi)
+        vlp[vi] = value[vi].vlevel;
+}
+static inline void FETCHVL(uint vli) {
+    uint *vlp = VLP(vli);
+    for (uint vi = 0; vi < k; ++vi)
+        value[vi].vlevel = vlp[vi];
+}
+
 long ticks_per_second;
 clock_t ticks = 0;
-uint n, k;
 
 mpz_t min, max;
 uint seen_best = 0;
@@ -247,8 +265,6 @@ void diag_walk_v(ulong ati, ulong end) {
 }
 
 void free_levels(void) {
-    for (uint i = 0; i < forcedp; ++i)
-        free(levels[i].vlevel);
     for (uint i = 0; i < k * maxfact + 1; ++i) {
         t_level *l = &levels[i];
         mpz_clear(l->aq);
@@ -264,8 +280,6 @@ void init_levels(void) {
         mpz_init(l->aq);
         mpz_init(l->rq);
     }
-    for (uint fi = 0; fi < forcedp; ++fi)
-        levels[fi].vlevel = (uint *)calloc(k, sizeof(uint));
     mpz_set_ui(levels[0].aq, 1);
     mpz_set_ui(levels[0].rq, 0);
     levels[0].have_square = 0;
@@ -303,6 +317,7 @@ void done(void) {
         for (uint i = 0; i < k; ++i)
             mpz_clear(wv_o[i]);
     free(wv_o);
+    free(vlevels);
     free_value();
     free_levels();
     if (forcep)
@@ -681,6 +696,7 @@ void init_post(void) {
 
     init_levels();
     init_value();
+    vlevels = (uint *)malloc(forcedp * k * sizeof(uint));
     countr = 0;
     countw = 0;
     countwi = 0;
@@ -1222,9 +1238,9 @@ uint prep_unforced_x(ulong p) {
     t_value *vp = &value[vi];
     t_allocation *ap = (vp->vlevel) ? &vp->alloc[vp->vlevel - 1] : NULL;
 
-/* FIXME: only if previous x was not forced: pull v_level[] out of t_level
-* to check this */
-    uint prevx = ap ? ap->x : 0;
+    /* pick up any previous unforced x */
+    uint unforced_base = (vl_forced) ? VLP(vl_forced - 1)[vi] : 0;
+    uint prevx = (vp->vlevel > unforced_base) ? ap->x : 0;
     if (p == 0 && x <= prevx && (ti % prevx) == 0) {
         if (x < prevx)
             return 0;   /* skip this x, we already did the reverse */
@@ -1293,8 +1309,7 @@ void recurse(void) {
                 t_forcep *fp = &forcep[fi];
                 if (fp->count == 0)
                     goto unforced;
-                for (uint vi = 0; vi < k; ++vi)
-                    prev_level->vlevel[vi] = value[vi].vlevel;
+                STOREVL(vl_forced++);
                 if (!apply_batch(fp, 0))
                     goto continue_recurse;
                 if (times(NULL) >= diagt)
@@ -1347,11 +1362,12 @@ void recurse(void) {
         }
         break;
       derecurse:
+        if (levels[level].is_forced)
+            --vl_forced;
       continue_recurse:
         --level;
         if (level == 0)
             break;
-      continue_level:
         {
             t_level *prev_level = &levels[level - 1];
             t_level *cur_level = &levels[level];
@@ -1360,8 +1376,7 @@ void recurse(void) {
                 t_forcep *fp = &forcep[fi];
 
                 /* unapply the batch */
-                for (uint vi = 0; vi < k; ++vi)
-                    value[vi].vlevel = prev_level->vlevel[vi];
+                FETCHVL(vl_forced - 1);
                 uint bi = cur_level->bi + 1;
                 if (bi >= fp->count)
                     goto derecurse;
