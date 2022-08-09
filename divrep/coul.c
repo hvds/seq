@@ -159,6 +159,11 @@ static inline void FETCHVL(uint vli) {
 
 long ticks_per_second;
 clock_t ticks = 0;
+struct tms time_buf;
+static inline clock_t utime(void) {
+    times(&time_buf);
+    return time_buf.tms_utime;
+}
 
 mpz_t min, max;
 uint seen_best = 0;
@@ -234,7 +239,7 @@ double seconds(clock_t t1) {
 }
 
 void diag_plain(void) {
-    clock_t t1 = times(NULL);
+    clock_t t1 = utime();
 
     prep_show_v();  /* into diag_buf */
     diag("%s", diag_buf);
@@ -249,7 +254,7 @@ void diag_plain(void) {
 }
 
 void diag_walk_v(ulong ati, ulong end) {
-    clock_t t1 = times(NULL);
+    clock_t t1 = utime();
 
     prep_show_v();  /* into diag_buf */
     if (!(debug && ati))
@@ -267,7 +272,7 @@ void diag_walk_v(ulong ati, ulong end) {
 
 void candidate(mpz_t c) {
     keep_diag();
-    clock_t t1 = times(NULL);
+    clock_t t1 = utime();
     report("202 Candidate %Zu (%.2fs)\n", c, seconds(t1));
     if (mpz_cmp(c, max) <= 0) {
         mpz_set(max, c);
@@ -379,7 +384,7 @@ void fail(char *format, ...) {
 void init_pre(void) {
     _GMP_init();
     ticks_per_second = sysconf(_SC_CLK_TCK);
-    ticks = times(NULL);
+    ticks = utime();
     mpz_init_set_ui(min, 0);
     mpz_init_set_ui(max, 0);
     init_fact(&nf);
@@ -866,7 +871,7 @@ void walk_v(t_level *cur_level, mpz_t start) {
     ulong end = mpz_get_ui(Z(wv_end));
     for (ulong ati = mpz_get_ui(Z(wv_ati)); ati <= end; ++ati) {
         ++countwi;
-        if (times(NULL) >= diagt)
+        if (utime() >= diagt)
             diag_walk_v(ati, end);
         for (uint ii = 0; ii < inv_count; ++ii) {
             t_mod *ip = &inv[ii];
@@ -1360,7 +1365,7 @@ void recurse(void) {
                     goto continue_recurse;
                 }
                 ++level;
-                if (times(NULL) >= diagt)
+                if (utime() >= diagt)
                     diag_plain();
                 continue;   /* deeper */
             }
@@ -1439,7 +1444,7 @@ void recurse(void) {
                 goto continue_recurse;
             }
             ++level;
-            if (times(NULL) >= diagt)
+            if (utime() >= diagt)
                 diag_plain();
             continue;
         }
@@ -1461,14 +1466,14 @@ void recurse(void) {
                     goto redo_unforced;
             /* note: this returns 0 if t=1 */
             if (!apply_alloc(prev_level, cur_level, cur_level->vi, p, cur_level->x)) {
-                if (times(NULL) >= diagt)
+                if (utime() >= diagt)
                     diag_plain();
                 --value[cur_level->vi].vlevel;
                 /* not redo_unforced, we may have improved max */
                 goto continue_unforced;
             }
             ++level;
-            if (times(NULL) >= diagt)
+            if (utime() >= diagt)
                 diag_plain();
             continue;   /* deeper */
         }
@@ -1518,7 +1523,7 @@ int main(int argc, char **argv, char **envp) {
     recurse();
     keep_diag();
 
-    clock_t tz = times(NULL);
+    clock_t tz = utime();
     report("367 coul(%u, %u): recurse %lu, walk %lu, walkc %lu (%.2fs)\n",
             n, k, countr, countw, countwi, seconds(tz));
     if (seen_best)

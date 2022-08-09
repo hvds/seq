@@ -13,6 +13,7 @@ TODO (high priority):
 
 CHECKME:
 - inject failures can clash with walk_1() successes
+- random seeding in _GMP_init may stop us getting consistent timings
 
 TODO (lower priority):
 - stash walk_1 values in an array, test in order (and in parallel)
