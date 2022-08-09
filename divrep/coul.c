@@ -145,7 +145,7 @@ t_value *value = NULL;
 /* allocations in each value before applying nth forced prime */
 uint *vlevels = NULL;
 uint vl_forced = 0;
-static inline uint *VLP(uint level) { return &vlevels[level * k]; }
+static inline uint *VLP(uint vlevel) { return &vlevels[vlevel * k]; }
 static inline void STOREVL(uint vli) {
     uint *vlp = VLP(vli);
     for (uint vi = 0; vi < k; ++vi)
@@ -802,11 +802,11 @@ bool test_other(mpz_t qq, mpz_t o, ulong ati, uint t) {
     return is_tau(Z(wv_cand), t);
 }
 
-void walk_v(mpz_t start) {
+void walk_v(t_level *cur_level, mpz_t start) {
     mpz_t *q[k];
-    mpz_t *m = &levels[level - 1].rq;
+    mpz_t *m = &cur_level->rq;
     uint t[k];
-    mpz_t *aq = &levels[level - 1].aq;
+    mpz_t *aq = &cur_level->aq;
     t_mod inv[maxfact * k];
     uint inv_count = 0;
     uint need_prime[k];
@@ -1009,10 +1009,9 @@ void update_chinese(t_level *old, t_level *new, uint vi, mpz_t px) {
 /* Record a new square at v_i; return FALSE if any v_j factor is not a
  * residue.
  */
-bool alloc_square(uint vi) {
+bool alloc_square(t_level *cur, uint vi) {
     t_value *v = &value[vi];
-    t_level *lp = &levels[level - 1];
-    uint sqi = lp->have_square++;
+    uint sqi = cur->have_square++;
     t_square *sqp = (sqi < MAX_SQUARE) ? &squares[sqi] : sqspare;
     sqp->vi = vi;
     mpz_set_ui(sqp->m, 1);
@@ -1036,7 +1035,7 @@ bool alloc_square(uint vi) {
 }
 
 /* returns TRUE if this newly creates a square */
-bool apply_allocv(uint vi, ulong p, uint x, mpz_t px) {
+bool apply_allocv(t_level *cur_level, uint vi, ulong p, uint x, mpz_t px) {
     t_value *v = &value[vi];
     t_allocation *prev = (v->vlevel) ? &v->alloc[v->vlevel - 1] : NULL;
     t_allocation *cur = &v->alloc[v->vlevel];
@@ -1058,17 +1057,13 @@ bool apply_allocv(uint vi, ulong p, uint x, mpz_t px) {
     }
 
     if ((cur->t & 1) && !(prevt & 1))
-        if (!alloc_square(vi))
+        if (!alloc_square(cur_level, vi))
             return 0;
     return 1;
 }
 
 /* Allocate p^{x-1} to v_{vi}. Returns FALSE if it is invalid. */
-bool apply_alloc(uint vi, ulong p, uint x) {
-    assert(level > 0);
-    t_level *prev = &levels[level - 1];
-    t_level *cur = &levels[level];
-    ++level;
+bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     cur->vi = vi;
     cur->p = p;
     cur->x = x;
@@ -1076,13 +1071,13 @@ bool apply_alloc(uint vi, ulong p, uint x) {
     mpz_set_ui(px, p);
     mpz_pow_ui(px, px, x - 1);
     update_chinese(prev, cur, vi, px);
-    return apply_allocv(vi, p, x, px);
+    return apply_allocv(cur, vi, p, x, px);
 }
 
 bool apply_secondary(t_level *cur, uint vi, ulong p, uint x) {
     mpz_set_ui(px, p);
     mpz_pow_ui(px, px, x - 1);
-    return apply_allocv(vi, p, x, px);
+    return apply_allocv(cur, vi, p, x, px);
 }
 
 /* find the best entry to progress: the one with the highest tau()
@@ -1138,9 +1133,10 @@ void insert_stack(void) {
         if (maxx == 0)
             fail("no forced prime %u found", p);
         /* CHECKME: this returns 0 if t=1 */
-        if (!apply_alloc(mini, p, maxx))
+        t_level *prev = &levels[level - 1];
+        t_level *cur = &levels[level];
+        if (!apply_alloc(prev, cur, mini, p, maxx))
             fail("could not apply_alloc(%u, %lu, %u)", mini, p, maxx);
-        t_level *lp = &levels[level];
         for (uint vi = 0; vi < k; ++vi) {
             t_fact *rs = &rstack[vi];
             if (rs->count && rs->ppow[rs->count - 1].p == p) {
@@ -1148,10 +1144,11 @@ void insert_stack(void) {
                 if (vi == mini)
                     continue;
                 uint x = rs->ppow[rs->count].e + 1;
-                if (!apply_secondary(lp, vi, p, x))
+                if (!apply_secondary(cur, vi, p, x))
                     fail("could not apply_secondary(%u, %lu, %u)", vi, p, x);
             }
         }
+        ++level;
 
         uint bi;
         for (bi = 0; bi < fp->count; ++bi) {
@@ -1161,8 +1158,8 @@ void insert_stack(void) {
         }
         if (bi >= fp->count)
             fail("no batch found for %u^{%u-1} at v_%u", p, maxx, mini);
-        levels[level - 1].is_forced = 1;
-        levels[level - 1].bi = bi;
+        cur->is_forced = 1;
+        cur->bi = bi;
     }
     /* now insert the rest */
     while (1) {
@@ -1176,8 +1173,13 @@ void insert_stack(void) {
         uint p = rs->ppow[rs->count].p;
         uint x = rs->ppow[rs->count].e + 1;
         /* CHECKME: this returns 0 if t=1 */
-        if (!apply_alloc(vi, p, x))
+        t_level *prev = &levels[level - 1];
+        t_level *cur = &levels[level];
+        if (!apply_alloc(prev, cur, vi, p, x))
             fail("could not apply_alloc(%u, %lu, %u)", vi, p, x);
+        ++level;
+        cur->is_forced = 0;
+        /* FIXME: set secondary values for unforced */
     }
     /* check we found them all */
     for (uint vi = 0; vi < k; ++vi) {
@@ -1226,15 +1228,14 @@ ulong next_prime(ulong cur) {
     exit(1);
 }
 
-bool apply_batch(t_forcep *fp, uint bi) {
+bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
     assert(fp->count > bi);
     t_value *vp;
-    t_level *lp = &levels[level];
-    lp->is_forced = 1;
-    lp->bi = bi;
+    cur->is_forced = 1;
+    cur->bi = bi;
 
     t_forcebatch *bp = &fp->batch[bi];
-    if (!apply_alloc(bp->vi, fp->p, bp->x))
+    if (!apply_alloc(prev, cur, bp->vi, fp->p, bp->x))
         return 0;
     /* check if we overshot */
     vp = &value[bp->vi];
@@ -1244,7 +1245,7 @@ bool apply_batch(t_forcep *fp, uint bi) {
     /* TODO: prep this */
     for (uint i = fp->p; i <= bp->vi; i += fp->p) {
         uint x = simple_valuation(i, fp->p) + 1;
-        if (!apply_secondary(lp, bp->vi - i, fp->p, x))
+        if (!apply_secondary(cur, bp->vi - i, fp->p, x))
             return 0;
         vp = &value[bp->vi - i];
         if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
@@ -1252,7 +1253,7 @@ bool apply_batch(t_forcep *fp, uint bi) {
     }
     for (uint i = fp->p; bp->vi + i < k; i += fp->p) {
         uint x = simple_valuation(i, fp->p) + 1;
-        if (!apply_secondary(lp, bp->vi + i, fp->p, x))
+        if (!apply_secondary(cur, bp->vi + i, fp->p, x))
             return 0;
         vp = &value[bp->vi + i];
         if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
@@ -1261,16 +1262,20 @@ bool apply_batch(t_forcep *fp, uint bi) {
     return 1;
 }
 
-uint prep_unforced_x(ulong p) {
-    t_level *cur_level = &levels[level];
-    uint ti = cur_level->ti;
+/*
+ * return 0 if nothing more to do at this level for any x;
+ * return 1 if nothing more to do for this x;
+ * return 2 if prepped for this x with work to do.
+ */
+uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
+    uint ti = cur->ti;
 
 /* TODO: for n=54, we should disallow eg x=9 when t=54, since we
  * will already have tried all x=3 and x=6 before that.
  */
 
-    uint x = divisors[ti].div[cur_level->di];
-    uint vi = cur_level->vi;
+    uint x = divisors[ti].div[cur->di];
+    uint vi = cur->vi;
     t_value *vp = &value[vi];
     t_allocation *ap = (vp->vlevel) ? &vp->alloc[vp->vlevel - 1] : NULL;
 
@@ -1279,7 +1284,7 @@ uint prep_unforced_x(ulong p) {
     uint prevx = (vp->vlevel > unforced_base) ? ap->x : 0;
     if (p == 0 && x <= prevx && (ti % prevx) == 0) {
         if (x < prevx)
-            return 0;   /* skip this x, we already did the reverse */
+            return 1;   /* skip this x, we already did the reverse */
         p = ap->p;      /* skip smaller p, we already did the reverse */
     } else if (p == 0)
         p = maxforce[vi];
@@ -1289,22 +1294,21 @@ uint prep_unforced_x(ulong p) {
     /* try p^{x-1} for all p until q_i . p^{x-1} . minrest > max + i */
     ulong limp = limit_p(vi, x, nextt);
     if (limp < p + 1)
-        return 0;   /* nothing to do here */
-    t_level *prev_level = &levels[level - 1];
+        return 1;   /* nothing to do here */
     mpz_add_ui(Z(r_walk), max, vi);
-    mpz_fdiv_q(Z(r_walk), Z(r_walk), prev_level->aq);
+    mpz_fdiv_q(Z(r_walk), Z(r_walk), prev->aq);
 #if 0
 /* TODO: support square walk */
-    if (prev_level->have_square) {
+    if (prev->have_square) {
         /* If we fix a square, expect to actually walk sqrt(r_walk)
-         * times number of roots mod cur_level->aq, typically 2^k
-         * if there are k primes dividing aq.
+         * times number of roots mod cur->aq, typically 2^k if there are
+         * k primes dividing aq.
          */
         mpz_root(Z(r_walk), Z(r_walk), 2);
         mpz_mul_2exp(Z(r_walk), Z(r_walk), primes_used());
 #   if 0
 /* TODO: support Pell */
-        if (prev_level->have_square > 1)
+        if (prev->have_square > 1)
             mpz_set_ui(Z(r_walk), 0);
 #   endif
     }
@@ -1314,13 +1318,13 @@ uint prep_unforced_x(ulong p) {
     if (mpz_fits_ulong_p(Z(r_walk))
         && mpz_get_ui(Z(r_walk)) < limp - p
     ) {
-        walk_v(Z(zero));
-        return 1;
+        walk_v(prev, Z(zero));
+        return 0;
     }
-    cur_level->p = p;
-    cur_level->x = x;
-    cur_level->limp = limp;
-    cur_level->max_at = seen_best;
+    cur->p = p;
+    cur->x = x;
+    cur->limp = limp;
+    cur->max_at = seen_best;
     /* TODO: do some constant alloc stuff in advance */
     /* TODO: special case for nextt == 1 */
     return 2;
@@ -1328,26 +1332,34 @@ uint prep_unforced_x(ulong p) {
 
 /* we emulate recursive calls via the levels[] array */
 void recurse(void) {
-    if (have_rwalk) {
-        walk_v(rwalk_from);
-        goto continue_recurse;
-    }
-
     ulong p;
     uint x;
+    t_level *prev_level, *cur_level;
+
+    if (have_rwalk) {
+        prev_level = &levels[level - 1];
+        walk_v(prev_level, rwalk_from);
+        goto derecurse;
+    }
+
     while (1) {
         ++countr;
+        prev_level = &levels[level - 1];
+        cur_level = &levels[level];
+
         /* recurse deeper */
         {
             uint fi = level - 1;
-            t_level *prev_level = &levels[level - 1];
             if (fi < forcedp && (fi == 0 || prev_level->is_forced)) {
                 t_forcep *fp = &forcep[fi];
                 if (fp->count == 0)
                     goto unforced;
                 STOREVL(vl_forced++);
-                if (!apply_batch(fp, 0))
+                if (!apply_batch(prev_level, cur_level, fp, 0)) {
+                    FETCHVL(vl_forced - 1);
                     goto continue_recurse;
+                }
+                ++level;
                 if (times(NULL) >= diagt)
                     diag_plain();
                 continue;   /* deeper */
@@ -1360,92 +1372,104 @@ void recurse(void) {
              * give same result each time.
              */
             if (vi == k) {
-                walk_v(Z(zero));
-                goto continue_recurse;
+                walk_v(prev_level, Z(zero));
+                goto derecurse;
             }
             t_value *vp = &value[vi];
             uint ti = (vp->vlevel) ? vp->alloc[vp->vlevel - 1].t : n;
             t_divisors *dp = &divisors[ti];
             if (dp->highdiv == 0)
                 fail("best_v() returned %u, but nothing to do there", vi);
-            t_level *cur_level = &levels[level];
             cur_level->vi = vi;
             cur_level->ti = ti;
             cur_level->di = 0;
             goto have_unforced_x;
         }
       continue_unforced_x:
-        ++levels[level].di;
+        ++cur_level->di;
       have_unforced_x:
         {
-            t_level *cur_level = &levels[level];
             if (cur_level->di >= divisors[cur_level->ti].highdiv)
                 goto derecurse;
-            switch (prep_unforced_x(0)) {
-                /* nothing to do for this x */
-                case 0: goto continue_unforced_x;
-                /* nothing to do for any x */
-                case 1: goto derecurse;
-                /* ok, continue for this x */
-                case 2: ;
+            switch (prep_unforced_x(prev_level, cur_level, 0)) {
+                case 0:
+                    /* nothing to do for any x */
+                    goto derecurse;
+                case 1:
+                    /* nothing to do for this x */
+                    goto continue_unforced_x;
+                case 2:
+                    /* ok, continue for this x */
+                    ;
             }
-            ++level;
-            ++value[cur_level->vi].vlevel;
-            goto continue_recurse;
+            goto continue_unforced;
         }
         break;
+      /* entry point, must set prev_level/cur_level before using */
       derecurse:
-        if (levels[level].is_forced)
-            --vl_forced;
-      continue_recurse:
         --level;
         if (level == 0)
             break;
-        {
-            t_level *prev_level = &levels[level - 1];
-            t_level *cur_level = &levels[level];
-            if (cur_level->is_forced) {
-                uint fi = level - 1;
-                t_forcep *fp = &forcep[fi];
+        prev_level = &levels[level - 1];
+        cur_level = &levels[level];
+        if (cur_level->is_forced) {
+            /* unapply the batch */
+            FETCHVL(vl_forced - 1);
+        } else
+            --value[cur_level->vi].vlevel;
+        /* goto continue_recurse; */
+      continue_recurse:
+        if (cur_level->is_forced) {
+            uint fi = level - 1;
+            t_forcep *fp = &forcep[fi];
 
-                /* unapply the batch */
-                FETCHVL(vl_forced - 1);
-                uint bi = cur_level->bi + 1;
-                if (bi >= fp->count)
-                    goto derecurse;
-                if (fp->batch[bi].x == 0) {
-                    cur_level->is_forced = 0;
-                    goto unforced;
-                }
-                if (!apply_batch(fp, bi))   /* ++level */
-                    goto continue_recurse;
-                if (times(NULL) >= diagt)
-                    diag_plain();
-            } else {
-                --value[cur_level->vi].vlevel;
-                ulong p = cur_level->p;
-                /* recalculate limit if we have an improved maximum */
-                if (seen_best > cur_level->max_at)
-                    if (!prep_unforced_x(p))
-                        goto continue_unforced_x;
-                /* note: only valid to use from just below here */
-              redo_unforced:
-                p = next_prime(p);
-                if (p > cur_level->limp)
-                    goto continue_unforced_x;
-                /* TODO: save max_used_p, use it to short-circuit */
-                for (uint li = 1; li < level; ++li)
-                    if (p == levels[li].p)
-                        goto redo_unforced;
-                /* note: this returns 0 if t=1 */
-                if (!apply_alloc(cur_level->vi, p, cur_level->x)) {
-                    if (times(NULL) >= diagt)
-                        diag_plain();
-                    goto continue_recurse;
-                }
-                if (times(NULL) >= diagt)
-                    diag_plain();
+            uint bi = cur_level->bi + 1;
+            if (bi >= fp->count) {
+                --vl_forced;
+                goto derecurse;
             }
+            if (fp->batch[bi].x == 0) {
+                cur_level->is_forced = 0;
+                FETCHVL(--vl_forced);
+                goto unforced;
+            }
+            if (!apply_batch(prev_level, cur_level, fp, bi)) {
+                /* unapply a possible partial batch */
+                FETCHVL(vl_forced - 1);
+                goto continue_recurse;
+            }
+            ++level;
+            if (times(NULL) >= diagt)
+                diag_plain();
+            continue;
+        }
+      continue_unforced:
+        {
+            ulong p = cur_level->p;
+            /* recalculate limit if we have an improved maximum */
+            if (seen_best > cur_level->max_at)
+                if (!prep_unforced_x(prev_level, cur_level, p))
+                    goto continue_unforced_x;
+            /* note: only valid to use from just below here */
+          redo_unforced:
+            p = next_prime(p);
+            if (p > cur_level->limp)
+                goto continue_unforced_x;
+            /* TODO: save max_used_p, use it to short-circuit */
+            for (uint li = 1; li < level; ++li)
+                if (p == levels[li].p)
+                    goto redo_unforced;
+            /* note: this returns 0 if t=1 */
+            if (!apply_alloc(prev_level, cur_level, cur_level->vi, p, cur_level->x)) {
+                if (times(NULL) >= diagt)
+                    diag_plain();
+                --value[cur_level->vi].vlevel;
+                /* not redo_unforced, we may have improved max */
+                goto continue_unforced;
+            }
+            ++level;
+            if (times(NULL) >= diagt)
+                diag_plain();
             continue;   /* deeper */
         }
     }

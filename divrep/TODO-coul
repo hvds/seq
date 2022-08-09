@@ -1,8 +1,15 @@
+FIXME:
+- recovery (insert_stack()) has bit-rotted
+  - set secondary levels[i] values for unforced primes
+  - check setup at the derecurse reentry point (with rwalk)
+  - check setup at the top-of-loop reentry point (without rwalk)
+
 TODO (high priority):
 - calculate and use mintau()
 - special case square in walk_v
 - test "other" tau cases in parallel, one factor_one() step at a time
 - tweak optimization options in the Makefile
+- check residues on new allocations when have_square
 
 CHECKME:
 - inject failures can clash with walk_1() successes
