@@ -1366,11 +1366,8 @@ void recurse(void) {
             t_value *vp = &value[vi];
             uint ti = (vp->vlevel) ? vp->alloc[vp->vlevel - 1].t : n;
             t_divisors *dp = &divisors[ti];
-            if (dp->highdiv == 0) {
-                /* is this an error? */
-                walk_v(Z(zero));
-                goto continue_recurse;
-            }
+            if (dp->highdiv == 0)
+                fail("best_v() returned %u, but nothing to do there", vi);
             t_level *cur_level = &levels[level];
             cur_level->vi = vi;
             cur_level->ti = ti;
