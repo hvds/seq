@@ -853,6 +853,7 @@ void walk_v(t_level *cur_level, mpz_t start) {
             need_prime[npc++] = vi;
         else if (t[vi] & 1)
             need_square[nqc++] = vi;
+/* CHECKME: after parallelization, check if we have a use for this */
 /*      else if (t[vi] == 4)
             need_semiprime[nsc++] = vi;
 */
