@@ -1035,16 +1035,15 @@ bool alloc_square(t_level *cur, uint vi) {
             continue;
         mpz_mul_ui(sqp->m, sqp->m, ap->p);
     }
-    for (uint vj = 0; vj < k; ++vj) {
-        if (vi == vj)
-            continue;
-        v = &value[vj];
-        for (uint ai = 0; ai < v->vlevel; ++ai) {
-            t_allocation *ap = &v->alloc[ai];
-            /* TODO: set is_forced 0 when we can */
-            if (!check_residue(vj, ap->p, ap->x, vi, sqp->m, 1))
-                return 0;
-        }
+    /* note: we rely on cur <= levels[level + 1] */
+    for (uint j = 1; j < level; ++j) {
+        t_level *lp = &levels[j];
+        if (lp == cur)
+            break;
+        /* note: for a forced batch, we only need to check an example of
+         * the highest power involved, which is the levels[] entry itself */
+        if (!check_residue(lp->vi, lp->p, lp->x, vi, sqp->m, lp->is_forced))
+            return 0;
     }
     return 1;
 }
