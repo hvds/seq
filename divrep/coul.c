@@ -951,43 +951,52 @@ bool has_sqrtmod(mpz_t a, mpz_t m) {
  * TODO: p == 2 seems like it should be easy, but existing algorithm
  * doesn't special-case it.
  */
-bool check_residue(uint vi, ulong p, uint x, uint vj, mpz_t m) {
+bool check_residue(uint vi, ulong p, uint x, uint vj, mpz_t m, bool is_forced) {
     int d = vj - vi;
     if (d == 0)
         return 1;
     uint e1 = x - 1;
     uint e2 = 0;
-    while ((d % p) == 0) {
-        ++e2;
-        d /= p;
-    }
+    bool need_divide = 0;
 
-    mpz_set(Z(res_m), m);
-    t_value *vpj = &value[vj];
-    for (uint i = 0; i < vpj->vlevel; ++i)
-        if (vpj->alloc[i].p == p) {
-            if (e2 == 0)
-                return 0;
-            if (e1 == e2)
-                return 1;   /* see below */
-            if (mpz_divisible_ui_p(Z(res_m), p)) {
-                mpz_divexact_ui(Z(res_m), Z(res_m), p);
-                --e1;
-                --e2;
-            }
-            break;
+    if (is_forced) {
+        while ((d % p) == 0) {
+            ++e2;
+            d /= p;
         }
 
-    if (e1 == e2) {
-        /* we know only that valuation(v_j, p) > e1, punt on this */
-        return 1;
+        t_value *vpj = &value[vj];
+        for (uint i = 0; i < vpj->vlevel; ++i)
+            if (vpj->alloc[i].p == p) {
+                if (e2 == 0)
+                    return 0;
+                if (e1 == e2)
+                    return 1;   /* see below */
+                if (mpz_divisible_ui_p(m, p)) {
+                    need_divide = 1;
+                    --e1;
+                    --e2;
+                }
+                break;
+            }
+
+        if (e1 == e2) {
+            /* we know only that valuation(v_j, p) > e1, punt on this */
+            return 1;
+        }
     }
+
+    if (need_divide)
+        mpz_divexact_ui(Z(res_m), m, p);
+    else
+        mpz_set(Z(res_m), m);
 
     /* we have v_j = p^{min(e1, e2)} . m . z^2 */
     if (p == 2)
         mpz_mul_2exp(Z(res_px), Z(zone), (e1 < e2) ? e2 - e1 : e1 - e2);
     else
         mpz_set_ui(Z(res_px), p);
+
     /* return true iff d / m (mod px) is a quadratic residue (mod px) */
     if (!mpz_invert(Z(res_m), Z(res_m), Z(res_px)))
         fail("logic error, p ~| m, so m should be invertible");
@@ -1032,7 +1041,8 @@ bool alloc_square(t_level *cur, uint vi) {
         v = &value[vj];
         for (uint ai = 0; ai < v->vlevel; ++ai) {
             t_allocation *ap = &v->alloc[ai];
-            if (!check_residue(vj, ap->p, ap->x, vi, sqp->m))
+            /* TODO: set is_forced 0 when we can */
+            if (!check_residue(vj, ap->p, ap->x, vi, sqp->m, 1))
                 return 0;
         }
     }
@@ -1059,6 +1069,13 @@ bool apply_allocv(t_level *cur_level, uint vi, ulong p, uint x, mpz_t px) {
     if (cur->t == 1) {
         walk_1(vi);
         return 0;
+    }
+
+    if (cur_level->have_square) {
+        /* TODO: either support Pell solver, or loop over squares here */
+        t_square *sqp = &squares[0];
+        if (!check_residue(vi, p, x, sqp->vi, sqp->m, cur_level->is_forced))
+            return 0;
     }
 
     if ((cur->t & 1) && !(prevt & 1))

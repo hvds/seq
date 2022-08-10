@@ -9,13 +9,13 @@ TODO (high priority):
 - special case square in walk_v
 - test "other" tau cases in parallel, one factor_one() step at a time
 - tweak optimization options in the Makefile
-- check residues on new allocations when have_square
 
 CHECKME:
 - inject failures can clash with walk_1() successes
 - random seeding in _GMP_init may stop us getting consistent timings
 
 TODO (lower priority):
+- refine is_forced for check_residue from alloc_square
 - stash walk_1 values in an array, test in order (and in parallel)
 - maintain a dummy alloc[0] on values[], to save lots of special handling
   - this may remove the need for m[] and t[] in walk_v()
