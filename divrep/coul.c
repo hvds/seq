@@ -110,6 +110,8 @@ typedef struct s_level {
     bool is_forced;
     uint vi;    /* allocation of p^x into v_i */
     ulong p;
+    uint x;
+    uint have_square;
     /* union */
         uint bi;    /* batch index, if forced */
     /* .. with */
@@ -118,10 +120,8 @@ typedef struct s_level {
         ulong limp; /* limit for p */
         uint max_at;/* which max value used for limp calculation */
     /* end union */
-    uint x;
     mpz_t aq;   /* running LCM of allocated p^x */
     mpz_t rq;   /* running CRT of (-i) % p^x */
-    uint have_square;
 } t_level;
 t_level *levels = NULL;
 uint level = 0;
