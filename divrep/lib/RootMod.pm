@@ -346,7 +346,6 @@ sub allrootmod_prime_power {
     }
     return () if ($a % $p) == 0;
 
-    my $pxp = $px * $p;
     my $ered = ($p > 2 || $x < 5)
         ? ($x + 1) >> 1
         : ($x + 3) >> 1;
@@ -363,6 +362,7 @@ sub allrootmod_prime_power {
         } @r;
     }
 
+    my $pxp = $px * $p;
     my @r2;
     for my $s (@r) {
         my $t = powmod($s, $k - 1, $pxp);

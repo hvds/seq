@@ -32,5 +32,7 @@ extern void simple_fact(uint n, t_fact *f);
 extern uint simple_tau(t_fact *f);
 extern uint simple_valuation(ulong n, ulong p);
 extern uint simple_prime_count(ulong n);
+extern uint tiny_gcd(uint a, uint b);
+extern ulong simple_gcd(ulong a, ulong b);
 
 #endif

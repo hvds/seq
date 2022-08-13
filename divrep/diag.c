@@ -5,6 +5,7 @@
 #include <signal.h>
 #include <string.h>
 #include <errno.h>
+#include "gmp.h"
 
 int diag_size = 0;
 
@@ -27,7 +28,7 @@ unsigned int diag(char *format, ...) {
 
     va_list ap;
     va_start(ap, format);
-    diag_size += vprintf(format, ap);
+    diag_size += gmp_vprintf(format, ap);
     va_end(ap);
     fflush(stdout);
     return diag_size;

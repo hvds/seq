@@ -107,3 +107,19 @@ uint simple_prime_count(ulong n) {
     mpz_clear(zc);
     return c;
 }
+
+uint tiny_gcd(uint a, uint b) {
+    if (a > b)
+        return tiny_gcd(b, a);
+    if (a == 0)
+        return b;
+    return tiny_gcd(b % a, a);
+}
+
+ulong simple_gcd(ulong a, ulong b) {
+    if (a > b)
+        return simple_gcd(b, a);
+    if (a == 0)
+        return b;
+    return simple_gcd(b % a, a);
+}

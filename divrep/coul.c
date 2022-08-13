@@ -30,6 +30,7 @@ typedef enum {
     sqm_t, sqm_q, sqm_b, sqm_z, sqm_x,  /* sqrtmod_t */
     uc_minusvi,                 /* update_chinese */
     wv_ati, wv_end, wv_cand,    /* walk_v */
+    wv_startr, wv_endr, wv_qqr, wv_r, wv_rx, wv_temp,
     w1_v, w1_j, w1_r,           /* walk_1 */
     lp_x, lp_mint,              /* limit_p */
     r_walk,                     /* recurse */
@@ -267,6 +268,23 @@ void diag_walk_v(ulong ati, ulong end) {
 
     if (rfp && t1 >= logt) {
         fprintf(rfp, "305 %s: %lu / %lu (%.2fs)\n",
+                diag_buf, ati, end, seconds(t1));
+        logt = t1 + log_delay;
+    }
+}
+
+void diag_walk_zv(mpz_t ati, mpz_t end) {
+    clock_t t1 = utime();
+
+    prep_show_v();  /* into diag_buf */
+    if (!(debug && mpz_sgn(ati)))
+        diag("%s: %Zu / %Zu", diag_buf, ati, end);
+    if (debug)
+        keep_diag();
+    diagt = t1 + diag_delay;
+
+    if (rfp && t1 >= logt) {
+        gmp_fprintf(rfp, "305 %s: %Zu / %Zu (%.2fs)\n",
                 diag_buf, ati, end, seconds(t1));
         logt = t1 + log_delay;
     }
@@ -829,10 +847,31 @@ bool test_prime(mpz_t qq, mpz_t o, ulong ati) {
     return _GMP_is_prob_prime(Z(wv_cand));
 }
 
+bool test_zprime(mpz_t qq, mpz_t o, mpz_t ati) {
+    mpz_mul(Z(wv_cand), qq, ati);
+    mpz_add(Z(wv_cand), Z(wv_cand), o);
+    return _GMP_is_prob_prime(Z(wv_cand));
+}
+
 bool test_other(mpz_t qq, mpz_t o, ulong ati, uint t) {
     mpz_mul_ui(Z(wv_cand), qq, ati);
     mpz_add(Z(wv_cand), Z(wv_cand), o);
     return is_tau(Z(wv_cand), t);
+}
+
+bool test_zother(mpz_t qq, mpz_t o, mpz_t ati, uint t) {
+    mpz_mul(Z(wv_cand), qq, ati);
+    mpz_add(Z(wv_cand), Z(wv_cand), o);
+    return is_tau(Z(wv_cand), t);
+}
+
+uint gcd_divisors(uint t) {
+    assert(t > 1);
+    t_divisors *dp = &divisors[t];
+    uint g = dp->div[0] - 1;
+    for (uint di = 1; di < dp->alldiv; ++di)
+        g = tiny_gcd(g, dp->div[di] - 1);
+    return g;
 }
 
 void walk_v(t_level *cur_level, mpz_t start) {
@@ -889,11 +928,121 @@ void walk_v(t_level *cur_level, mpz_t start) {
             need_other[noc++] = vi;
     }
 
-#if 0
     if (nqc) {
-        /* TODO: special case square walk */
-    }
+        uint sqi = need_square[0];
+        mpz_t *oi = &wv_o[sqi];
+        mpz_t *qi = q[sqi];
+        mpz_t *qqi = &wv_qq[sqi];
+        uint ti = t[sqi];
+#if 0
+        if (npc > 1) {
+            /* TODO: special case Pell solver */
+        }
 #endif
+        uint xi = gcd_divisors(ti);
+        /* we need to find all r: r^x_i == o_i (mod qq_i) */
+        mpz_t *xmod;
+        uint xmc = allrootmod(&xmod, *oi, xi, *qqi);
+        if (xmc == 0)
+            return;
+        uint rindex = 0;
+        if (mpz_sgn(Z(wv_ati)) > 0) {
+            mpz_mul(Z(wv_startr), Z(wv_ati), *qqi);
+            mpz_add(Z(wv_startr), Z(wv_startr), *oi);
+            mpz_root(Z(wv_startr), Z(wv_startr), xi);
+            mpz_fdiv_qr(Z(wv_startr), Z(wv_temp), Z(wv_startr), *qqi);
+            /* Note: on recover, we expect an exact match here, but on
+             * normal entry we don't. */
+            for (uint xmi = 0; xmi < xmc; ++xmi) {
+                int cmp = mpz_cmp(xmod[xmi], Z(wv_temp));
+                if (cmp == 0) {
+                    rindex = xmi;
+                    break;
+                } else if (cmp > 0) {
+                    if (mpz_sgn(start) == 0) {
+                        rindex = xmi;
+                        break;
+                    }
+                    gmp_fprintf(stderr,
+                        "from restart %Zu no match found for mod %Zu < %Zu\n",
+                        Z(wv_ati), Z(wv_temp), xmod[xmi]
+                    );
+                    exit(1);
+                }
+                if (xmi + 1 == xmc) {
+                    if (mpz_sgn(start) == 0) {
+                        rindex = 0;
+                        mpz_add_ui(Z(wv_startr), Z(wv_startr), 1);
+                        break;
+                    }
+                    gmp_fprintf(stderr,
+                        "from start %Zu no match found for mod %Zu > %Zu\n",
+                        Z(wv_ati), Z(wv_temp), xmod[xmi]
+                    );
+                    exit(1);
+                }
+            }
+            mpz_mul(Z(wv_qqr), *qqi, Z(wv_startr));
+        } else {
+            mpz_set_ui(Z(wv_qqr), 0);
+        }
+        mpz_sub(Z(wv_end), max, *m);
+        mpz_fdiv_q(Z(wv_end), Z(wv_end), *aq);
+        mpz_add_ui(Z(wv_endr), max, sqi);
+        mpz_fdiv_q(Z(wv_endr), Z(wv_endr), *qi);
+        mpz_root(Z(wv_endr), Z(wv_endr), xi);
+
+        while (1) {
+            mpz_add(Z(wv_r), Z(wv_qqr), xmod[rindex]);
+            if (mpz_cmp(Z(wv_r), Z(wv_endr)) > 0)
+                return;
+            ++countwi;
+            mpz_pow_ui(Z(wv_rx), Z(wv_r), xi);
+            mpz_sub(Z(wv_ati), Z(wv_rx), *oi);
+            mpz_fdiv_q(Z(wv_ati), Z(wv_ati), *qqi);
+            if (utime() >= diagt)
+                diag_walk_zv(Z(wv_ati), Z(wv_end));
+            for (uint ii = 0; ii < inv_count; ++ii) {
+                t_mod *ip = &inv[ii];
+                if (mpz_fdiv_ui(Z(wv_ati), ip->m) == ip->v)
+                    goto next_sqati;
+            }
+            /* TODO: variant is_tau for known power */
+            if (!is_tau(Z(wv_rx), ti))
+                goto next_sqati;
+            /* TODO: bail and print somewhere here if 'opt_print' */
+            /* note: we have no more squares */
+            /* TODO: remove me once we handle Pell */
+            for (uint i = 1; i < nqc; ++i) {
+                uint vi = need_square[i];
+                if (!test_zother(wv_qq[vi], wv_o[vi], Z(wv_ati), t[vi]))
+                    goto next_sqati;
+            }
+            for (uint i = 0; i < npc; ++i) {
+                uint vi = need_prime[i];
+                if (!test_zprime(wv_qq[vi], wv_o[vi], Z(wv_ati)))
+                    goto next_sqati;
+            }
+            /* TODO: test these in parallel, with optional printme cutoff */
+            for (uint i = 0; i < noc; ++i) {
+                uint vi = need_other[i];
+                if (!test_zother(wv_qq[vi], wv_o[vi], Z(wv_ati), t[vi]))
+                    goto next_sqati;
+            }
+            /* have candidate: calculate and apply it */
+            mpz_mul(Z(wv_cand), wv_qq[0], Z(wv_ati));
+            mpz_add(Z(wv_cand), Z(wv_cand), wv_o[0]);
+            mpz_mul(Z(wv_cand), Z(wv_cand), *q[0]);
+            candidate(Z(wv_cand));
+            return;
+          next_sqati:
+            ++rindex;
+            if (rindex >= xmc) {
+                mpz_add(Z(wv_qqr), Z(wv_qqr), *qqi);
+                rindex = 0;
+            }
+        }
+    }
 
     if (!mpz_fits_ulong_p(Z(wv_end)))
         fail("TODO: walk_v.end > 2^64");
@@ -909,12 +1058,6 @@ void walk_v(t_level *cur_level, mpz_t start) {
         }
         /* TODO: bail and print somewhere here if 'opt_print' */
         /* note: we have no squares */
-        /* TODO: remove me once we handle squares */
-        for (uint i = 0; i < nqc; ++i) {
-            uint vi = need_square[i];
-            if (!test_other(wv_qq[vi], wv_o[vi], ati, t[vi]))
-                goto next_ati;
-        }
         for (uint i = 0; i < npc; ++i) {
             uint vi = need_prime[i];
             if (!test_prime(wv_qq[vi], wv_o[vi], ati))
@@ -1348,22 +1491,19 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
         return 1;   /* nothing to do here */
     mpz_add_ui(Z(r_walk), max, vi);
     mpz_fdiv_q(Z(r_walk), Z(r_walk), prev->aq);
-#if 0
-/* TODO: support square walk */
     if (prev->have_square) {
         /* If we fix a square, expect to actually walk sqrt(r_walk)
          * times number of roots mod cur->aq, typically 2^k if there are
          * k primes dividing aq.
          */
         mpz_root(Z(r_walk), Z(r_walk), 2);
-        mpz_mul_2exp(Z(r_walk), Z(r_walk), primes_used());
+        mpz_mul_2exp(Z(r_walk), Z(r_walk), level - 1);
 #   if 0
-/* TODO: support Pell */
+        /* TODO: support Pell */
         if (prev->have_square > 1)
             mpz_set_ui(Z(r_walk), 0);
 #   endif
     }
-#endif
     if (gain > 1)
         mpz_mul_ui(Z(r_walk), Z(r_walk), gain);
     if (antigain > 1)

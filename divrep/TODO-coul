@@ -6,7 +6,6 @@ FIXME:
 
 TODO (high priority):
 - calculate and use mintau()
-- special case square in walk_v
 - test "other" tau cases in parallel, one factor_one() step at a time
 - tweak optimization options in the Makefile
 
@@ -14,6 +13,7 @@ CHECKME:
 - inject failures can clash with walk_1() successes
 - random seeding in _GMP_init may stop us getting consistent timings
 - after parallelization, check if picking out semiprimes can help us
+- can best_v do better by picking the most constrained?
 
 TODO (lower priority):
 - stash walk_1 values in an array, test in order (and in parallel)
@@ -36,4 +36,5 @@ TODO (lower priority):
 - for cases like n=54, t=54 we should disallow eg x=9, since we will already
   have tried all x=3 and x=6 before that
 - work out how to get the Math::Prime::Util::GMP code we need more portably
-
+- new option to show fixed-prime patterns, with indices
+- sharding by new option to select one or more fixed-prime patterns by index
