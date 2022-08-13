@@ -1167,6 +1167,7 @@ uint best_v(void) {
 void insert_stack(void) {
     /* first insert forced primes */
     for (uint fpi = 0; fpi < forcedp; ++fpi) {
+        STOREVL(vl_forced++);
         t_forcep *fp = &forcep[fpi];
         uint p = fp->p;
         uint maxx = 0, mini;
