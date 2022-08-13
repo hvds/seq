@@ -190,6 +190,7 @@ t_fact nf;
 uint tn;
 uint maxfact;
 uint *maxforce = NULL;
+uint *minnext = NULL;
 mpz_t px;   /* p^x */
 mpz_t *wv_o = NULL, *wv_qq = NULL;  /* wv_o[k], wv_qq[k] */
 
@@ -360,6 +361,7 @@ void done(void) {
         for (int i = 0; i < forcedp; ++i)
             free(forcep[i].batch);
     free(forcep);
+    free(minnext);
     free(maxforce);
     if (divisors)
         for (int i = 0; i <= n; ++i)
@@ -624,16 +626,18 @@ void prep_maxforce(void) {
     if ((n & 3) != 0) {
         for (int i = 0; i < k; ++i)
             maxforce[i] = k;
-        return;
-    }
-    for (int i = 0; i < k; ++i) {
-        int mf = k - i - 1;
-        if (i > mf)
-            mf = i;
-        if (force_all > mf)
-            mf = force_all;
-        maxforce[i] = mf;
-    }
+    } else
+        for (int i = 0; i < k; ++i) {
+            int mf = k - i - 1;
+            if (i > mf)
+                mf = i;
+            if (force_all > mf)
+                mf = force_all;
+            maxforce[i] = mf;
+        }
+    minnext = (uint *)malloc(k * sizeof(uint));
+    for (uint i = 0; i < k; ++i)
+        minnext[i] = next_prime(maxforce[i]);
 }
 
 void prep_forcep(void) {
@@ -1397,6 +1401,28 @@ void insert_stack(void) {
     }
 }
 
+/* TODO: cache this */
+uint _sumpm(uint t) {
+    uint s = 0;
+    while (t > 1) {
+        uint h = divisors[t].high;
+        s += h - 1;
+        t /= h;
+    }
+    return s;
+}
+
+/* Calculate the minimum contribution from primes satisfying the given tau.
+ */
+void mintau(mpz_t mint, uint vi, uint t) {
+    /* quick version: given the minimum prime p that can be used, we
+     * calculate p^k where k = sum{p_i - 1} over the primes dividing
+     * t _with multiplicity_.
+     */
+    mpz_set_ui(mint, minnext[vi]);
+    mpz_pow_ui(mint, mint, _sumpm(t));
+}
+
 /* return the maximum prime to iterate to */
 ulong limit_p(uint vi, uint x, uint nextt) {
     t_value *vp = &value[vi];
@@ -1405,10 +1431,12 @@ ulong limit_p(uint vi, uint x, uint nextt) {
     if (ap)
         mpz_div(Z(lp_x), Z(lp_x), ap->q);
     /* else notional ap->q is 1 */
-    /* TODO: calculate mintau(nextt) */
-/*  mintau(ZP(lp_mint), vi, nextt);
+
+    /* divide through by the minimum contribution that could supply the
+     * remaining tau */
+    mintau(Z(lp_mint), vi, nextt);
     mpz_div(Z(lp_x), Z(lp_x), Z(lp_mint));
-*/
+
     mpz_root(Z(lp_x), Z(lp_x), x - 1);
     if (mpz_fits_ulong_p(Z(lp_x))) {
         ulong lim = mpz_get_ui(Z(lp_x));
