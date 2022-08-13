@@ -543,6 +543,18 @@ int cmp_high(const void *va, const void *vb) {
     return divisors[b].high - divisors[a].high;
 }
 
+/* TODO: use MPU code for ulong next_prime */
+ulong next_prime(ulong cur) {
+    mpz_set_ui(Z(np_p), cur);
+    _GMP_next_prime(Z(np_p));
+    if (mpz_fits_ulong_p(Z(np_p)))
+        return mpz_get_ui(Z(np_p));
+    diag_plain();
+    keep_diag();
+    report("002 next_prime overflow\n");
+    exit(1);
+}
+
 /* recurse() wants the list of powers to try: each divisor of t_i (which
  * itself divides n) that is divisible by the highest odd prime factor
  * dividing t_i, in increasing order.
@@ -1408,18 +1420,6 @@ ulong limit_p(uint vi, uint x, uint nextt) {
     keep_diag();
     report("002 %s: outsize limit %Zu\n", diag_buf, Z(lp_x));
     return 0;
-}
-
-/* TODO: use MPU code for ulong next_prime */
-ulong next_prime(ulong cur) {
-    mpz_set_ui(Z(np_p), cur);
-    _GMP_next_prime(Z(np_p));
-    if (mpz_fits_ulong_p(Z(np_p)))
-        return mpz_get_ui(Z(np_p));
-    diag_plain();
-    keep_diag();
-    report("002 next_prime overflow\n");
-    exit(1);
 }
 
 bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
