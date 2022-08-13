@@ -403,6 +403,62 @@ void init_pre(void) {
     mpz_set_ui(Z(zone), 1);
 }
 
+/* Parse a "305" log line for initialization.
+ * Input string should point after the initial "305 ".
+ */
+void parse_305(char *s) {
+    double dtime;
+    t_ppow pp;
+
+    rstack = (t_fact *)malloc(k * sizeof(t_fact));
+    for (int i = 0; i < k; ++i)
+        init_fact(&rstack[i]);
+
+    for (int i = 0; i < k; ++i) {
+        if (i) {
+            assert(s[0] == ' ');
+            ++s;
+        }
+        if (s[0] == '.') {
+            ++s;
+            continue;
+        }
+        while (1) {
+            pp.p = strtoul(s, &s, 10);
+            pp.e = (s[0] == '^') ? strtoul(&s[1], &s, 10) : 1;
+            add_fact(&rstack[i], pp);
+            if (s[0] != '.')
+                break;
+            ++s;
+        }
+        /* reverse them, so we can pop as we allocate */
+        reverse_fact(&rstack[i]);
+    }
+    if (s[0] == ':') {
+        assert(s[1] == ' ');
+        s += 2;
+        if (strncmp("t=1", s, 3) == 0)
+            s += 3; /* ignore */
+        else {
+            int from_start, from_end, to_start, to_end;
+            have_rwalk = 1;
+            if (EOF == sscanf(s, "%n%*[0-9]%n / %n%*[0-9]%n ",
+                    &from_start, &from_end, &to_start, &to_end))
+                fail("could not parse 305 from/to: '%s'", s);
+            s[from_end] = 0;
+            mpz_init_set_str(rwalk_from, &s[from_start], 10);
+            s[to_end] = 0;
+            mpz_init_set_str(rwalk_to, &s[to_start], 10);
+            have_rwalk = 1;
+            s[to_end] = ' ';
+            s = &s[to_end];
+        }
+    }
+    if (EOF == sscanf(s, " (%lfs)\n", &dtime))
+        fail("could not parse 305 time: '%s'", s);
+    ticks -= (clock_t)dtime * ticks_per_second;
+}
+
 void recover(void) {
     char *last305 = NULL;
     char *last202 = NULL;
@@ -456,57 +512,8 @@ void recover(void) {
         mpz_clear(cand);
         free(last202);
     }
-    if (last305) {
-        char *s = last305 + 3;
-        double dtime;
-        t_ppow pp;
-
-        rstack = (t_fact *)malloc(k * sizeof(t_fact));
-        for (int i = 0; i < k; ++i)
-            init_fact(&rstack[i]);
-
-        for (int i = 0; i < k; ++i) {
-            assert(s[0] == ' ');
-            ++s;
-            if (s[0] == '.') {
-                ++s;
-                continue;
-            }
-            while (1) {
-                pp.p = strtoul(s, &s, 10);
-                pp.e = (s[0] == '^') ? strtoul(&s[1], &s, 10) : 1;
-                add_fact(&rstack[i], pp);
-                if (s[0] != '.')
-                    break;
-                ++s;
-            }
-            /* reverse them, so we can pop as we allocate */
-            reverse_fact(&rstack[i]);
-        }
-        if (s[0] == ':') {
-            assert(s[1] == ' ');
-            s += 2;
-            if (strncmp("t=1", s, 3) == 0)
-                s += 3; /* ignore */
-            else {
-                int from_start, from_end, to_start, to_end;
-                have_rwalk = 1;
-                if (EOF == sscanf(s, "%n%*[0-9]%n / %n%*[0-9]%n ", 
-                        &from_start, &from_end, &to_start, &to_end))
-                    fail("could not parse 305 from/to: '%s'", s);
-                s[from_end] = 0;
-                mpz_init_set_str(rwalk_from, &s[from_start], 10);
-                s[to_end] = 0;
-                mpz_init_set_str(rwalk_to, &s[to_start], 10);
-                have_rwalk = 1;
-                s[to_end] = ' ';
-                s = &s[to_end];
-            }
-        }
-        if (EOF == sscanf(s, " (%lfs)\n", &dtime))
-            fail("could not parse 305 time: '%s'", s);
-        ticks -= (clock_t)dtime * ticks_per_second;
-    }
+    if (last305)
+        parse_305(last305 + 4);
     free(curbuf);
     free(last305);
     free(last202);
