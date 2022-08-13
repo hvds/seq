@@ -168,7 +168,8 @@ static inline clock_t utime(void) {
 
 mpz_t min, max;
 uint seen_best = 0;
-ulong gain = 1;
+ulong gain = 0;
+ulong antigain = 0;
 /* TODO: implement minp */
 uint minp = 0, maxp = 0;
 uint runid = 0;
@@ -750,8 +751,13 @@ void report_init(FILE *fp, char *prog) {
     }
     if (force_all)
         fprintf(fp, " -f%u", force_all);
-    if (gain > 1)
-        fprintf(fp, " -g%lu", gain);
+    if (gain > 1 || antigain > 1) {
+        fprintf(fp, " -g");
+        if (antigain > 1)
+            fprintf(fp, "%lu:", antigain);
+        if (gain > 1)
+            fprintf(fp, "%lu", gain);
+    }
     if (mpz_sgn(min) || mpz_sgn(max)) {
         fprintf(fp, " -x");
         if (mpz_sgn(min))
@@ -777,6 +783,18 @@ void set_minmax(char *s) {
     } else {
         mpz_set_ui(min, 0);
         mpz_set_str(max, s, 10);
+    }
+}
+
+void set_gain(char *s) {
+    char *t = strchr(s, ':');
+    if (t) {
+        *t = 0;
+        antigain = *s ? strtoul(s, NULL, 10) : 0;
+        gain = t[1] ? strtoul(&t[1], NULL, 10) : 0;
+    } else {
+        antigain = 0;
+        gain = strtoul(s, NULL, 10);
     }
 }
 
@@ -1347,6 +1365,8 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
 #endif
     if (gain > 1)
         mpz_mul_ui(Z(r_walk), Z(r_walk), gain);
+    if (antigain > 1)
+        mpz_fdiv_q_ui(Z(r_walk), Z(r_walk), antigain);
     if (mpz_fits_ulong_p(Z(r_walk))
         && mpz_get_ui(Z(r_walk)) < limp - p
     ) {
@@ -1520,7 +1540,7 @@ int main(int argc, char **argv, char **envp) {
         if (arg[1] == 'x')
             set_minmax(&arg[2]);
         else if (arg[1] == 'g')
-            gain = strtoul(&arg[2], NULL, 0);
+            set_gain(&arg[2]);
         else if (arg[1] == 'p')
             set_cap(&arg[2]);
         else if (arg[1] == 'r')
