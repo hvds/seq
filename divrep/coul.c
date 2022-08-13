@@ -11,6 +11,7 @@
 #include <sys/times.h>
 #include "coulfact.h"
 #include "diag.h"
+#include "rootmod.h"
 
 /* from MPUG */
 #include "factor.h"
@@ -366,6 +367,7 @@ void done(void) {
     free_fact(&nf);
     mpz_clear(max);
     mpz_clear(min);
+    done_rootmod();
     _GMP_destroy();
 }
 
@@ -383,6 +385,7 @@ void fail(char *format, ...) {
 
 void init_pre(void) {
     _GMP_init();
+    init_rootmod();
     ticks_per_second = sysconf(_SC_CLK_TCK);
     ticks = utime();
     mpz_init_set_ui(min, 0);
