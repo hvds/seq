@@ -7,7 +7,6 @@ FIXME:
 TODO (high priority):
 - calculate even more accurate mintau()
 - test "other" tau cases in parallel, one factor_one() step at a time
-- tweak optimization options in the Makefile
 
 CHECKME:
 - inject failures can clash with walk_1() successes
