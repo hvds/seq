@@ -24,6 +24,7 @@
  */
 uint n, k;
 
+/* stash of mpz_t, initialized once at start */
 typedef enum {
     zero, zone,                 /* constants */
     res_m, res_e, res_px,       /* check_residue */
@@ -43,9 +44,12 @@ typedef enum {
 mpz_t *zstash;
 static inline mpz_t *ZP(t_zstash e) { return &zstash[e]; }
 #define Z(e) *ZP(e)
+/* additional arrays of mpz_t initialized once at start */
+mpz_t *wv_o = NULL, *wv_qq = NULL;  /* wv_o[k], wv_qq[k] */
 
 typedef unsigned char bool;
 
+/* used to store disallowed inverses in walk_v() */
 typedef struct s_mod {
     ulong v;
     ulong m;
@@ -55,6 +59,7 @@ typedef struct s_mod {
  * highest prime factor, then ascending. 'high' is the highest prime
  * factor of 'i'; 'alldiv' is the number of factors; 'highdiv' is the
  * number of factors that are a multiple of 'high'.
+ * Eg divisors[18] = { alldiv=6, highdiv=4, high=3, div=[3, 6, 9, 18, 2, 1] }
  */
 typedef struct s_divisors {
     uint alldiv;
@@ -67,8 +72,8 @@ t_divisors *divisors = NULL;
 /* For prime p < k, we "force" allocation of powers in a batch to ensure
  * that multiple allocations of the same prime are coherent. Whereas normal
  * allocation considers only p^{x-1} where x is divisible by the highest
- * prime dividing v_i.t, forced primes may allocate any p^{x-1} with
- * x | v_i.t.
+ * prime dividing t_i, forced primes may allocate any p^{x-1} with x | t_i.
+ *
  * For cases where two or more v_i are divisible by p, we always force
  * every possible case. For cases where only one v_i is divisible by p,
  * we force them only if n == 2 (mod 4) (heuristically, since allocations
@@ -87,8 +92,9 @@ typedef struct s_forcep {
     uint count;
     t_forcebatch *batch;
 } t_forcep;
-uint forcedp;
 t_forcep *forcep = NULL;
+uint forcedp;
+uint force_all = 0;
 
 /* When allocation forces the residue of some v_i to be square, we want
  * to capture some information, and check if that is consistent with
@@ -113,7 +119,7 @@ typedef struct s_level {
     uint vi;    /* allocation of p^x into v_i */
     ulong p;
     uint x;
-    uint have_square;
+    uint have_square;   /* number of v_i residues forced square so far */
     /* union */
         uint bi;    /* batch index, if forced */
     /* .. with */
@@ -144,7 +150,7 @@ typedef struct s_value {
 } t_value;
 t_value *value = NULL;
 
-/* allocations in each value before applying nth forced prime */
+/* saved counts of allocations in each value before applying nth forced prime */
 uint *vlevels = NULL;
 uint vl_forced = 0;
 static inline uint *VLP(uint vlevel) { return &vlevels[vlevel * k]; }
@@ -160,6 +166,7 @@ static inline void FETCHVL(uint vli) {
 }
 
 long ticks_per_second;
+/* set to utime at start of run, minus last timestamp of recovery file */
 clock_t ticks = 0;
 struct tms time_buf;
 static inline clock_t utime(void) {
@@ -167,32 +174,34 @@ static inline clock_t utime(void) {
     return time_buf.tms_utime;
 }
 
-mpz_t min, max;
-uint seen_best = 0;
-ulong gain = 0;
+mpz_t min, max;     /* limits to check for v_0 */
+uint seen_best = 0; /* number of times we've improved max */
+ulong gain = 0;     /* used to fine-tune balance of recursion vs. walk */
 ulong antigain = 0;
+/* maxp is the greatest prime we should attempt to allocate; minp is the
+ * threshold that at least one allocated prime should exceed (else we can
+ * skip the walk)
+ */
 /* TODO: implement minp */
 uint minp = 0, maxp = 0;
-uint runid = 0;
-bool opt_print = 0;
-uint force_all = 0;
-bool debug = 0;
+uint runid = 0;     /* runid for log file */
+bool opt_print = 0; /* print candidates instead of fully testing them */
+bool debug = 0;     /* diag and keep every case seen */
 
-char *rpath = NULL;
-FILE *rfp = NULL;
-bool start_seen = 0;
-t_fact *rstack = NULL;
-bool have_rwalk = 0;
+char *rpath = NULL; /* path to log file */
+FILE *rfp = NULL;   /* file handle to log file */
+bool start_seen = 0;    /* true if log file has been written to before */
+t_fact *rstack = NULL;  /* point reached in recovery log file */
+bool have_rwalk = 0;    /* true if recovery is mid-walk */
 mpz_t rwalk_from;
 mpz_t rwalk_to;
 
-t_fact nf;
-uint tn;
-uint maxfact;
-uint *maxforce = NULL;
-uint *minnext = NULL;
-mpz_t px;   /* p^x */
-mpz_t *wv_o = NULL, *wv_qq = NULL;  /* wv_o[k], wv_qq[k] */
+t_fact nf;      /* factors of n */
+uint tn;        /* tau(n) */
+uint maxfact;   /* count of prime factors dividing n, with multiplicity */
+uint *maxforce = NULL;  /* max prime to force at v_i */
+uint *minnext = NULL;   /* first prime after maxforce[vi] */
+mpz_t px;       /* p^x */
 
 #define DIAG 1
 #define LOG 600
