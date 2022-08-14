@@ -58,13 +58,18 @@ typedef struct s_mod {
 /* 'divisors[i].div' is a list of divisors of 'i' in descending order of
  * highest prime factor, then ascending. 'high' is the highest prime
  * factor of 'i'; 'alldiv' is the number of factors; 'highdiv' is the
- * number of factors that are a multiple of 'high'.
- * Eg divisors[18] = { alldiv=6, highdiv=4, high=3, div=[3, 6, 9, 18, 2, 1] }
+ * number of factors that are a multiple of 'high'; 'sumpm' is sum{p_i - 1}
+ * of the primes dividing 'i', with multiplicity.
+ * Eg divisors[18] = {
+ *   alldiv = 6, highdiv = 4, high = 3, sumpm = 5 = (3-1)+(3-1)+(2-1),
+ *   div = = [3, 6, 9, 18, 2, 1]
+ * }
  */
 typedef struct s_divisors {
     uint alldiv;
     uint highdiv;
     uint high;
+    uint sumpm;
     uint *div;
 } t_divisors;
 t_divisors *divisors = NULL;
@@ -587,6 +592,8 @@ void prep_fact(void) {
         simple_fact(i, &f);
         uint td = simple_tau(&f);
         dp->high = (f.count) ? f.ppow[f.count - 1].p : 1;
+        dp->sumpm = dp->high - 1;
+        dp->sumpm += divisors[i / dp->high].sumpm;
         uint nd = 0;
         dp->div = (uint *)malloc(td * sizeof(uint));
         for (uint j = 1; j <= i; ++j) {
@@ -1410,17 +1417,6 @@ void insert_stack(void) {
     }
 }
 
-/* TODO: cache this */
-uint _sumpm(uint t) {
-    uint s = 0;
-    while (t > 1) {
-        uint h = divisors[t].high;
-        s += h - 1;
-        t /= h;
-    }
-    return s;
-}
-
 /* Calculate the minimum contribution from primes satisfying the given tau.
  */
 void mintau(mpz_t mint, uint vi, uint t) {
@@ -1429,7 +1425,7 @@ void mintau(mpz_t mint, uint vi, uint t) {
      * t _with multiplicity_.
      */
     mpz_set_ui(mint, minnext[vi]);
-    mpz_pow_ui(mint, mint, _sumpm(t));
+    mpz_pow_ui(mint, mint, divisors[t].sumpm);
 }
 
 /* return the maximum prime to iterate to */
