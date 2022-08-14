@@ -5,7 +5,7 @@ FIXME:
   - check setup at the top-of-loop reentry point (without rwalk)
 
 TODO (high priority):
-- calculate more accurate mintau()
+- calculate even more accurate mintau()
 - test "other" tau cases in parallel, one factor_one() step at a time
 - tweak optimization options in the Makefile
 

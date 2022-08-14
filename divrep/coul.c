@@ -125,6 +125,7 @@ typedef struct s_level {
     ulong p;
     uint x;
     uint have_square;   /* number of v_i residues forced square so far */
+    uint nextpi;    /* index of least prime not yet allocated */
     /* union */
         uint bi;    /* batch index, if forced */
     /* .. with */
@@ -170,6 +171,10 @@ static inline void FETCHVL(uint vli) {
         value[vi].vlevel = vlp[vi];
 }
 
+/* list of some small primes, at least enough for one per allocation  */
+uint *sprimes = NULL;
+uint nsprimes;
+
 long ticks_per_second;
 /* set to utime at start of run, minus last timestamp of recovery file */
 clock_t ticks = 0;
@@ -204,8 +209,8 @@ mpz_t rwalk_to;
 t_fact nf;      /* factors of n */
 uint tn;        /* tau(n) */
 uint maxfact;   /* count of prime factors dividing n, with multiplicity */
+uint maxodd;    /* as above for odd prime factors */
 uint *maxforce = NULL;  /* max prime to force at v_i */
-uint *minnext = NULL;   /* first prime after maxforce[vi] */
 mpz_t px;       /* p^x */
 
 #define DIAG 1
@@ -325,6 +330,7 @@ void free_levels(void) {
 }
 
 void init_levels(void) {
+    /* CHECKME: can this be maxodd * k + forcedp? */
     levels = (t_level *)calloc(k * maxfact + 1, sizeof(t_level));
     for (uint i = 0; i < k * maxfact + 1; ++i) {
         t_level *l = &levels[i];
@@ -334,6 +340,7 @@ void init_levels(void) {
     mpz_set_ui(levels[0].aq, 1);
     mpz_set_ui(levels[0].rq, 0);
     levels[0].have_square = 0;
+    levels[0].nextpi = 0;
     level = 1;
 }
 
@@ -371,11 +378,11 @@ void done(void) {
     free(vlevels);
     free_value();
     free_levels();
+    free(sprimes);
     if (forcep)
         for (int i = 0; i < forcedp; ++i)
             free(forcep[i].batch);
     free(forcep);
-    free(minnext);
     free(maxforce);
     if (divisors)
         for (int i = 0; i <= n; ++i)
@@ -651,9 +658,19 @@ void prep_maxforce(void) {
                 mf = force_all;
             maxforce[i] = mf;
         }
-    minnext = (uint *)malloc(k * sizeof(uint));
-    for (uint i = 0; i < k; ++i)
-        minnext[i] = next_prime(maxforce[i]);
+}
+
+void prep_primes(void) {
+    /* We can certainly not allocate more than (each of the forced primes)
+     * plus (one per odd prime factor for each v_i); in practice it will
+     * usually be less. */
+    nsprimes = maxodd * k + forcedp;
+    sprimes = (uint *)malloc(nsprimes * sizeof(uint));
+    uint p = 1;
+    for (uint i = 0; i < nsprimes; ++i) {
+        p = next_prime(p);
+        sprimes[i] = p;
+    }
 }
 
 void prep_forcep(void) {
@@ -760,10 +777,12 @@ void init_post(void) {
     maxfact = 0;
     for (int i = 0; i < nf.count; ++i)
         maxfact += nf.ppow[i].e;
+    maxodd = maxfact - nf.ppow[0].e;    /* n is always even */
 
     prep_fact();
     prep_maxforce();
     prep_forcep();
+    prep_primes();  /* needs forcedp */
     prep_mintau();
 
     diag_delay = (debug) ? 0 : DIAG * ticks_per_second;
@@ -871,6 +890,23 @@ ulong small_divmod(mpz_t za, mpz_t zb, ulong p) {
     mpz_mul(Z(sdm_r), Z(sdm_r), za);
     mpz_mod_ui(Z(sdm_r), Z(sdm_r), p);
     return mpz_get_ui(Z(sdm_r));
+}
+
+/* This allocation uses what was the next unused prime, so find the
+ * index of the new next unused prime.
+ */
+uint find_nextpi(t_level *cur) {
+    uint pi = cur->nextpi;
+    while (1) {
+        ++pi;
+        uint p = sprimes[pi];
+        for (uint i = 1; i < level; ++i)
+            if (levels[i].p == p)
+                goto NEXT_PI;
+        return pi;
+      NEXT_PI:
+        ;
+    }
 }
 
 bool test_prime(mpz_t qq, mpz_t o, ulong ati) {
@@ -1293,6 +1329,9 @@ bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     cur->p = p;
     cur->x = x;
     cur->have_square = prev->have_square;
+    cur->nextpi = prev->nextpi;
+    if (p == sprimes[cur->nextpi])
+        cur->nextpi = find_nextpi(cur);
     mpz_set_ui(px, p);
     mpz_pow_ui(px, px, x - 1);
     update_chinese(prev, cur, vi, px);
@@ -1424,7 +1463,8 @@ void mintau(mpz_t mint, uint vi, uint t) {
      * calculate p^k where k = sum{p_i - 1} over the primes dividing
      * t _with multiplicity_.
      */
-    mpz_set_ui(mint, minnext[vi]);
+    uint minnext = sprimes[levels[level - 1].nextpi];
+    mpz_set_ui(mint, minnext);
     mpz_pow_ui(mint, mint, divisors[t].sumpm);
 }
 
@@ -1439,8 +1479,10 @@ ulong limit_p(uint vi, uint x, uint nextt) {
 
     /* divide through by the minimum contribution that could supply the
      * remaining tau */
-    mintau(Z(lp_mint), vi, nextt);
-    mpz_div(Z(lp_x), Z(lp_x), Z(lp_mint));
+    if (nextt > 1) {
+        mintau(Z(lp_mint), vi, nextt);
+        mpz_div(Z(lp_x), Z(lp_x), Z(lp_mint));
+    }
 
     mpz_root(Z(lp_x), Z(lp_x), x - 1);
     if (mpz_fits_ulong_p(Z(lp_x))) {
