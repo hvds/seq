@@ -1,7 +1,7 @@
 MPUGMP = /src/perl/Math-Prime-Util-GMP
 PERL = /opt/maths-GMP/lib/perl5/5.34.0/x86_64-linux/CORE
-COUL = coul.c coulfact.c diag.c rootmod.c
-HOUL = coulfact.h diag.h rootmod.h
+COUL = coul.c coulfact.c diag.c rootmod.c coultau.c
+HOUL = coulfact.h diag.h rootmod.h coultau.h
 CC_OPT = -O6 -fgcse-sm -fgcse-las -fgcse-after-reload -ftree-loop-linear -ftree-loop-distribution -ftree-loop-im -fivopts -ftracer -funroll-loops -fvariable-expansion-in-unroller -freorder-blocks-and-partition -funswitch-loops
 # CC_ALL_OPT = -fwhole-program
 

@@ -12,6 +12,7 @@
 #include "coulfact.h"
 #include "diag.h"
 #include "rootmod.h"
+#include "coultau.h"
 
 /* from MPUG */
 #include "factor.h"
@@ -427,6 +428,7 @@ void fail(char *format, ...) {
 
 void init_pre(void) {
     _GMP_init();
+    init_tau();
     init_rootmod();
     ticks_per_second = sysconf(_SC_CLK_TCK);
     ticks = utime();
@@ -924,13 +926,13 @@ bool test_zprime(mpz_t qq, mpz_t o, mpz_t ati) {
 bool test_other(mpz_t qq, mpz_t o, ulong ati, uint t) {
     mpz_mul_ui(Z(wv_cand), qq, ati);
     mpz_add(Z(wv_cand), Z(wv_cand), o);
-    return is_tau(Z(wv_cand), t);
+    return is_taux(Z(wv_cand), t, 1);
 }
 
 bool test_zother(mpz_t qq, mpz_t o, mpz_t ati, uint t) {
     mpz_mul(Z(wv_cand), qq, ati);
     mpz_add(Z(wv_cand), Z(wv_cand), o);
-    return is_tau(Z(wv_cand), t);
+    return is_taux(Z(wv_cand), t, 1);
 }
 
 uint gcd_divisors(uint t) {
@@ -1075,8 +1077,7 @@ void walk_v(t_level *cur_level, mpz_t start) {
                 if (mpz_fdiv_ui(Z(wv_ati), ip->m) == ip->v)
                     goto next_sqati;
             }
-            /* TODO: variant is_tau for known power */
-            if (!is_tau(Z(wv_rx), ti))
+            if (!is_taux(Z(wv_r), ti, xi))
                 goto next_sqati;
             /* TODO: bail and print somewhere here if 'opt_print' */
             /* note: we have no more squares */
@@ -1170,7 +1171,7 @@ void walk_1(uint vi) {
                 return;
         }
         /* TODO: stash these in an array, test them in order */
-        if (!is_tau(Z(w1_j), ajp ? ajp->t : n))
+        if (!is_taux(Z(w1_j), ajp ? ajp->t : n, 1))
             return;
     }
     candidate(Z(w1_v));

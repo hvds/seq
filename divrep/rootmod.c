@@ -2,6 +2,7 @@
 #include <string.h>
 #include "rootmod.h"
 #include "coulfact.h"
+#include "coultau.h"
 #include "utility.h"
 
 extern void fs_init(factor_state *fs);
