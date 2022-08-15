@@ -19,7 +19,7 @@ void diag_reset(void) {
 
 void keep_diag(void) {
     if (diag_size)
-        write(1, "\n", 1);
+        (void) !write(1, "\n", 1);
     diag_size = 0;
 }
 
@@ -35,13 +35,13 @@ unsigned int diag(char *format, ...) {
 }
 
 int diag_fail(char *msg) {
-    write(2, msg, strlen(msg));
+    (void) !write(2, msg, strlen(msg));
     return 0;
 }
 
 /* needs to be async-signal-safe */
 void diag_fatal(char *msg) {
-    write(2, msg, strlen(msg));
+    (void) !write(2, msg, strlen(msg));
     exit(1);
 }
 
