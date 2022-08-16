@@ -831,7 +831,7 @@ void init_post(void) {
 }
 
 void report_init(FILE *fp, char *prog) {
-    fprintf(fp, "001 %s%s", (start_seen ? "recover " : ""), prog);
+    fprintf(fp, "001 %scoul(%u %u)", (start_seen ? "recover " : ""), n, k);
     if (opt_print)
         fprintf(fp, " -o");
     if (minp || maxp) {
@@ -857,7 +857,7 @@ void report_init(FILE *fp, char *prog) {
         if (mpz_sgn(max))
             gmp_fprintf(fp, "%Zu", max);
     }
-    fprintf(fp, " %u %u\n", n, k);
+    fprintf(fp, "\n");
 }
 
 void set_minmax(char *s) {
