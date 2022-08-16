@@ -1,0 +1,60 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use Math::Prime::Util qw{ factor_exp };
+
+@ARGV == 5 or die <<USAGE;
+Usage: $0 <nx> <cp> <c> <n> <k>
+Runs "gtauseq -nx<nx> -cp<cp> -c<c> <n> <k>" to parse debug output and
+to categorize and deduplicate the constraints found.
+USAGE
+
+my($nx, $cp, $c, $n, $k) = @ARGV;
+my(%a, %b, @c);
+LINE: for my $line (`./gtauseq -yo -nx$nx -cp$cp -c$c -d -d $n $k 2>&1 | grep 'series.*applied'`) {
+    my($v, $m, $n0) = $line =~ /(\d+), (\d+), (\d+)/ or die $_;
+    if ($n0) {
+        push @c, [ $v, $m, $n0 ];
+        next;
+    }
+    for my $m2 (keys %b) {
+        next if $m % $m2;
+        for my $v2 (@{ $b{$m2} }) {
+            next LINE if $v2 == ($v % $m2);
+        }
+    }
+    push @{ $b{$m} }, $v;
+}
+
+for my $m (keys %b) {
+    for my $i (0 .. $#{ $b{$m} }) {
+        my $v = $b{$m}[$i] // last;
+        my $div = gcd($m, $v);
+        if ($n % tau($div)) {
+            push @{ $a{$m} }, $v;
+            splice @{ $b{$m} }, $i, 1;
+            redo;
+        }
+    }
+    delete $b{$m} unless @{ $b{$m} };
+}
+
+print 'Set 1 (tau does not divide n): ',
+    join('; ', map { join(", ", @{ $a{$_} }) . " mod $_" } sort { $a <=> $b } keys %a), "\n";
+print 'Set 2 (forces impossible square): ',
+    join('; ', map { join(", ", @{ $b{$_} }) . " mod $_" } sort { $a <=> $b } keys %b), "\n";
+print 'Set 3 (impossible above limit): ',
+    join('; ', map { "$_->[0] mod $_->[1] > $_->[2]" } @c), "\n";
+
+sub gcd {
+    my($a, $b) = @_;
+    return gcd($b, $a) if $a > $b;
+    return $b if $a == 0;
+    return gcd($b % $a, $a);
+}
+
+sub tau {
+    my $t = 1;
+    $t *= $_->[1] + 1 for factor_exp($_[0]);
+    return $t;
+}
