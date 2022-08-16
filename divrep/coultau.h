@@ -34,6 +34,8 @@ typedef struct factor_state_s {
 } factor_state;
 
 extern void init_tau(void);
+extern void fs_init(factor_state* fs);
+extern void fs_clear(factor_state* fs);
 extern int factor_one(factor_state* fs);
 extern int is_taux(mpz_t n, uint32_t k, uint32_t x);
 

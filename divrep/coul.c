@@ -13,6 +13,7 @@
 #include "diag.h"
 #include "rootmod.h"
 #include "coultau.h"
+#include "pell.h"
 
 /* from MPUG */
 #include "factor.h"
@@ -33,6 +34,7 @@ typedef enum {
     uc_minusvi,                 /* update_chinese */
     wv_ati, wv_end, wv_cand,    /* walk_v */
     wv_startr, wv_endr, wv_qqr, wv_r, wv_rx, wv_temp,
+    wv_x, wv_y, wv_x2, wv_y2,
     w1_v, w1_j, w1_r,           /* walk_1 */
     lp_x, lp_mint,              /* limit_p */
     r_walk,                     /* recurse */
@@ -311,6 +313,23 @@ void diag_walk_zv(mpz_t ati, mpz_t end) {
     }
 }
 
+void diag_walk_pell(uint pc) {
+    clock_t t1 = utime();
+
+    prep_show_v();  /* into diag_buf */
+    if (!(debug && pc))
+        diag("%s: P%u", diag_buf, pc);
+    if (debug)
+        keep_diag();
+    diagt = t1 + diag_delay;
+
+    if (rfp && t1 >= logt) {
+        fprintf(rfp, "305 %s: P%u (%.2fs)\n",
+                diag_buf, pc, seconds(t1));
+        logt = t1 + log_delay;
+    }
+}
+
 void candidate(mpz_t c) {
     keep_diag();
     clock_t t1 = utime();
@@ -410,6 +429,7 @@ void done(void) {
     free_fact(&nf);
     mpz_clear(max);
     mpz_clear(min);
+    done_pell();
     done_rootmod();
     _GMP_destroy();
 }
@@ -430,6 +450,7 @@ void init_pre(void) {
     _GMP_init();
     init_tau();
     init_rootmod();
+    init_pell();
     ticks_per_second = sysconf(_SC_CLK_TCK);
     ticks = utime();
     mpz_init_set_ui(min, 0);
@@ -1004,11 +1025,98 @@ void walk_v(t_level *cur_level, mpz_t start) {
         mpz_t *qi = q[sqi];
         mpz_t *qqi = &wv_qq[sqi];
         uint ti = t[sqi];
-#if 0
-        if (npc > 1) {
-            /* TODO: special case Pell solver */
+        if (nqc > 1) {
+            uint sqj = need_square[1];
+            mpz_t *oj = &wv_o[sqj];
+            mpz_t *qj = q[sqj];
+            mpz_t *qqj = &wv_qq[sqj];
+            uint tj = t[sqj];
+
+            mpz_fdiv_q(Z(wv_endr), max, *qi);
+            mpz_root(Z(wv_endr), Z(wv_endr), 2);
+            /* solve Ax^2 - By^2 = C with x <= D */
+            new_pell(*qi, *qj, (int)sqi - (int)sqj, Z(wv_endr));
+            uint pc = 0;
+            while (next_pell(Z(wv_x), Z(wv_y))) {
+                /* v_{sqi} = x^2 . q_i; v_{sqj} = y^2 . q_j */
+                mpz_mul(Z(wv_x2), Z(wv_x), Z(wv_x));
+
+                /* verify limit */
+                mpz_mul(Z(wv_temp), Z(wv_x2), *qi);
+                mpz_sub_ui(Z(wv_temp), Z(wv_temp), sqi);
+                if (mpz_cmp(Z(wv_temp), max) > 0)
+                    break;  /* CHECKME: should this be an error? */
+
+                ++countwi;
+                ++pc;
+                if (utime() >= diagt)
+                    diag_walk_pell(pc);
+
+                /* verify mod, coprime and tau */
+                mpz_fdiv_r(Z(wv_temp), Z(wv_x2), *qqi);
+                if (mpz_cmp(Z(wv_temp), *oi) != 0)
+                    continue;   /* CHECKME: should this be an error? */
+                mpz_mul(Z(wv_y2), Z(wv_y), Z(wv_y));
+                mpz_fdiv_r(Z(wv_temp), Z(wv_y2), *qqj);
+                if (mpz_cmp(Z(wv_temp), *oj) != 0)
+                    continue;   /* CHECKME: should this be an error? */
+                mpz_gcd(Z(wv_temp), Z(wv_x), *qqi);
+                if (mpz_cmp_ui(Z(wv_temp), 1) != 0)
+                    continue;
+                mpz_gcd(Z(wv_temp), Z(wv_y), *qqj);
+                if (mpz_cmp_ui(Z(wv_temp), 1) != 0)
+                    continue;
+                /* Note: assume the square roots are small enough to
+                 * factorize without fuss */
+                if (!is_taux(Z(wv_x), ti, 2))
+                    continue;
+                if (!is_taux(Z(wv_y), tj, 2))
+                    continue;
+
+                mpz_sub(Z(wv_ati), Z(wv_x2), *oi);
+                mpz_divexact(Z(wv_ati), Z(wv_ati), *qqi);
+                mpz_sub(Z(wv_temp), Z(wv_y2), *oj);
+                mpz_divexact(Z(wv_temp), Z(wv_temp), *qqj);
+                if (mpz_cmp(Z(wv_ati), Z(wv_temp)) != 0)
+                    continue;   /* CHECKME: should this be an error? */
+
+                /* now test the rest */
+                for (uint ii = 0; ii < inv_count; ++ii) {
+                    t_mod *ip = &inv[ii];
+                    if (mpz_fdiv_ui(Z(wv_ati), ip->m) == ip->v)
+                        goto next_pell;
+                }
+                /* TODO: bail and print somewhere here if 'opt_print' */
+                /* note: we may have had more than 2 squares */
+                for (uint i = 2; i < nqc; ++i) {
+                    uint vi = need_square[i];
+                    if (!test_zother(wv_qq[vi], wv_o[vi], Z(wv_ati), t[vi]))
+                        goto next_pell;
+                }
+                for (uint i = 0; i < npc; ++i) {
+                    uint vi = need_prime[i];
+                    if (!test_zprime(wv_qq[vi], wv_o[vi], Z(wv_ati)))
+                        goto next_pell;
+                }
+                /* TODO: test these in parallel, with optional printme cutoff */
+                for (uint i = 0; i < noc; ++i) {
+                    uint vi = need_other[i];
+                    if (!test_zother(wv_qq[vi], wv_o[vi], Z(wv_ati), t[vi]))
+                        goto next_pell;
+                }
+                /* have candidate: calculate and apply it */
+                mpz_mul(Z(wv_cand), wv_qq[0], Z(wv_ati));
+                mpz_add(Z(wv_cand), Z(wv_cand), wv_o[0]);
+                mpz_mul(Z(wv_cand), Z(wv_cand), *q[0]);
+                candidate(Z(wv_cand));
+                break;
+
+              next_pell:
+                ;
+            }
+            /* clear_pell(); */
+            return;
         }
-#endif
         uint xi = gcd_divisors(ti);
         /* we need to find all r: r^x_i == o_i (mod qq_i) */
         mpz_t *xmod;
@@ -1081,12 +1189,6 @@ void walk_v(t_level *cur_level, mpz_t start) {
                 goto next_sqati;
             /* TODO: bail and print somewhere here if 'opt_print' */
             /* note: we have no more squares */
-            /* TODO: remove me once we handle Pell */
-            for (uint i = 1; i < nqc; ++i) {
-                uint vi = need_square[i];
-                if (!test_zother(wv_qq[vi], wv_o[vi], Z(wv_ati), t[vi]))
-                    goto next_sqati;
-            }
             for (uint i = 0; i < npc; ++i) {
                 uint vi = need_prime[i];
                 if (!test_zprime(wv_qq[vi], wv_o[vi], Z(wv_ati)))
@@ -1312,7 +1414,6 @@ bool apply_allocv(t_level *cur_level, uint vi, ulong p, uint x, mpz_t px) {
     }
 
     if (cur_level->have_square) {
-        /* TODO: either support Pell solver, or loop over squares here */
         t_square *sqp = &squares[0];
         if (!check_residue(vi, p, x, sqp->vi, sqp->m, cur_level->is_forced))
             return 0;
@@ -1574,11 +1675,8 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
          */
         mpz_root(Z(r_walk), Z(r_walk), 2);
         mpz_mul_2exp(Z(r_walk), Z(r_walk), level - 1);
-#   if 0
-        /* TODO: support Pell */
         if (prev->have_square > 1)
             mpz_set_ui(Z(r_walk), 0);
-#   endif
     }
     if (gain > 1)
         mpz_mul_ui(Z(r_walk), Z(r_walk), gain);
