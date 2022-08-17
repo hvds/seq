@@ -1480,84 +1480,6 @@ uint best_v(void) {
     return ti ? vi : k;
 }
 
-void insert_stack(void) {
-    /* first insert forced primes */
-    for (uint fpi = 0; fpi < forcedp; ++fpi) {
-        STOREVL(vl_forced++);
-        t_forcep *fp = &forcep[fpi];
-        uint p = fp->p;
-        uint maxx = 0, mini;
-        for (uint vi = 0; vi < k; ++vi) {
-            t_fact *rs = &rstack[vi];
-            if (rs->count && rs->ppow[rs->count - 1].p == p) {
-                uint x = rs->ppow[rs->count - 1].e + 1;
-                if (maxx < x) {
-                    maxx = x;
-                    mini = vi;
-                }
-            }
-        }
-        if (maxx == 0)
-            fail("no forced prime %u found", p);
-        /* CHECKME: this returns 0 if t=1 */
-        t_level *prev = &levels[level - 1];
-        t_level *cur = &levels[level];
-        if (!apply_alloc(prev, cur, mini, p, maxx))
-            fail("could not apply_alloc(%u, %lu, %u)", mini, p, maxx);
-        for (uint vi = 0; vi < k; ++vi) {
-            t_fact *rs = &rstack[vi];
-            if (rs->count && rs->ppow[rs->count - 1].p == p) {
-                --rs->count;
-                if (vi == mini)
-                    continue;
-                uint x = rs->ppow[rs->count].e + 1;
-                if (!apply_secondary(cur, vi, p, x))
-                    fail("could not apply_secondary(%u, %lu, %u)", vi, p, x);
-            }
-        }
-        ++level;
-
-        uint bi;
-        for (bi = 0; bi < fp->count; ++bi) {
-            t_forcebatch *b = &fp->batch[bi];
-            if (b->x == maxx && b->vi == mini)
-                break;
-        }
-        if (bi >= fp->count)
-            fail("no batch found for %u^{%u-1} at v_%u", p, maxx, mini);
-        cur->is_forced = 1;
-        cur->bi = bi;
-    }
-    /* now insert the rest */
-    while (1) {
-        uint vi = best_v();
-        if (vi == k)
-            break;
-        t_fact *rs = &rstack[vi];
-        if (rs->count == 0)
-            break;
-        --rs->count;
-        uint p = rs->ppow[rs->count].p;
-        uint x = rs->ppow[rs->count].e + 1;
-        /* CHECKME: this returns 0 if t=1 */
-        t_level *prev = &levels[level - 1];
-        t_level *cur = &levels[level];
-        if (!apply_alloc(prev, cur, vi, p, x))
-            fail("could not apply_alloc(%u, %lu, %u)", vi, p, x);
-        ++level;
-        cur->is_forced = 0;
-        /* FIXME: set secondary values for unforced */
-    }
-    /* check we found them all */
-    for (uint vi = 0; vi < k; ++vi) {
-        t_fact *rs = &rstack[vi];
-        if (rs->count) {
-            t_ppow pp = rs->ppow[rs->count - 1];
-            fail("failed to inject %lu^%u at v_%u", pp.p, pp.e, vi);
-        }
-    }
-}
-
 /* Calculate the minimum contribution from primes satisfying the given tau.
  */
 void mintau(mpz_t mint, uint vi, uint t) {
@@ -1695,6 +1617,86 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     /* TODO: do some constant alloc stuff in advance */
     /* TODO: special case for nextt == 1 */
     return 2;
+}
+
+/* On recovery, set up the recursion stack to the point we had reached.
+ */
+void insert_stack(void) {
+    /* first insert forced primes */
+    for (uint fpi = 0; fpi < forcedp; ++fpi) {
+        STOREVL(vl_forced++);
+        t_forcep *fp = &forcep[fpi];
+        uint p = fp->p;
+        uint maxx = 0, mini;
+        for (uint vi = 0; vi < k; ++vi) {
+            t_fact *rs = &rstack[vi];
+            if (rs->count && rs->ppow[rs->count - 1].p == p) {
+                uint x = rs->ppow[rs->count - 1].e + 1;
+                if (maxx < x) {
+                    maxx = x;
+                    mini = vi;
+                }
+            }
+        }
+        if (maxx == 0)
+            fail("no forced prime %u found", p);
+        /* CHECKME: this returns 0 if t=1 */
+        t_level *prev = &levels[level - 1];
+        t_level *cur = &levels[level];
+        if (!apply_alloc(prev, cur, mini, p, maxx))
+            fail("could not apply_alloc(%u, %lu, %u)", mini, p, maxx);
+        for (uint vi = 0; vi < k; ++vi) {
+            t_fact *rs = &rstack[vi];
+            if (rs->count && rs->ppow[rs->count - 1].p == p) {
+                --rs->count;
+                if (vi == mini)
+                    continue;
+                uint x = rs->ppow[rs->count].e + 1;
+                if (!apply_secondary(cur, vi, p, x))
+                    fail("could not apply_secondary(%u, %lu, %u)", vi, p, x);
+            }
+        }
+        ++level;
+
+        uint bi;
+        for (bi = 0; bi < fp->count; ++bi) {
+            t_forcebatch *b = &fp->batch[bi];
+            if (b->x == maxx && b->vi == mini)
+                break;
+        }
+        if (bi >= fp->count)
+            fail("no batch found for %u^{%u-1} at v_%u", p, maxx, mini);
+        cur->is_forced = 1;
+        cur->bi = bi;
+    }
+    /* now insert the rest */
+    while (1) {
+        uint vi = best_v();
+        if (vi == k)
+            break;
+        t_fact *rs = &rstack[vi];
+        if (rs->count == 0)
+            break;
+        --rs->count;
+        uint p = rs->ppow[rs->count].p;
+        uint x = rs->ppow[rs->count].e + 1;
+        /* CHECKME: this returns 0 if t=1 */
+        t_level *prev = &levels[level - 1];
+        t_level *cur = &levels[level];
+        if (!apply_alloc(prev, cur, vi, p, x))
+            fail("could not apply_alloc(%u, %lu, %u)", vi, p, x);
+        ++level;
+        cur->is_forced = 0;
+        /* FIXME: set secondary values for unforced */
+    }
+    /* check we found them all */
+    for (uint vi = 0; vi < k; ++vi) {
+        t_fact *rs = &rstack[vi];
+        if (rs->count) {
+            t_ppow pp = rs->ppow[rs->count - 1];
+            fail("failed to inject %lu^%u at v_%u", pp.p, pp.e, vi);
+        }
+    }
 }
 
 /* we emulate recursive calls via the levels[] array */
