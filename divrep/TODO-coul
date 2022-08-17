@@ -1,9 +1,3 @@
-FIXME:
-- recovery (insert_stack()) has bit-rotted
-  - set secondary levels[i] values for unforced primes
-  - check setup at the derecurse reentry point (with rwalk)
-  - check setup at the top-of-loop reentry point (without rwalk)
-
 TODO (high priority):
 - calculate even more accurate mintau()
   - and beyond oul for suppressed factors

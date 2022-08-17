@@ -1640,9 +1640,11 @@ void insert_stack(void) {
         }
         if (maxx == 0)
             fail("no forced prime %u found", p);
-        /* CHECKME: this returns 0 if t=1 */
+        --rstack[mini].count;
         t_level *prev = &levels[level - 1];
         t_level *cur = &levels[level];
+        cur->is_forced = 1;
+        /* CHECKME: this returns 0 if t=1 */
         if (!apply_alloc(prev, cur, mini, p, maxx))
             fail("could not apply_alloc(%u, %lu, %u)", mini, p, maxx);
         for (uint vi = 0; vi < k; ++vi) {
@@ -1666,7 +1668,6 @@ void insert_stack(void) {
         }
         if (bi >= fp->count)
             fail("no batch found for %u^{%u-1} at v_%u", p, maxx, mini);
-        cur->is_forced = 1;
         cur->bi = bi;
     }
     /* now insert the rest */
@@ -1680,14 +1681,37 @@ void insert_stack(void) {
         --rs->count;
         uint p = rs->ppow[rs->count].p;
         uint x = rs->ppow[rs->count].e + 1;
-        /* CHECKME: this returns 0 if t=1 */
+
         t_level *prev = &levels[level - 1];
         t_level *cur = &levels[level];
+        t_value *vp = &value[vi];
+
+        uint ti = (vp->vlevel) ? vp->alloc[vp->vlevel - 1].t : n;
+        t_divisors *dp = &divisors[ti];
+        if (dp->highdiv == 0)
+            fail("best_v() returned %u, but nothing to do there", vi);
+
+        uint di;
+        for (di = 0; di <= dp->highdiv; ++di) {
+            if (di == dp->highdiv)
+                fail("x=%u is not a highdiv of t=%u\n", x, ti);
+            if (dp->div[di] == x)
+                break;
+        }
+        cur->vi = vi;
+        cur->ti = ti;
+        cur->di = di;
+
+        /* note: must pass in p=0 for it to calculate limp */
+        uint pux = prep_unforced_x(prev, cur, 0);
+        if (pux != 2)
+            fail("prep_unforced_x() returns %u for %lu^%u at %u\n",
+                    pux, p, x, vi);
+
+        /* CHECKME: this returns 0 if t=1 */
         if (!apply_alloc(prev, cur, vi, p, x))
             fail("could not apply_alloc(%u, %lu, %u)", vi, p, x);
         ++level;
-        cur->is_forced = 0;
-        /* FIXME: set secondary values for unforced */
     }
     /* check we found them all */
     for (uint vi = 0; vi < k; ++vi) {
@@ -1736,6 +1760,9 @@ void recurse(void) {
         }
       unforced:
         {
+            /* note: cur_level->is_forced is either always 0 by calloc(),
+             * or gets set to 0 on the tail of a batch */
+            /* cur_level->is_forced = 0; */
             uint vi = best_v();
             /* TODO: walk_v() directly at previous level, if best_v() would
              * give same result each time.
