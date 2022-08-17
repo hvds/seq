@@ -200,6 +200,7 @@ uint minp = 0, maxp = 0;
 uint runid = 0;     /* runid for log file */
 bool opt_print = 0; /* print candidates instead of fully testing them */
 bool debug = 0;     /* diag and keep every case seen */
+ulong randseed = 1; /* for ECM, etc */
 
 char *rpath = NULL; /* path to log file */
 FILE *rfp = NULL;   /* file handle to log file */
@@ -448,6 +449,11 @@ void fail(char *format, ...) {
 
 void init_pre(void) {
     _GMP_init();
+    /* reseed immediately to retain reproducibility */
+    clear_randstate();
+    init_randstate(1);
+    /* we may do this again after options handled, to select real seed */
+
     init_tau();
     init_rootmod();
     init_pell();
@@ -777,6 +783,14 @@ void prep_forcep(void) {
 }
 
 void init_post(void) {
+    if (randseed != 1) {
+        /* hard to guarantee we haven't used any randomness before this.
+         * note also that this will give different results for a run that
+         * is stopped and recovered.
+         */
+        clear_randstate();
+        init_randstate(randseed);
+    }
     if (runid) {
         char buf[100];
         snprintf(buf, sizeof(buf), "%s/%u.%u-%u",
@@ -857,6 +871,8 @@ void report_init(FILE *fp, char *prog) {
         if (mpz_sgn(max))
             gmp_fprintf(fp, "%Zu", max);
     }
+    if (randseed != 1)
+        fprintf(fp, " -s%lu", randseed);
     fprintf(fp, "\n");
 }
 
@@ -1891,6 +1907,8 @@ int main(int argc, char **argv, char **envp) {
             runid = strtoul(&arg[2], NULL, 10);
         else if (arg[1] == 'f')
             force_all = strtoul(&arg[2], NULL, 10);
+        else if (arg[1] == 's')
+            randseed = strtoul(&arg[2], NULL, 10);
         else if (strncmp("-o", arg, 2) == 0)
             opt_print = 1;
         else if (strncmp("-d", arg, 2) == 0)
