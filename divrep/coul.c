@@ -432,6 +432,7 @@ void done(void) {
     mpz_clear(min);
     done_pell();
     done_rootmod();
+    done_tau();
     _GMP_destroy();
 }
 
@@ -782,6 +783,7 @@ void prep_forcep(void) {
 }
 
 void init_post(void) {
+    alloc_taum(k);
     if (randseed != 1) {
         /* hard to guarantee we haven't used any randomness before this.
          * note also that this will give different results for a run that
@@ -959,12 +961,37 @@ bool test_zprime(mpz_t qq, mpz_t o, mpz_t ati) {
     return _GMP_is_prob_prime(Z(wv_cand));
 }
 
+bool test_multi(uint *need, uint nc, ulong ati, uint *t) {
+    for (uint i = 0; i < nc; ++i) {
+        uint vi = need[i];
+        t_tm *tm = &taum[i];
+        mpz_mul_ui(tm->n, wv_qq[vi], ati);
+        mpz_add(tm->n, tm->n, wv_o[vi]);
+        tm->t = t[vi];
+        if (!tau_multi_prep(i))
+            return 0;
+    }
+    return tau_multi_run(nc);
+}
+
+bool test_zmulti(uint *need, uint nc, mpz_t ati, uint *t) {
+    for (uint i = 0; i < nc; ++i) {
+        uint vi = need[i];
+        t_tm *tm = &taum[i];
+        mpz_mul(tm->n, wv_qq[vi], ati);
+        mpz_add(tm->n, tm->n, wv_o[vi]);
+        tm->t = t[vi];
+        if (!tau_multi_prep(i))
+            return 0;
+    }
+    return tau_multi_run(nc);
+}
+
 bool test_other(mpz_t qq, mpz_t o, ulong ati, uint t) {
     mpz_mul_ui(Z(wv_cand), qq, ati);
     mpz_add(Z(wv_cand), Z(wv_cand), o);
     return is_taux(Z(wv_cand), t, 1);
 }
-
 bool test_zother(mpz_t qq, mpz_t o, mpz_t ati, uint t) {
     mpz_mul(Z(wv_cand), qq, ati);
     mpz_add(Z(wv_cand), Z(wv_cand), o);
@@ -1030,10 +1057,6 @@ void walk_v(t_level *cur_level, mpz_t start) {
             need_prime[npc++] = vi;
         else if (t[vi] & 1)
             need_square[nqc++] = vi;
-/* CHECKME: after parallelization, check if we have a use for this */
-/*      else if (t[vi] == 4)
-            need_semiprime[nsc++] = vi;
-*/
         else
             need_other[noc++] = vi;
     }
@@ -1105,11 +1128,12 @@ void walk_v(t_level *cur_level, mpz_t start) {
                     if (mpz_fdiv_ui(Z(wv_ati), ip->m) == ip->v)
                         goto next_pell;
                 }
-                /* TODO: bail and print somewhere here if 'opt_print' */
                 /* note: we may have had more than 2 squares */
                 for (uint i = 2; i < nqc; ++i) {
                     uint vi = need_square[i];
-                    if (!test_zother(wv_qq[vi], wv_o[vi], Z(wv_ati), t[vi]))
+                    mpz_mul(Z(wv_cand), wv_qq[vi], Z(wv_ati));
+                    mpz_add(Z(wv_cand), Z(wv_cand), wv_o[vi]);
+                    if (!is_taux(Z(wv_cand), t[vi], 1))
                         goto next_pell;
                 }
                 for (uint i = 0; i < npc; ++i) {
@@ -1117,12 +1141,17 @@ void walk_v(t_level *cur_level, mpz_t start) {
                     if (!test_zprime(wv_qq[vi], wv_o[vi], Z(wv_ati)))
                         goto next_pell;
                 }
-                /* TODO: test these in parallel, with optional printme cutoff */
+                /* TODO: bail and print somewhere here if 'opt_print' */
+#ifdef PARALLEL
+                if (!test_zmulti(need_other, noc, Z(wv_ati), t))
+                    goto next_pell;
+#else
                 for (uint i = 0; i < noc; ++i) {
                     uint vi = need_other[i];
                     if (!test_zother(wv_qq[vi], wv_o[vi], Z(wv_ati), t[vi]))
                         goto next_pell;
                 }
+#endif
                 /* have candidate: calculate and apply it */
                 mpz_mul(Z(wv_cand), wv_qq[0], Z(wv_ati));
                 mpz_add(Z(wv_cand), Z(wv_cand), wv_o[0]);
@@ -1206,19 +1235,23 @@ void walk_v(t_level *cur_level, mpz_t start) {
             }
             if (!is_taux(Z(wv_r), ti, xi))
                 goto next_sqati;
-            /* TODO: bail and print somewhere here if 'opt_print' */
             /* note: we have no more squares */
             for (uint i = 0; i < npc; ++i) {
                 uint vi = need_prime[i];
                 if (!test_zprime(wv_qq[vi], wv_o[vi], Z(wv_ati)))
                     goto next_sqati;
             }
-            /* TODO: test these in parallel, with optional printme cutoff */
+            /* TODO: bail and print somewhere here if 'opt_print' */
+#ifdef PARALLEL
+            if (!test_zmulti(need_other, noc, Z(wv_ati), t))
+                goto next_sqati;
+#else
             for (uint i = 0; i < noc; ++i) {
                 uint vi = need_other[i];
                 if (!test_zother(wv_qq[vi], wv_o[vi], Z(wv_ati), t[vi]))
                     goto next_sqati;
             }
+#endif
             /* have candidate: calculate and apply it */
             mpz_mul(Z(wv_cand), wv_qq[0], Z(wv_ati));
             mpz_add(Z(wv_cand), Z(wv_cand), wv_o[0]);
@@ -1246,19 +1279,23 @@ void walk_v(t_level *cur_level, mpz_t start) {
             if (ati % ip->m == ip->v)
                 goto next_ati;
         }
-        /* TODO: bail and print somewhere here if 'opt_print' */
         /* note: we have no squares */
         for (uint i = 0; i < npc; ++i) {
             uint vi = need_prime[i];
             if (!test_prime(wv_qq[vi], wv_o[vi], ati))
                 goto next_ati;
         }
-        /* TODO: test these in parallel, with optional printme cutoff */
+        /* TODO: bail and print somewhere here if 'opt_print' */
+#ifdef PARALLEL
+        if (!test_multi(need_other, noc, ati, t))
+            goto next_ati;
+#else
         for (uint i = 0; i < noc; ++i) {
             uint vi = need_other[i];
             if (!test_other(wv_qq[vi], wv_o[vi], ati, t[vi]))
                 goto next_ati;
         }
+#endif
         /* have candidate: calculate and apply it */
         mpz_mul_ui(Z(wv_cand), wv_qq[0], ati);
         mpz_add(Z(wv_cand), Z(wv_cand), wv_o[0]);

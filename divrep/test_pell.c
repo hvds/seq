@@ -32,4 +32,5 @@ int main(int argc, char **argv) {
     }
     done_pell();
     done_rootmod();
+    done_tau();
 }

@@ -12,12 +12,22 @@
 #include "tinyqs.h"
 #include "simpqs.h"
 
+t_tm *taum = NULL;
+uint taum_alloc = 0;
+uint taum_size;
+mpz_t tmf;
+#define SIMPQS_SIZE 66
+mpz_t simpqs_array[SIMPQS_SIZE];
+
 #define _GMP_ECM_FACTOR(n, f, b1, ncurves) \
      _GMP_ecm_factor_projective(n, f, b1, 0, ncurves)
 
 #define NPRIMES_SMALL 2000
 /* MPUG declares this static, so we must copy it */
 static unsigned short primes_small[NPRIMES_SMALL];
+
+void init_tmfbl(void);
+void done_tmfbl(void);
 void init_tau(void) {
     UV pn;
     PRIME_ITERATOR(iter);
@@ -26,6 +36,30 @@ void init_tau(void) {
     for (pn = 2; pn < NPRIMES_SMALL; pn++)
         primes_small[pn] = prime_iterator_next(&iter);
     prime_iterator_destroy(&iter);
+    mpz_init(tmf);
+    init_tmfbl();
+    for (uint i = 0; i < SIMPQS_SIZE; ++i)
+        mpz_init(simpqs_array[i]);
+}
+
+void done_tau(void) {
+    for (uint i = 0; i < SIMPQS_SIZE; ++i)
+        mpz_clear(simpqs_array[i]);
+    done_tmfbl();
+    if (taum_alloc)
+        for (uint i = 0; i < taum_alloc; ++i)
+            mpz_clear(taum[i].n);
+    free(taum);
+    mpz_clear(tmf);
+}
+
+void alloc_taum(uint size) {
+    if (size > taum_alloc) {
+        taum = (t_tm *)realloc(taum, size * sizeof(t_tm));
+        for (uint i = taum_alloc; i < size; ++i)
+            mpz_init(taum[i].n);
+        taum_alloc = size;
+    }
 }
 
 void fs_init(factor_state* fs) {
@@ -509,4 +543,338 @@ int is_taux(mpz_t n, uint32_t k, uint32_t x) {
     }
     fs_clear(&fs);
     return result;
+}
+
+/* We need to invoke simpqs, but find a single prime factor to return;
+ * we accept that means we may do extra work to find back additional
+ * factors.
+ */
+bool do_GMP_simpqs(mpz_t n, mpz_t f) {
+    int qs = _GMP_simpqs(n, simpqs_array);
+
+    /* if not factorized, it's a fail */
+    if (qs < 2)
+        return 0;
+
+    /* look for a prime among the factors */
+    for (uint i = 0; i < qs; ++i)
+        if (_GMP_is_prob_prime(simpqs_array[i])) {
+            mpz_set(f, simpqs_array[i]);
+            return 1;
+        }
+
+    /* all factors composite: pick the first one and find a factor there */
+    factor_state fs;
+    fs_init(&fs);
+    mpz_set(fs.n, simpqs_array[0]);
+    if (!factor_one(&fs)) {
+        gmp_fprintf(stderr,
+            "factor_one(%Zd) failed to find factor in simpqs composite\n",
+            fs.n
+        );
+        exit(1);
+    }
+    mpz_set(f, fs.f);
+    fs_clear(&fs);
+    return 1;
+}
+
+static inline bool prep_abort(t_tm *tm, bool result) {
+    if (result)
+        tm->state = 0;  /* done */
+    return result;
+}
+
+bool tau_multi_prep(uint i) {
+    t_tm *tm = &taum[i];
+    uint t = tm->t;
+    uint nbits = mpz_sizeinbase(tm->n, 2);
+    tm->state = 1;  /* init */
+
+    if (t == 1)
+        return prep_abort(tm, mpz_cmp_ui(tm->n, 1) == 0);
+
+    /* do FS_TRIAL stage directly */
+    int ep = 0;
+    while (mpz_even_p(tm->n)) {
+        mpz_divexact_ui(tm->n, tm->n, 2);
+        ++ep;
+    }
+    if (ep) {
+        if ((t % (ep + 1)) != 0)
+            return 0;
+        t /= ep + 1;
+        if (t == 1)
+            return prep_abort(tm, mpz_cmp_ui(tm->n, 1) == 0);
+        nbits -= ep;
+        ep = 0;
+    }
+
+    UV p;
+    UV sp = 2;
+    UV tlim = (nbits > 80) ? 4001 * 4001 : 16001 * 16001;
+    UV un = mpz_cmp_ui(tm->n, 2 * tlim) >= 0
+        ? 2 * tlim
+        : mpz_get_ui(tm->n);
+    UV lim = (tlim < un) ? tlim : un;
+    for (p = primes_small[sp]; p * p < lim; p = primes_small[++sp]) {
+        while (mpz_divisible_ui_p(tm->n, p)) {
+            mpz_divexact_ui(tm->n, tm->n, p);
+            ++ep;
+        }
+        if (ep) {
+            if ((t % (ep + 1)) != 0)
+                return 0;
+            t /= ep + 1;
+            if (t == 1)
+                return prep_abort(tm, mpz_cmp_ui(tm->n, 1) == 0);
+            if (t == 2)
+                return prep_abort(tm, _GMP_is_prob_prime(tm->n));
+            if (mpz_cmp_ui(tm->n, 1) == 0)
+                return 0;
+            ep = 0;
+            un = mpz_cmp_ui(tm->n, 2 * tlim) > 0
+                ? 2 * tlim
+                : mpz_get_ui(tm->n);
+            lim = (tlim < un) ? tlim : un;
+        }
+    }
+
+    if (un < p * p)
+        return prep_abort(tm, t == (mpz_cmp_ui(tm->n, 1) == 0 ? 1 : 2));
+    if (mpz_cmp_ui(tm->n, 1) == 0)
+        return prep_abort(tm, t == 1);
+    if (t == 2)
+        return prep_abort(tm, _GMP_is_prob_prime(tm->n));
+    if (_GMP_is_prob_prime(tm->n))
+        return prep_abort(tm, t == 2);
+
+    tm->t = t;
+    return 1;
+}
+
+bool tmf_2(t_tm *tm) { return pbrent63(tm->n, tmf, 400000); }
+bool tmf_3(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 5000, 5000); }
+bool tmf_4(t_tm *tm) { return tinyqs(tm->n, tmf); }
+bool tmf_5(t_tm *tm) { return squfof126(tm->n, tmf, 400000); }
+bool tmf_6(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 1000, 10000); }
+bool tmf_7(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 2000, 20000); }
+bool tmf_8(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 4000, 40000); }
+bool tmf_9(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 10000, 100000); }
+bool tmf_10(t_tm *tm) { return squfof126(tm->n, tmf, 1000000); }
+bool tmf_11(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 20000, 200000); }
+bool tmf_12(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 200, 4); }
+bool tmf_13(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 600, 20); }
+bool tmf_14(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 2000, 10); }
+bool tmf_15(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 200000, 3000000); }
+bool tmf_16(t_tm *tm) {
+    tm->B1 = 5000;
+    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 20);
+}
+/* FIXME: surely this and the next case should have curves = 20?
+ * There was a comment on each "go to QS" - is the intent to do
+ * a quick hit here, then rely on QS for more progress?
+ */
+bool tmf_17(t_tm *tm) {
+    tm->B1 = 10000;
+    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 2);
+}
+bool tmf_18(t_tm *tm) {
+    tm->B1 = 20000;
+    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 2);
+}
+bool tmf_19(t_tm *tm) {
+    tm->B1 = 30000;
+    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 20);
+}
+bool tmf_20(t_tm *tm) {
+    tm->B1 = 40000;
+    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 40);
+}
+bool tmf_21(t_tm *tm) {
+    tm->B1 = 80000;
+    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 40);
+}
+bool tmf_22(t_tm *tm) {
+    tm->B1 = 160000;
+    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 80);
+}
+bool tmf_23(t_tm *tm) {
+    tm->B1 = 320000;
+    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 160);
+}
+bool tmf_24(t_tm *tm) { return do_GMP_simpqs(tm->n, tmf); }
+bool tmf_25(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 2 * tm->B1, 20); }
+bool tmf_26(t_tm *tm) { return _GMP_pbrent_factor(tm->n, tmf, 1, 1 << 20); }
+bool tmf_27(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 4 * tm->B1, 20); }
+bool tmf_28(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 8 * tm->B1, 20); }
+bool tmf_29(t_tm *tm) { return _GMP_holf_factor(tm->n, tmf, 1 << 20); }
+bool tmf_30(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 5000000, 5000000 * 20); }
+bool tmf_31(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 32 * tm->B1, 40); }
+/* last resort tests */
+bool tmf_32(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 4, 100); }
+bool tmf_33(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 5, 100); }
+bool tmf_34(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 6, 100); }
+bool tmf_35(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 7, 100); }
+bool tmf_36(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 8, 100); }
+bool tmf_37(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 9, 100); }
+bool tmf_38(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 10, 100); }
+bool tmf_39(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 11, 100); }
+bool tmf_40(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 12, 100); }
+bool tmf_41(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 13, 100); }
+
+typedef bool (*t_tmf)(t_tm *tm);
+const t_tmf tmfa[] = {
+    NULL, NULL, &tmf_2, &tmf_3, &tmf_4, &tmf_5, &tmf_6, &tmf_7,
+    &tmf_8, &tmf_9, &tmf_10, &tmf_11, &tmf_12, &tmf_13, &tmf_14, &tmf_15,
+    &tmf_16, &tmf_17, &tmf_18, &tmf_19, &tmf_20, &tmf_21, &tmf_22, &tmf_23,
+    &tmf_24, &tmf_25, &tmf_26, &tmf_27, &tmf_28, &tmf_29, &tmf_30, &tmf_31,
+    &tmf_32, &tmf_33, &tmf_34, &tmf_35, &tmf_36, &tmf_37, &tmf_38, &tmf_39,
+    &tmf_40, &tmf_41
+};
+#define TM_TERM 0
+/* leave room for possible power check at tmf_1() */
+#define TM_INIT 2
+#define TM_MAX (sizeof(tmfa) / sizeof(t_tmf))
+typedef struct s_tmf_bits {
+    uint maxlen;
+    ulong tmf_bits;
+} t_tmf_bits;
+
+t_tmf_bits tmfb[] = {
+    { 53, 0b11111110000000011111110000100100},
+    { 58, 0b11111110000000011111110001000100},
+    { 63, 0b11111110000000011111110010000100},
+    { 64, 0b11111110000000011111110100000000},
+    { 72, 0b11111110000000011111111100011000},
+    { 77, 0b11111110000000011111111000011000},
+    { 89, 0b11111110000000011111100000011000},
+    { 99, 0b11111111000000011111100000011000},
+    {126, 0b11111111000000100111100000011000},
+    {127, 0b11111111000000100111100000000000},
+    {159, 0b11111111000001000111100000000000},
+    {191, 0b11111111000010001111100000000000},
+    {223, 0b11111111000100001111100000000000},
+    {255, 0b11111111001000001111100000000000},
+    {299, 0b11111111010000001111100000000000},
+    {511, 0b11111110010000001111100000000000},
+    {  0, 0b11111110100000001111100000000000}
+};
+#define TMFB_MAX (sizeof(tmfb) / sizeof(t_tmf_bits))
+ulong *tmfbl = NULL;
+uint tmfb_maxb;
+ulong tmfb_lim;
+
+void init_tmfbl(void) {
+    tmfb_lim = tmfb[TMFB_MAX - 1].tmf_bits;
+    tmfb_maxb = tmfb[TMFB_MAX - 2].maxlen;
+    tmfbl = (ulong *)malloc((tmfb_maxb + 1) * sizeof(ulong));
+    uint i = 0;
+    for (uint j = 0; j <= TMFB_MAX - 2; ++j) {
+        uint lim = tmfb[j].maxlen;
+        ulong bits = tmfb[j].tmf_bits;
+        for (; i <= lim; ++i)
+            tmfbl[i] = bits;
+    }
+}
+
+void done_tmfbl(void) {
+    free(tmfbl);
+}
+
+static inline ulong _find_tmfb(uint size) {
+    if (size <= tmfb_maxb)
+        return tmfbl[size];
+    return tmfb_lim;
+}
+    
+bool tau_multi_run(uint count) {
+    uint i = 0;
+    /* Shuffle the entries that did not complete by trial division to
+     * the front. Find size and thus the associated tmfb entry for each. */
+    for (uint j = 0; j < count; ++j) {
+        if (taum[j].state == 0)
+            continue;
+        if (i < j) {
+            mpz_swap(taum[i].n, taum[j].n);
+            taum[i].t = taum[j].t;
+        }
+        taum[i].state = 2;
+        taum[i].bits = _find_tmfb(mpz_sizeinbase(taum[i].n, 2));
+        ++i;
+    }
+    if (i == 0)
+        return 1;
+    count = i;
+
+    uint next_i;
+  tmr_retry:
+    for (uint i = TM_INIT; i < TM_MAX; i = next_i) {
+        next_i = i + 1;
+        for (uint j = 0; j < count; ++j) {
+            t_tm *tm = &taum[j];
+          tmr_redo:
+            if (tm->state > i)
+                continue;
+            if (!(tm->bits & (1 << i)))
+                continue;
+            if (!(*tmfa[i])(tm)) {
+                tm->state = i + 1;
+                continue;
+            }
+            uint e = 1;
+            while (mpz_divisible_p(tm->n, tmf)) {
+                ++e;
+                mpz_divexact(tm->n, tm->n, tmf);
+            }
+            if (e == 1) {
+                gmp_fprintf(stderr,
+                    "state %d found non-divisible factor %Zd for %Zd\n",
+                    tm->state, tmf, tm->n
+                );
+                exit(1);
+            }
+            if (tm->t % e)
+                return 0;
+            tm->t /= e;
+            if (tm->t == 1) {
+                if (mpz_cmp_ui(tm->n, 1) != 0)
+                    return 0;
+                goto tmr_splice;
+            } else if (tm->t == 2) {
+                if (!_GMP_is_prob_prime(tm->n))
+                    return 0;
+                goto tmr_splice;
+            } else if (mpz_cmp_ui(tm->n, 1) == 0)
+                return 0;
+            else if (tm->t & 1) {
+                /* odd tau should be easy, do immediate full check */
+                if (!is_taux(tm->n, 1, tm->t))
+                    return 0;
+                goto tmr_splice;
+            } else if (_GMP_is_prob_prime(tm->n))
+                return 0;
+            tm->state = TM_INIT;
+            next_i = TM_INIT;
+            tm->bits = _find_tmfb(mpz_sizeinbase(tm->n, 2));
+            goto tmr_retry;
+
+          tmr_splice:
+            --count;
+            if (count == 0)
+                return 1;
+            if (j < count) {
+                mpz_swap(taum[j].n, taum[count].n);
+                taum[j].t = taum[count].t;
+                taum[j].state = taum[count].state;
+                taum[j].bits = taum[count].bits;
+            }
+            goto tmr_redo;
+        }
+    }
+    gmp_fprintf(stderr,
+        "no factors found for %u non-primes starting %Zd (%u)\n",
+        count, taum[0].n, taum[0].t
+    );
+    exit(1);
 }

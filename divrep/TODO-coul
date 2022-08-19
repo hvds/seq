@@ -1,7 +1,6 @@
 TODO (high priority):
 - calculate even more accurate mintau()
   - and beyond oul for suppressed factors
-- test "other" tau cases in parallel, one factor_one() step at a time
 - fix linear search in pell.c:contfrac()
 
 CHECKME:
