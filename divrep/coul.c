@@ -581,7 +581,6 @@ void recover(void) {
         if (mpz_sgn(max) == 0 || mpz_cmp(max, cand) > 0)
             mpz_set(max, cand);
         mpz_clear(cand);
-        free(last202);
     }
     if (last305)
         parse_305(last305 + 4);
