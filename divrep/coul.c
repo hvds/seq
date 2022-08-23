@@ -199,7 +199,7 @@ ulong antigain = 0;
 uint minp = 0, maxp = 0;
 uint runid = 0;     /* runid for log file */
 bool opt_print = 0; /* print candidates instead of fully testing them */
-bool debug = 0;     /* diag and keep every case seen */
+int debug = 0;     /* diag and keep every case seen */
 ulong randseed = 1; /* for ECM, etc */
 
 char *rpath = NULL; /* path to log file */
@@ -284,7 +284,7 @@ void diag_walk_v(ulong ati, ulong end) {
     clock_t t1 = utime();
 
     prep_show_v();  /* into diag_buf */
-    if (!(debug && ati))
+    if (!(debug == 1 && ati))
         diag("%s: %lu / %lu", diag_buf, ati, end);
     if (debug)
         keep_diag();
@@ -1911,7 +1911,7 @@ int main(int argc, char **argv, char **envp) {
         else if (strncmp("-o", arg, 2) == 0)
             opt_print = 1;
         else if (strncmp("-d", arg, 2) == 0)
-            debug = 1;
+            ++debug;
         else
             fail("unknown option '%s'", arg);
     }
