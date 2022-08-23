@@ -787,7 +787,24 @@ static inline ulong _find_tmfb(uint size) {
         return tmfbl[size];
     return tmfb_lim;
 }
-    
+
+/* see also other_comparator() in coul.c */
+int taum_comparator(const void *va, const void *vb) {
+    t_tm *tma = (t_tm *)va;
+    t_tm *tmb = (t_tm *)vb;
+    uint at2 = tma->t ^ (tma->t - 1);
+    uint bt2 = tmb->t ^ (tmb->t - 1);
+    if (at2 < bt2)
+        return -1;
+    if (at2 > bt2)
+        return 1;
+    if (tma->t < tmb->t)
+        return -1;
+    if (tma->t > tmb->t)
+        return 1;
+    return mpz_cmp(tma->n, tmb->n);
+}
+
 bool tau_multi_run(uint count) {
     uint i = 0;
     /* Shuffle the entries that did not complete by trial division to
@@ -806,6 +823,8 @@ bool tau_multi_run(uint count) {
     if (i == 0)
         return 1;
     count = i;
+
+    qsort(taum, count, sizeof(t_tm), &taum_comparator);
 
     uint next_i;
   tmr_retry:

@@ -1007,6 +1007,42 @@ uint gcd_divisors(uint t) {
     return g;
 }
 
+/* Sort need_prime by qq multiplier ascending */
+int prime_comparator(const void *va, const void *vb) {
+    uint a = *(uint *)va;
+    uint b = *(uint *)vb;
+    return mpz_cmp(wv_qq[a], wv_qq[b]);
+}
+
+/* Sort need_other by tau (power of 2 ascending, then size ascending),
+ * then by qq multiplier ascending
+ * TODO: if we implement trial division to higher levels to show
+ * a given tau is not reachable, we may want tau by size descending.
+ */
+uint *oc_t;
+int other_comparator(const void *va, const void *vb) {
+    uint a = *(uint *)va;
+    uint b = *(uint *)vb;
+    uint at2 = oc_t[a] ^ (oc_t[a] - 1);
+    uint bt2 = oc_t[b] ^ (oc_t[b] - 1);
+    if (at2 < bt2)
+        return -1;
+    if (at2 > bt2)
+        return 1;
+    if (oc_t[a] < oc_t[b])
+        return -1;
+    if (oc_t[a] > oc_t[b])
+        return 1;
+    return mpz_cmp(wv_qq[a], wv_qq[b]);
+}
+
+/* Sort inverses by modulus ascending */
+int inv_comparator(const void *va, const void *vb) {
+    t_mod *a = (t_mod *)va;
+    t_mod *b = (t_mod *)vb;
+    return (b->m < a->m) - (a->m < b->m);
+}
+
 void walk_v(t_level *cur_level, mpz_t start) {
 #ifdef SQONLY
     if (!cur_level->have_square)
@@ -1060,6 +1096,13 @@ void walk_v(t_level *cur_level, mpz_t start) {
         else
             need_other[noc++] = vi;
     }
+
+#if 0
+    qsort(inv, inv_count, sizeof(t_mod), &inv_comparator);
+    qsort(need_prime, npc, sizeof(uint), &prime_comparator);
+#endif
+    oc_t = t;
+    qsort(need_other, noc, sizeof(uint), &other_comparator);
 
     if (nqc) {
         uint sqi = need_square[0];
