@@ -1273,6 +1273,11 @@ void walk_1(uint vi) {
 
     if (mpz_cmp(Z(w1_v), min) < 0)
         return;
+    uint t[k];
+    uint need_prime[k];
+    uint need_square[k];
+    uint need_other[k];
+    uint npc = 0, nqc = 0, noc = 0;
     for (uint vj = 0; vj < k; ++vj) {
         if (vi == vj)
             continue;
@@ -1287,10 +1292,29 @@ void walk_1(uint vi) {
             if (mpz_cmp(Z(w1_r), Z(zone)) != 0)
                 return;
         }
-        /* TODO: stash these in an array, test them in order */
-        if (!is_taux(Z(w1_j), ajp ? ajp->t : n, 1))
-            return;
+        t[vj] = ajp ? ajp->t : n;
+        if (t[vj] = 1) {
+            if (mpz_cmp_ui(Z(w1_j), 1) != 0)
+                return;
+        } else if (t[vj] == 2)
+            need_prime[npc++] = vj;
+        else if (t[vj] & 1)
+            need_square[nqc++] = vj;
+        else
+            need_other[noc++] = vj;
+        mpz_set(wv_o[vj], Z(w1_j));
     }
+    for (uint i = 0; i < npc; ++i)
+        if (!_GMP_is_prob_prime(wv_o[need_prime[i]]))
+            return;
+    for (uint i = 0; i < nqc; ++i)
+        if (!is_taux(wv_o[need_square[i]], t[need_square[i]], 1))
+            return;
+    oc_t = t;
+    qsort(need_other, noc, sizeof(uint), &other_comparator);
+    for (uint i = 0; i < noc; ++i)
+        if (!is_taux(wv_o[need_other[i]], t[need_other[i]], 1))
+            return;
     candidate(Z(w1_v));
     return;
 }
