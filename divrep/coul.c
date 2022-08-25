@@ -1342,9 +1342,12 @@ bool check_residue(uint vi, ulong p, uint x, uint vj, mpz_t m, bool is_forced) {
     bool need_divide = 0;
 
     if (is_forced) {
-        while ((d % p) == 0) {
-            ++e2;
-            d /= p;
+        if (p < INT_MAX) {
+            int ip = (int)p;
+            while ((d % ip) == 0) {
+                ++e2;
+                d /= ip;
+            }
         }
 
         t_value *vpj = &value[vj];
