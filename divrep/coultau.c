@@ -12,6 +12,10 @@
 #include "tinyqs.h"
 #include "simpqs.h"
 
+#include <time.h>
+#include <string.h>
+#include <errno.h>
+
 t_tm *taum = NULL;
 uint taum_alloc = 0;
 uint taum_size;
@@ -21,6 +25,131 @@ mpz_t simpqs_array[SIMPQS_SIZE];
 
 #define _GMP_ECM_FACTOR(n, f, b1, ncurves) \
      _GMP_ecm_factor_projective(n, f, b1, 0, ncurves)
+
+struct timespec cg_tp0;
+struct timespec cg_tp1;
+#define GIG 1000000000
+static inline ulong cgdiff(struct timespec *t0) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp1);
+    return (cg_tp1.tv_sec - t0->tv_sec) * GIG
+            + cg_tp1.tv_nsec - t0->tv_nsec;
+}
+#ifdef VERBOSE
+#define dz(format, ...) do { \
+    gmp_printf("(%ld) " format "\n", cgdiff(&cg_tp0), ## __VA_ARGS__); \
+} while (0)
+#else
+#define dz(...) 1
+#endif
+
+#ifdef VERBOSE
+static inline bool ct_prime(mpz_t n) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    bool r = _GMP_is_prob_prime(n);
+    gmp_printf("(%ld) p: %Zd %u\n", cgdiff(&cg_tp0), n, r ? 1 : 0);
+    return r;
+}
+static inline ulong ct_power(mpz_t n) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    ulong r = power_factor(n, n);
+    gmp_printf("(%ld) pow: %Zd^%lu\n", cgdiff(&cg_tp0), n, r);
+    return r;
+}
+static inline bool ct_ecm(mpz_t n, mpz_t f, ulong b1, ulong curves) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    bool r = _GMP_ECM_FACTOR(n, f, b1, curves);
+    gmp_printf("(%ld) ecm: %Zu [%lu, %lu] %u", cgdiff(&cg_tp0), n, b1, curves, r);
+    if (r)
+        gmp_printf(" %Zu", f);
+    gmp_printf("\n");
+    return r;
+}
+static inline bool ct_pminus1(mpz_t n, mpz_t f, ulong b1, ulong b2) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    bool r = _GMP_pminus1_factor(n, f, b1, b2);
+    gmp_printf("(%ld) p-1: %Zu [%lu, %lu] %u", cgdiff(&cg_tp0), n, b1, b2, r);
+    if (r)
+        gmp_printf(" %Zu", f);
+    gmp_printf("\n");
+    return r;
+}
+static inline bool ct_tinyqs(mpz_t n, mpz_t f) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    bool r = tinyqs(n, f);
+    gmp_printf("(%ld) tqs: %Zu %u", cgdiff(&cg_tp0), n, r);
+    if (r)
+        gmp_printf(" %Zu", f);
+    gmp_printf("\n");
+    return r;
+}
+static inline bool ct_simpqs(mpz_t n, mpz_t *fa) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    int r = _GMP_simpqs(n, fa);
+    gmp_printf("(%ld) sqs: %Zu %d", cgdiff(&cg_tp0), n, r);
+    if (r)
+        gmp_printf(" %Zu", fa[0]);
+    gmp_printf("\n");
+    return r;
+}
+static inline bool ct_holf(mpz_t n, mpz_t f, ulong rounds) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    bool r = _GMP_holf_factor(n, f, rounds);
+    gmp_printf("(%ld) hlf: %Zu [%lu] %d", cgdiff(&cg_tp0), n, rounds, r);
+    if (r)
+        gmp_printf(" %Zu", f);
+    gmp_printf("\n");
+    return r;
+}
+static inline bool ct_squfof(mpz_t n, mpz_t f, ulong rounds) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    bool r = squfof126(n, f, rounds);
+    gmp_printf("(%ld) sqf: %Zu [%lu] %d", cgdiff(&cg_tp0), n, rounds, r);
+    if (r)
+        gmp_printf(" %Zu", f);
+    gmp_printf("\n");
+    return r;
+}
+static inline bool ct_brent63(mpz_t n, mpz_t f, ulong rounds) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    bool r = pbrent63(n, f, rounds);
+    gmp_printf("(%ld) b63: %Zu [%lu] %d", cgdiff(&cg_tp0), n, rounds, r);
+    if (r)
+        gmp_printf(" %Zu", f);
+    gmp_printf("\n");
+    return r;
+}
+static inline bool ct_brent(mpz_t n, mpz_t f, ulong a, ulong rounds) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    bool r = _GMP_pbrent_factor(n, f, a, rounds);
+    gmp_printf("(%ld) sqf: %Zu [%lu, %lu] %d", cgdiff(&cg_tp0), n, a, rounds, r);
+    if (r)
+        gmp_printf(" %Zu", f);
+    gmp_printf("\n");
+    return r;
+}
+extern int fs_trial(factor_state* fs);
+static inline bool ct_trial(factor_state *fs) {
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+    bool r = fs_trial(fs);
+    gmp_printf("(%ld) div: %Zu %d", cgdiff(&cg_tp0), fs->n, r);
+    if (r)
+        gmp_printf(" %Zu", fs->f);
+    gmp_printf("\n");
+    return r;
+}
+#else
+#   define ct_prime(n) _GMP_is_prob_prime(n)
+#   define ct_power(n) power_factor(n, n)
+#   define ct_ecm(n, f, b1, curves) _GMP_ECM_FACTOR(n, f, b1, curves)
+#   define ct_pminus1(n, f, b1, b2) _GMP_pminus1_factor(n, f, b1, b2)
+#   define ct_tinyqs(n, f) tinyqs(n, f)
+#   define ct_simpqs(n, fa) _GMP_simpqs(n, fa)
+#   define ct_holf(n, f, rounds) _GMP_holf_factor(n, f, rounds)
+#   define ct_squfof(n, f, rounds) squfof126(n, f, rounds)
+#   define ct_brent63(n, f, rounds) pbrent63(n, f, rounds)
+#   define ct_brent(n, f, a, rounds) _GMP_pbrent_factor(n, f, a, rounds)
+#   define ct_trial(fs) fs_trial(fs)
+#endif
 
 #define NPRIMES_SMALL 2000
 /* MPUG declares this static, so we must copy it */
@@ -176,11 +305,11 @@ fs_retry:
         fs->tlim = (nbits > 80) ? 4001 * 4001 : 16001 * 16001;
         fs->state = FS_TRIAL;
     case FS_TRIAL:
-        if (fs_trial(fs))
+        if (ct_trial(fs))
             return 1;
         fs->state = FS_POWER;
     case FS_POWER:
-        fs->ef = power_factor(fs->n, fs->n);
+        fs->ef = ct_power(fs->n);
         if (!fs->ef)
             fs->ef = 1;
         fs->state = FS_LARGE;
@@ -200,87 +329,51 @@ fs_retry:
  * and tofac_stack must be checked (see label fs_retry above).
  */
     case FS_LARGE:
-        if (mpz_cmp_ui(fs->n, fs->tlim) <= 0 || _GMP_is_prob_prime(fs->n)) {
+        if (mpz_cmp_ui(fs->n, fs->tlim) <= 0 || ct_prime(fs->n)) {
             mpz_set(fs->f, fs->n);
             fs->e = fs->ef * _fs_remove(fs);
             return 1;
         }
 
-        if (nbits <= 63) {
-            if (pbrent63(fs->n, fs->f, 400000)) {
-                if (fs->log)
-                    gmp_printf("UV Rho-Brent found factor %Zd\n", fs->f);
+        if (nbits <= 63)
+            if (ct_brent63(fs->n, fs->f, 400000))
                 goto found_factor;
-            }
-        }
         if (nbits >= 65 && nbits <= 126) {
-            if (_GMP_pminus1_factor(fs->n, fs->f, 5000, 5000)) {
-                if (fs->log)
-                    gmp_printf("p-1 (%dk) found factor %Zd\n", 5000, fs->f);
+            if (ct_pminus1(fs->n, fs->f, 5000, 5000))
                 goto found_factor;
-            }
-            if (tinyqs(fs->n, fs->f)) {
-                if (fs->log)
-                    gmp_printf("tinyqs found factor %Zd\n", fs->f);
+            if (ct_tinyqs(fs->n, fs->f))
                 goto found_factor;
-            }
         }
         /* It's possible the previous calls failed or weren't available */
-        if (nbits <= 53) {
-            if (squfof126(fs->n, fs->f, 400000)) {
-                if (fs->log)
-                    gmp_printf("UV SQUFOF126 found factor %Zd\n", fs->f);
+        if (nbits <= 53)
+            if (ct_squfof(fs->n, fs->f, 400000))
                 goto found_factor;
-            }
-        }
         if (nbits <= 77) {
             int sb1 = (nbits < 58) ? 1
                 : (nbits < 63) ? 2
                 : (nbits < 72) ? 4
                 : 10;
-            if (_GMP_pminus1_factor(fs->n, fs->f, sb1 * 1000, sb1 * 10000)) {
-                if (fs->log)
-                    gmp_printf("p-1 (%dk) found factor %Zd\n", sb1, fs->f);
+            if (ct_pminus1(fs->n, fs->f, sb1 * 1000, sb1 * 10000))
                 goto found_factor;
-            }
-            if (squfof126(fs->n, fs->f, 1000000)) {
-                if (fs->log)
-                    gmp_printf("SQUFOF126 found factor %Zd\n", fs->f);
+            if (ct_squfof(fs->n, fs->f, 1000000))
                 goto found_factor;
-            }
         }
         /* recheck power? */
-        if (_GMP_pminus1_factor(fs->n, fs->f, 20000, 200000)) {
-            if (fs->log)
-                gmp_printf("p-1 (20k) found factor %Zd\n", fs->f);
+        if (ct_pminus1(fs->n, fs->f, 20000, 200000))
             goto found_factor;
-        }
 
         /* Small ECM to find small factors */
-        if (_GMP_ECM_FACTOR(fs->n, fs->f, 200, 4)) {
-            if (fs->log)
-                gmp_printf("tiny ecm (200) found factor %Zd\n", fs->f);
+        if (ct_ecm(fs->n, fs->f, 200, 4))
             goto found_factor;
-        }
-        if (_GMP_ECM_FACTOR(fs->n, fs->f, 600, 20)) {
-            if (fs->log)
-                gmp_printf("tiny ecm (600) found factor %Zd\n", fs->f);
+        if (ct_ecm(fs->n, fs->f, 600, 20))
             goto found_factor;
-        }
-        if (_GMP_ECM_FACTOR(fs->n, fs->f, 2000, 10)) {
-            if (fs->log)
-                gmp_printf("tiny ecm (2000) found factor %Zd\n", fs->f);
+        if (ct_ecm(fs->n, fs->f, 2000, 10))
             goto found_factor;
-        }
 
         /* Small p-1 */
-        if (nbits < 100 || nbits >= 160) {
-            if (_GMP_pminus1_factor(fs->n, fs->f, 200000, 3000000)) {
-                if (fs->log)
-                    gmp_printf("p-1 (200k) found factor %Zd\n", fs->f);
+        if (nbits < 100 || nbits >= 160)
+            if (ct_pminus1(fs->n, fs->f, 200000, 3000000))
                 goto found_factor;
-            }
-        }
 
         /* Set ECM parameters that have a good chance of success */
         UV curves;
@@ -313,12 +406,8 @@ fs_retry:
             B1 = 320000;
             curves = 160;
         }
-        if (curves > 0 && _GMP_ECM_FACTOR(fs->n, fs->f, B1, curves)) {
-            if (fs->log)
-                gmp_printf("small ecm (%luk,%lu) found factor %Zd\n",
-                        B1 / 1000, curves, fs->f);
+        if (curves > 0 && ct_ecm(fs->n, fs->f, B1, curves))
             goto found_factor;
-        }
 
         /* QS (30+ digits). Fantastic if it is a semiprime, but can be
          * slow and a memory hog if not (compared to ECM). Restrict to
@@ -331,7 +420,7 @@ fs_retry:
             int i, qs_nfactors;
             for (i = 0; i < 66; i++)
                 mpz_init(farray[i]);
-            qs_nfactors = _GMP_simpqs(fs->n, farray);
+            qs_nfactors = ct_simpqs(fs->n, farray);
             mpz_set(fs->f, farray[0]);
             if (qs_nfactors > 2) {
                 /* We found multiple factors */
@@ -356,60 +445,25 @@ fs_retry:
             }
         }
 
-        if (_GMP_ECM_FACTOR(fs->n, fs->f, 2 * B1, 20)) {
-            if (fs->log)
-                gmp_printf("ecm (%luk,20) found factor %Zd\n",
-                        2 * B1 / 1000, fs->f);
+        if (ct_ecm(fs->n, fs->f, 2 * B1, 20))
             goto found_factor;
-        }
-
-        if (_GMP_pbrent_factor(fs->n, fs->f, 1, 1024 * 1024)) {
-            if (fs->log)
-                gmp_printf("pbrent (1,1M) found factor %Zd\n", fs->f);
+        if (ct_brent(fs->n, fs->f, 1, 1024 * 1024))
             goto found_factor;
-        }
-
-        if (_GMP_ECM_FACTOR(fs->n, fs->f, 4 * B1, 20)) {
-            if (fs->log)
-                gmp_printf("ecm (%luk,20) ecm found factor %Zd\n",
-                        4 * B1, fs->f);
+        if (ct_ecm(fs->n, fs->f, 4 * B1, 20))
             goto found_factor;
-        }
-
-        if (_GMP_ECM_FACTOR(fs->n, fs->f, 8 * B1, 20)) {
-            if (fs->log)
-                gmp_printf("ecm (%luk,20) ecm found factor %Zd\n",
-                        8 * B1, fs->f);
+        if (ct_ecm(fs->n, fs->f, 8 * B1, 20))
             goto found_factor;
-        }
-
         /* HOLF in case it's a near-ratio-of-perfect-square */
-        if (_GMP_holf_factor(fs->n, fs->f, 1024 * 1024)) {
-            if (fs->log)
-                gmp_printf("holf found factor %Zd\n", fs->f);
+        if (ct_holf(fs->n, fs->f, 1024 * 1024))
             goto found_factor;
-        }
-
         /* Large p-1 with stage 2: B2 = 20 * B1 */
-        if (_GMP_pminus1_factor(fs->n, fs->f, 5000000, 5000000 * 20)) {
-            if (fs->log)
-                gmp_printf("p-1 (5M) found factor %Zd\n", fs->f);
+        if (ct_pminus1(fs->n, fs->f, 5000000, 5000000 * 20))
             goto found_factor;
-        }
-
-        if (_GMP_ECM_FACTOR(fs->n, fs->f, 32 * B1, 40)) {
-            if (fs->log)
-                gmp_printf("ecm (%luk,40) ecm found factor %Zd\n",
-                        32 * B1, fs->f);
+        if (ct_ecm(fs->n, fs->f, 32 * B1, 40))
             goto found_factor;
-        }
-
 #if 0
-        if (_GMP_pbrent_factor(fs->n, fs->f, 2, 512 * 1024 * 1024)) {
-            if (fs->log)
-                gmp_printf("pbrent (2,512M) found factor %Zd\n", fs->f);
+        if (ct_brent(fs->n, fs->f, 2, 512 * 1024 * 1024))
             goto found_factor;
-        }
 #endif
 
         /* Our method of last resort: ECM with high bmax and many curves*/
@@ -417,7 +471,7 @@ fs_retry:
             gmp_printf("starting large ECM on %Zd\n", fs->n);
         B1 *= 8;
         for (UV i = 0; i < 10; B1 *= 2, i++) {
-            if (_GMP_ECM_FACTOR(fs->n, fs->f, B1, 100)) {
+            if (ct_ecm(fs->n, fs->f, B1, 100)) {
                 if (!mpz_divisible_p(fs->n, fs->f)
                     || mpz_cmp_ui(fs->f, 1) == 0
                     || mpz_cmp(fs->f, fs->n) == 0
@@ -425,9 +479,6 @@ fs_retry:
                     gmp_printf("n = %Zd    f = %Zd\n", fs->n, fs->f);
                     croak("Incorrect factoring");
                 }
-                if (fs->log)
-                    gmp_printf("ecm (%luk,100) ecm found factor %Zd\n",
-                            B1, fs->f);
                 goto found_factor;
             }
         }
@@ -440,7 +491,7 @@ fs_retry:
         goto found_factor;
     }
 found_factor:
-    if (!_GMP_is_prob_prime(fs->f)) {
+    if (!ct_prime(fs->f)) {
         mpz_init(fs->tofac_stack[fs->ntofac]);
         mpz_divexact(fs->tofac_stack[fs->ntofac], fs->n, fs->f);
         ++fs->ntofac;
@@ -455,7 +506,7 @@ found_factor:
 static int _scanp(factor_state* fs) {
     int result = 0;
     if (mpz_cmp_ui(fs->n, 1) != 0) {
-        if (_GMP_is_prime(fs->n))
+        if (ct_prime(fs->n))
             result = 1;
         else
             return 0;
@@ -465,7 +516,7 @@ static int _scanp(factor_state* fs) {
             continue;
         if (result)
             return 0;
-        if (_GMP_is_prime(fs->tofac_stack[i]))
+        if (ct_prime(fs->tofac_stack[i]))
             result = 1;
         else
             return 0;
@@ -479,6 +530,9 @@ int is_taux(mpz_t n, uint32_t k, uint32_t x) {
     int result = 0;
     factor_state fs;
 
+#ifdef VERBOSE
+    gmp_printf("is_taux t=%u (%u) %Zu^%u\n", k, mpz_sizeinbase(n, 2), n, x);
+#endif
     if (cmp < 0)
         return 0;
     if (cmp == 0)
@@ -486,13 +540,13 @@ int is_taux(mpz_t n, uint32_t k, uint32_t x) {
     if (k == 1 || x == 0)
         return 0;
     if (k == x + 1)
-        return _GMP_is_prime(n) ? 1 : 0;
+        return ct_prime(n) ? 1 : 0;
 
     fs_init(&fs);
     mpz_set(fs.n, n);
     while (1) {
         if ((k & 1) && (x & 1)) {
-            int e = power_factor(fs.n, fs.n);
+            int e = ct_power(fs.n);
             if (e == 0 || e & 1 || e > k)
                 break;
             /* we actually need e divisible by gcd(map $_ - 1, divisors(k)) */
@@ -545,8 +599,8 @@ int is_taux(mpz_t n, uint32_t k, uint32_t x) {
  * we accept that means we may do extra work to find back additional
  * factors.
  */
-bool do_GMP_simpqs(mpz_t n, mpz_t f) {
-    int qs = _GMP_simpqs(n, simpqs_array);
+bool do_simpqs(mpz_t n, mpz_t f) {
+    int qs = ct_simpqs(n, simpqs_array);
 
     /* if not factorized, it's a fail */
     if (qs < 2)
@@ -554,7 +608,7 @@ bool do_GMP_simpqs(mpz_t n, mpz_t f) {
 
     /* look for a prime among the factors */
     for (uint i = 0; i < qs; ++i)
-        if (_GMP_is_prob_prime(simpqs_array[i])) {
+        if (ct_prime(simpqs_array[i])) {
             mpz_set(f, simpqs_array[i]);
             return 1;
         }
@@ -587,8 +641,14 @@ bool tau_multi_prep(uint i) {
     uint nbits = mpz_sizeinbase(tm->n, 2);
     tm->state = 1;  /* init */
 
-    if (t == 1)
+#ifdef VERBOSE
+    gmp_printf("tau_multi_prep t=%u (%u) %Zu\n", t, nbits, tm->n);
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cg_tp0);
+#endif
+    if (t == 1) {
+        dz("div: t=1");
         return prep_abort(tm, mpz_cmp_ui(tm->n, 1) == 0);
+    }
 
     /* do FS_TRIAL stage directly */
     int ep = 0;
@@ -597,11 +657,15 @@ bool tau_multi_prep(uint i) {
         ++ep;
     }
     if (ep) {
-        if ((t % (ep + 1)) != 0)
+        if ((t % (ep + 1)) != 0) {
+            dz("div: %u ~| t=%u", ep + 1, t);
             return 0;
+        }
         t /= ep + 1;
-        if (t == 1)
+        if (t == 1) {
+            dz("div: t=1");
             return prep_abort(tm, mpz_cmp_ui(tm->n, 1) == 0);
+        }
         nbits -= ep;
         ep = 0;
     }
@@ -619,15 +683,21 @@ bool tau_multi_prep(uint i) {
             ++ep;
         }
         if (ep) {
-            if ((t % (ep + 1)) != 0)
+            if ((t % (ep + 1)) != 0) {
+                dz("div: %u ~| t=%u", ep + 1, t);
                 return 0;
+            }
             t /= ep + 1;
-            if (t == 1)
+            if (t == 1) {
+                dz("div: t=1");
                 return prep_abort(tm, mpz_cmp_ui(tm->n, 1) == 0);
-            if (t == 2)
-                return prep_abort(tm, _GMP_is_prob_prime(tm->n));
-            if (mpz_cmp_ui(tm->n, 1) == 0)
+            } else if (t == 2) {
+                dz("div: t=2");
+                return prep_abort(tm, ct_prime(tm->n));
+            } else if (mpz_cmp_ui(tm->n, 1) == 0) {
+                dz("div: n=1");
                 return 0;
+            }
             ep = 0;
             un = mpz_cmp_ui(tm->n, 2 * tlim) > 0
                 ? 2 * tlim
@@ -636,15 +706,20 @@ bool tau_multi_prep(uint i) {
         }
     }
 
-    if (un < p * p)
-        return prep_abort(tm, t == (mpz_cmp_ui(tm->n, 1) == 0 ? 1 : 2));
-    if (mpz_cmp_ui(tm->n, 1) == 0)
+    if (un < p * p) {
+        dz("div: tail is prime");
+        return prep_abort(tm, t == ((mpz_cmp_ui(tm->n, 1) == 0) ? 1 : 2));
+    } else if (mpz_cmp_ui(tm->n, 1) == 0) {
+        dz("div: n = 1");
         return prep_abort(tm, t == 1);
-    if (t == 2)
-        return prep_abort(tm, _GMP_is_prob_prime(tm->n));
-    if (_GMP_is_prob_prime(tm->n))
+    } else if (t == 2) {
+        dz("div: t == 2");
+        return prep_abort(tm, ct_prime(tm->n));
+    }
+    dz("div: done, t=%u", t);
+    if (ct_prime(tm->n))
         return prep_abort(tm, t == 2);
-    tm->e = power_factor(tm->n, tm->n);
+    tm->e = ct_power(tm->n);
     if (!tm->e)
         tm->e = 1;
     if ((t & 1) && (tm->e & 1))
@@ -655,75 +730,51 @@ bool tau_multi_prep(uint i) {
     return 1;
 }
 
-bool tmf_2(t_tm *tm) { return pbrent63(tm->n, tmf, 400000); }
-bool tmf_3(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 5000, 5000); }
-bool tmf_4(t_tm *tm) { return tinyqs(tm->n, tmf); }
-bool tmf_5(t_tm *tm) { return squfof126(tm->n, tmf, 400000); }
-bool tmf_6(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 1000, 10000); }
-bool tmf_7(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 2000, 20000); }
-bool tmf_8(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 4000, 40000); }
-bool tmf_9(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 10000, 100000); }
-bool tmf_10(t_tm *tm) { return squfof126(tm->n, tmf, 1000000); }
-bool tmf_11(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 20000, 200000); }
-bool tmf_12(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 200, 4); }
-bool tmf_13(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 600, 20); }
-bool tmf_14(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 2000, 10); }
-bool tmf_15(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 200000, 3000000); }
-bool tmf_16(t_tm *tm) {
-    tm->B1 = 5000;
-    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 20);
-}
+bool tmf_2(t_tm *tm) { return ct_brent63(tm->n, tmf, 400000); }
+bool tmf_3(t_tm *tm) { return ct_pminus1(tm->n, tmf, 5000, 5000); }
+bool tmf_4(t_tm *tm) { return ct_tinyqs(tm->n, tmf); }
+bool tmf_5(t_tm *tm) { return ct_squfof(tm->n, tmf, 400000); }
+bool tmf_6(t_tm *tm) { return ct_pminus1(tm->n, tmf, 1000, 10000); }
+bool tmf_7(t_tm *tm) { return ct_pminus1(tm->n, tmf, 2000, 20000); }
+bool tmf_8(t_tm *tm) { return ct_pminus1(tm->n, tmf, 4000, 40000); }
+bool tmf_9(t_tm *tm) { return ct_pminus1(tm->n, tmf, 10000, 100000); }
+bool tmf_10(t_tm *tm) { return ct_squfof(tm->n, tmf, 1000000); }
+bool tmf_11(t_tm *tm) { return ct_pminus1(tm->n, tmf, 20000, 200000); }
+bool tmf_12(t_tm *tm) { return ct_ecm(tm->n, tmf, 200, 4); }
+bool tmf_13(t_tm *tm) { return ct_ecm(tm->n, tmf, 600, 20); }
+bool tmf_14(t_tm *tm) { return ct_ecm(tm->n, tmf, 2000, 10); }
+bool tmf_15(t_tm *tm) { return ct_pminus1(tm->n, tmf, 200000, 3000000); }
+bool tmf_16(t_tm *tm) { tm->B1 = 5000; return ct_ecm(tm->n, tmf, tm->B1, 20); }
 /* FIXME: surely this and the next case should have curves = 20?
  * There was a comment on each "go to QS" - is the intent to do
  * a quick hit here, then rely on QS for more progress?
  */
-bool tmf_17(t_tm *tm) {
-    tm->B1 = 10000;
-    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 2);
-}
-bool tmf_18(t_tm *tm) {
-    tm->B1 = 20000;
-    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 2);
-}
-bool tmf_19(t_tm *tm) {
-    tm->B1 = 30000;
-    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 20);
-}
-bool tmf_20(t_tm *tm) {
-    tm->B1 = 40000;
-    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 40);
-}
-bool tmf_21(t_tm *tm) {
-    tm->B1 = 80000;
-    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 40);
-}
-bool tmf_22(t_tm *tm) {
-    tm->B1 = 160000;
-    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 80);
-}
-bool tmf_23(t_tm *tm) {
-    tm->B1 = 320000;
-    return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1, 160);
-}
-bool tmf_24(t_tm *tm) { return do_GMP_simpqs(tm->n, tmf); }
-bool tmf_25(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 2 * tm->B1, 20); }
-bool tmf_26(t_tm *tm) { return _GMP_pbrent_factor(tm->n, tmf, 1, 1 << 20); }
-bool tmf_27(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 4 * tm->B1, 20); }
-bool tmf_28(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 8 * tm->B1, 20); }
-bool tmf_29(t_tm *tm) { return _GMP_holf_factor(tm->n, tmf, 1 << 20); }
-bool tmf_30(t_tm *tm) { return _GMP_pminus1_factor(tm->n, tmf, 5000000, 5000000 * 20); }
-bool tmf_31(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, 32 * tm->B1, 40); }
+bool tmf_17(t_tm *tm) { tm->B1 = 10000; return ct_ecm(tm->n, tmf, tm->B1, 2); }
+bool tmf_18(t_tm *tm) { tm->B1 = 20000; return ct_ecm(tm->n, tmf, tm->B1, 2); }
+bool tmf_19(t_tm *tm) { tm->B1 = 30000; return ct_ecm(tm->n, tmf, tm->B1, 20); }
+bool tmf_20(t_tm *tm) { tm->B1 = 40000; return ct_ecm(tm->n, tmf, tm->B1, 40); }
+bool tmf_21(t_tm *tm) { tm->B1 = 80000; return ct_ecm(tm->n, tmf, tm->B1, 40); }
+bool tmf_22(t_tm *tm) { tm->B1 = 160000; return ct_ecm(tm->n, tmf, tm->B1, 80); }
+bool tmf_23(t_tm *tm) { tm->B1 = 320000; return ct_ecm(tm->n, tmf, tm->B1, 160); }
+bool tmf_24(t_tm *tm) { return do_simpqs(tm->n, tmf); }
+bool tmf_25(t_tm *tm) { return ct_ecm(tm->n, tmf, 2 * tm->B1, 20); }
+bool tmf_26(t_tm *tm) { return ct_brent(tm->n, tmf, 1, 1 << 20); }
+bool tmf_27(t_tm *tm) { return ct_ecm(tm->n, tmf, 4 * tm->B1, 20); }
+bool tmf_28(t_tm *tm) { return ct_ecm(tm->n, tmf, 8 * tm->B1, 20); }
+bool tmf_29(t_tm *tm) { return ct_holf(tm->n, tmf, 1 << 20); }
+bool tmf_30(t_tm *tm) { return ct_pminus1(tm->n, tmf, 5000000, 5000000 * 20); }
+bool tmf_31(t_tm *tm) { return ct_ecm(tm->n, tmf, 32 * tm->B1, 40); }
 /* last resort tests */
-bool tmf_32(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 4, 100); }
-bool tmf_33(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 5, 100); }
-bool tmf_34(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 6, 100); }
-bool tmf_35(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 7, 100); }
-bool tmf_36(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 8, 100); }
-bool tmf_37(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 9, 100); }
-bool tmf_38(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 10, 100); }
-bool tmf_39(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 11, 100); }
-bool tmf_40(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 12, 100); }
-bool tmf_41(t_tm *tm) { return _GMP_ECM_FACTOR(tm->n, tmf, tm->B1 << 13, 100); }
+bool tmf_32(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 4, 100); }
+bool tmf_33(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 5, 100); }
+bool tmf_34(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 6, 100); }
+bool tmf_35(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 7, 100); }
+bool tmf_36(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 8, 100); }
+bool tmf_37(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 9, 100); }
+bool tmf_38(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 10, 100); }
+bool tmf_39(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 11, 100); }
+bool tmf_40(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 12, 100); }
+bool tmf_41(t_tm *tm) { return ct_ecm(tm->n, tmf, tm->B1 << 13, 100); }
 
 typedef bool (*t_tmf)(t_tm *tm);
 const t_tmf tmfa[] = {
@@ -865,7 +916,7 @@ bool tau_multi_run(uint count) {
                     return 0;
                 goto tmr_splice;
             } else if (tm->t == 2) {
-                if (!_GMP_is_prob_prime(tm->n))
+                if (!ct_prime(tm->n))
                     return 0;
                 goto tmr_splice;
             } else if (mpz_cmp_ui(tm->n, 1) == 0)
@@ -875,10 +926,10 @@ bool tau_multi_run(uint count) {
                 if (!is_taux(tm->n, 1, tm->t))
                     return 0;
                 goto tmr_splice;
-            } else if (_GMP_is_prob_prime(tm->n))
+            } else if (ct_prime(tm->n))
                 return 0;
             else if ((tm->t & 1) && (tm->e & 1)) {
-                e = power_factor(tm->n, tm->n);
+                e = ct_power(tm->n);
                 if (e == 0 || e & 1 || e > tm->t)
                     return 0;
                 tm->e *= e;
