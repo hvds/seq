@@ -1768,27 +1768,13 @@ void insert_stack(void) {
                 }
             }
         }
-        if (maxx == 0)
-            fail("no forced prime %u found", p);
-        --rstack[mini].count;
-        t_level *prev = &levels[level - 1];
-        t_level *cur = &levels[level];
-        cur->is_forced = 1;
-        /* CHECKME: this returns 0 if t=1 */
-        if (!apply_alloc(prev, cur, mini, p, maxx))
-            fail("could not apply_alloc(%u, %lu, %u)", mini, p, maxx);
-        for (uint vi = 0; vi < k; ++vi) {
-            t_fact *rs = &rstack[vi];
-            if (rs->count && rs->ppow[rs->count - 1].p == p) {
-                --rs->count;
-                if (vi == mini)
-                    continue;
-                uint x = rs->ppow[rs->count].e + 1;
-                if (!apply_secondary(cur, vi, p, x))
-                    fail("could not apply_secondary(%u, %lu, %u)", vi, p, x);
-            }
+        /* find the batch */
+        if (maxx == 0) {
+            if (fp->batch[fp->count -1].x != 0)
+                fail("no forced prime %u found", p);
+            /* this prime unforced, so any remaining ones are too */
+            break;
         }
-        ++level;
 
         uint bi;
         for (bi = 0; bi < fp->count; ++bi) {
@@ -1796,9 +1782,48 @@ void insert_stack(void) {
             if (b->x == maxx && b->vi == mini)
                 break;
         }
-        if (bi >= fp->count)
-            fail("no batch found for %u^{%u-1} at v_%u", p, maxx, mini);
+        if (bi >= fp->count) {
+            if (fp->batch[fp->count -1].x != 0)
+                fail("no batch found for %u^{%u-1} at v_%u", p, maxx, mini);
+            /* this prime unforced, so any remaining ones are too */
+            break;
+        }
+
+        --rstack[mini].count;
+        t_level *prev = &levels[level - 1];
+        t_level *cur = &levels[level];
+        cur->is_forced = 1;
         cur->bi = bi;
+
+        /* CHECKME: this returns 0 if t=1 */
+        if (!apply_alloc(prev, cur, mini, p, maxx))
+            fail("could not apply_alloc(%u, %lu, %u)", mini, p, maxx);
+        /* TODO: prep this, per apply_batch */
+        for (uint j = p; j <= mini; j += p) {
+            uint vj = mini - j;
+            uint x = simple_valuation(j, p) + 1;
+            t_fact *rs = &rstack[vj];
+            t_ppow *rsp = rs->count ? &rs->ppow[rs->count - 1] : NULL;
+            if (!rsp || rsp->p != p || rsp->e + 1 != x)
+                fail("missing secondary %u^%u at %u", p, x, vj);
+            --rs->count;
+
+            if (!apply_secondary(cur, vj, p, x))
+                fail("could not apply_secondary(%u, %lu, %u)", vj, p, x);
+        }
+        for (uint j = p; mini + j < k; j += p) {
+            uint vj = mini + j;
+            uint x = simple_valuation(j, p) + 1;
+            t_fact *rs = &rstack[vj];
+            t_ppow *rsp = rs->count ? &rs->ppow[rs->count - 1] : NULL;
+            if (!rsp || rsp->p != p || rsp->e + 1 != x)
+                fail("missing secondary %u^%u at %u", p, x, vj);
+            --rs->count;
+
+            if (!apply_secondary(cur, vj, p, x))
+                fail("could not apply_secondary(%u, %lu, %u)", vj, p, x);
+        }
+        ++level;
     }
     /* now insert the rest */
     while (1) {
