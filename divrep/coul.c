@@ -981,6 +981,10 @@ uint gcd_divisors(uint t) {
 }
 
 void walk_v(t_level *cur_level, mpz_t start) {
+#ifdef SQONLY
+    if (!cur_level->have_square)
+        return;
+#endif
     mpz_t *q[k];
     mpz_t *m = &cur_level->rq;
     uint t[k];
@@ -1266,7 +1270,11 @@ void walk_v(t_level *cur_level, mpz_t start) {
     }
 }
 
-void walk_1(uint vi) {
+void walk_1(t_level *cur_level, uint vi) {
+#ifdef SQONLY
+    if (!cur_level->have_square)
+        return;
+#endif
     t_value *vip = &value[vi];
     t_allocation *aip = &vip->alloc[vip->vlevel - 1];
     mpz_sub_ui(Z(w1_v), aip->q, vi);
@@ -1451,7 +1459,7 @@ bool apply_allocv(t_level *cur_level, uint vi, ulong p, uint x, mpz_t px) {
     else
         mpz_set(cur->q, px);
     if (cur->t == 1) {
-        walk_1(vi);
+        walk_1(cur_level, vi);
         return 0;
     }
 
@@ -1953,6 +1961,10 @@ int main(int argc, char **argv, char **envp) {
     init_post();
     report_init(stdout, argv[0]);
     if (rfp) report_init(rfp, argv[0]);
+#if 0
+    char s[] = "3 2^2.5 . 2.3^2 7^2 2^5 3.5^2 2 . 2^2.3 (3200400.00s)\n";
+    parse_305(s);
+#endif
     if (rstack)
         insert_stack();
     recurse();
