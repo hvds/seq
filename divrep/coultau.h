@@ -39,6 +39,7 @@ typedef struct s_tm {
     mpz_t n;    /* remaining value to test */
     uint t;     /* look for tau(n^e) = t */
     uint state; /* next factor test to try */
+    uint e;     /* power found */
     ulong bits; /* bitset showing which factor tests to try */
     ulong B1;   /* for ECM tests */
 } t_tm;

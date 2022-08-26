@@ -648,7 +648,13 @@ bool tau_multi_prep(uint i) {
         return prep_abort(tm, _GMP_is_prob_prime(tm->n));
     if (_GMP_is_prob_prime(tm->n))
         return prep_abort(tm, t == 2);
-
+    tm->e = power_factor(tm->n, tm->n);
+    if (!tm->e)
+        tm->e = 1;
+    if ((t & 1) && (tm->e & 1))
+        return 0;
+    if (!(t & 1) && !(tm->e & 1))
+        return 0;
     tm->t = t;
     return 1;
 }
@@ -815,6 +821,7 @@ bool tau_multi_run(uint count) {
         if (i < j) {
             mpz_swap(taum[i].n, taum[j].n);
             taum[i].t = taum[j].t;
+            taum[i].e = taum[j].e;
         }
         taum[i].state = 2;
         taum[i].bits = _find_tmfb(mpz_sizeinbase(taum[i].n, 2));
@@ -841,18 +848,19 @@ bool tau_multi_run(uint count) {
                 tm->state = i + 1;
                 continue;
             }
-            uint e = 1;
+            uint e = 0;
             while (mpz_divisible_p(tm->n, tmf)) {
                 ++e;
                 mpz_divexact(tm->n, tm->n, tmf);
             }
-            if (e == 1) {
+            if (e == 0) {
                 gmp_fprintf(stderr,
                     "state %d found non-divisible factor %Zd for %Zd\n",
                     tm->state, tmf, tm->n
                 );
                 exit(1);
             }
+            e = e * tm->e + 1;
             if (tm->t % e)
                 return 0;
             tm->t /= e;
@@ -873,6 +881,12 @@ bool tau_multi_run(uint count) {
                 goto tmr_splice;
             } else if (_GMP_is_prob_prime(tm->n))
                 return 0;
+            else if ((tm->t & 1) && (tm->e & 1)) {
+                e = power_factor(tm->n, tm->n);
+                if (e == 0 || e & 1 || e > tm->t)
+                    return 0;
+                tm->e *= e;
+            }
             tm->state = TM_INIT;
             next_i = TM_INIT;
             tm->bits = _find_tmfb(mpz_sizeinbase(tm->n, 2));
@@ -885,6 +899,7 @@ bool tau_multi_run(uint count) {
             if (j < count) {
                 mpz_swap(taum[j].n, taum[count].n);
                 taum[j].t = taum[count].t;
+                taum[j].e = taum[count].e;
                 taum[j].state = taum[count].state;
                 taum[j].bits = taum[count].bits;
             }
