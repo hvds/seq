@@ -180,12 +180,9 @@ fs_retry:
             return 1;
         fs->state = FS_POWER;
     case FS_POWER:
-        fs->ef = power_factor(fs->n, fs->f);
-        if (fs->ef) {
-            mpz_set(fs->n, fs->f);
-        } else {
+        fs->ef = power_factor(fs->n, fs->n);
+        if (!fs->ef)
             fs->ef = 1;
-        }
         fs->state = FS_LARGE;
 /*
  * This set of operations is meant to provide good performance for
@@ -495,10 +492,9 @@ int is_taux(mpz_t n, uint32_t k, uint32_t x) {
     mpz_set(fs.n, n);
     while (1) {
         if ((k & 1) && (x & 1)) {
-            int e = power_factor(fs.n, fs.f);
+            int e = power_factor(fs.n, fs.n);
             if (e == 0 || e & 1 || e > k)
                 break;
-            mpz_set(fs.n, fs.f);
             /* we actually need e divisible by gcd(map $_ - 1, divisors(k)) */
             x *= e;
         }
