@@ -1639,15 +1639,10 @@ ulong limit_p(uint vi, uint x, uint nextt) {
     }
 
     mpz_root(Z(lp_x), Z(lp_x), x - 1);
-    if (mpz_fits_ulong_p(Z(lp_x))) {
-        ulong lim = mpz_get_ui(Z(lp_x));
-        if (maxp && maxp < lim)
-            return maxp;
-        return lim;
-    }
-    diag_plain();
-    keep_diag();
-    report("002 %s: outsize limit %Zu\n", diag_buf, Z(lp_x));
+    if (maxp && mpz_cmp_ui(Z(lp_x), maxp) > 0)
+        return maxp;
+    if (mpz_fits_ulong_p(Z(lp_x)))
+        return mpz_get_ui(Z(lp_x));
     return 0;
 }
 
@@ -1716,7 +1711,18 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     uint nextt = ti / x;
     /* try p^{x-1} for all p until q_i . p^{x-1} . minrest > max + i */
     ulong limp = limit_p(vi, x, nextt);
-    if (limp < p + 1)
+    if (limp == 0) {
+        if (!prev->have_square) {
+            diag_plain();
+            keep_diag();
+            report("002 %s: outsize limit %Zu without square\n",
+                    diag_buf, Z(lp_x));
+            return 1;   /* skip this cycle */
+        }
+        /* force walk */
+        walk_v(prev, Z(zero));
+        return 0;
+    } else if (limp < p + 1)
         return 1;   /* nothing to do here */
     mpz_add_ui(Z(r_walk), max, vi);
     mpz_fdiv_q(Z(r_walk), Z(r_walk), prev->aq);
