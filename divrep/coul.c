@@ -197,7 +197,6 @@ ulong antigain = 0;
  */
 /* TODO: implement minp */
 uint minp = 0, maxp = 0;
-uint runid = 0;     /* runid for log file */
 bool opt_print = 0; /* print candidates instead of fully testing them */
 int debug = 0;     /* diag and keep every case seen */
 ulong randseed = 1; /* for ECM, etc */
@@ -791,13 +790,6 @@ void init_post(void) {
          */
         clear_randstate();
         init_randstate(randseed);
-    }
-    if (runid) {
-        char buf[100];
-        snprintf(buf, sizeof(buf), "%s/%u.%u-%u",
-                "logs/o", n, k, runid);
-        rpath = (char *)malloc(strlen(buf) + 1);
-        strcpy(rpath, buf);
     }
     if (rpath) {
         printf("path %s\n", rpath);
@@ -2048,9 +2040,10 @@ int main(int argc, char **argv, char **envp) {
             set_gain(&arg[2]);
         else if (arg[1] == 'p')
             set_cap(&arg[2]);
-        else if (arg[1] == 'r')
-            runid = strtoul(&arg[2], NULL, 10);
-        else if (arg[1] == 'f')
+        else if (arg[1] == 'r') {
+            rpath = (char *)malloc(strlen(&arg[2]) + 1);
+            strcpy(rpath, &arg[2]);
+        } else if (arg[1] == 'f')
             force_all = strtoul(&arg[2], NULL, 10);
         else if (arg[1] == 's')
             randseed = strtoul(&arg[2], NULL, 10);
