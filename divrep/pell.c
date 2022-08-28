@@ -144,49 +144,49 @@ void contfrac(void) {
     bool qd = mpz_perfect_square_p(Z(cf_d));
 
     while (1) {
-        mpz_t *cura = &cft.za[cft.size - 3];
-        mpz_t *curb = &cft.za[cft.size - 2];
-        mpz_t *curc = &cft.za[cft.size - 1];
-        if (mpz_sgn(*curc) == 0) {
+        uint cura = cft.size - 3;
+        uint curb = cft.size - 2;
+        uint curc = cft.size - 1;
+        if (mpz_sgn(cft.za[curc]) == 0) {
             fprintf(stderr, "Division by zero\n");
             exit(1);
         }
-        if (mpz_sgn(*cura) == 0 && mpz_sgn(*curb) == 0)
+        if (mpz_sgn(cft.za[cura]) == 0 && mpz_sgn(cft.za[curb]) == 0)
             return;
-        if (mpz_sgn(*curc) < 0) {
-            mpz_mul_si(*cura, *cura, -1);
-            mpz_mul_si(*curb, *curb, -1);
-            mpz_mul_si(*curc, *curc, -1);
+        if (mpz_sgn(cft.za[curc]) < 0) {
+            mpz_mul_si(cft.za[cura], cft.za[cura], -1);
+            mpz_mul_si(cft.za[curb], cft.za[curb], -1);
+            mpz_mul_si(cft.za[curc], cft.za[curc], -1);
         }
-        mpz_gcd(Z(zt1), *cura, *curb);
-        mpz_gcd(Z(zt1), Z(zt1), *curc);
+        mpz_gcd(Z(zt1), cft.za[cura], cft.za[curb]);
+        mpz_gcd(Z(zt1), Z(zt1), cft.za[curc]);
         if (mpz_cmp_ui(Z(zt1), 1) > 0) {
-            mpz_divexact(*cura, *cura, Z(zt1));
-            mpz_divexact(*curb, *curb, Z(zt1));
-            mpz_divexact(*curc, *curc, Z(zt1));
+            mpz_divexact(cft.za[cura], cft.za[cura], Z(zt1));
+            mpz_divexact(cft.za[curb], cft.za[curb], Z(zt1));
+            mpz_divexact(cft.za[curc], cft.za[curc], Z(zt1));
         }
 
         /* CHECKME: do we need something faster than linear search? */
         for (uint i = 0; i < cft.size - 3; i += 3) {
-            if (mpz_cmp(cft.za[i], *cura) == 0
-                && mpz_cmp(cft.za[i + 1], *curb) == 0
-                && mpz_cmp(cft.za[i + 2], *curc) == 0
+            if (mpz_cmp(cft.za[i], cft.za[cura]) == 0
+                && mpz_cmp(cft.za[i + 1], cft.za[curb]) == 0
+                && mpz_cmp(cft.za[i + 2], cft.za[curc]) == 0
             ) {
                 split = i / 3;
                 goto cf_done;
             }
         }
 
-        mpz_mul(Z(zt1), *curb, *curb);
+        mpz_mul(Z(zt1), cft.za[curb], cft.za[curb]);
         mpz_mul(Z(zt1), Z(zt1), Z(cf_d));
         mpz_root(Z(zt1), Z(zt1), 2);
-        if (mpz_sgn(*curb) < 0) {
+        if (mpz_sgn(cft.za[curb]) < 0) {
             mpz_mul_si(Z(zt1), Z(zt1), -1);
             if (!qd)
                 mpz_sub_ui(Z(zt1), Z(zt1), 1);
         }
-        mpz_add(Z(zt1), Z(zt1), *cura);
-        mpz_fdiv_q(Z(zt1), Z(zt1), *curc);
+        mpz_add(Z(zt1), Z(zt1), cft.za[cura]);
+        mpz_fdiv_q(Z(zt1), Z(zt1), cft.za[curc]);
         resize_zarray(&cf_initial, cf_initial.size + 1);
         mpz_set(cf_initial.za[cf_initial.size++], Z(zt1));
 
@@ -194,19 +194,19 @@ void contfrac(void) {
          * = (ac - c^2x - bc sqrt(d)) / ((a + cx)^2 - b^2d) */
         resize_zarray(&cft, cft.size + 3);
         cft.size += 3;
-        mpz_t *nexta = &cft.za[cft.size - 3];
-        mpz_t *nextb = &cft.za[cft.size - 2];
-        mpz_t *nextc = &cft.za[cft.size - 1];
+        uint nexta = cft.size - 3;
+        uint nextb = cft.size - 2;
+        uint nextc = cft.size - 1;
 
-        mpz_mul(Z(zt1), Z(zt1), *curc);
-        mpz_sub(Z(zt2), *cura, Z(zt1));
-        mpz_mul(*nexta, *curc, Z(zt2));
-        mpz_mul(*nextb, *curb, *curc);
-        mpz_mul_si(*nextb, *nextb, -1);
+        mpz_mul(Z(zt1), Z(zt1), cft.za[curc]);
+        mpz_sub(Z(zt2), cft.za[cura], Z(zt1));
+        mpz_mul(cft.za[nexta], cft.za[curc], Z(zt2));
+        mpz_mul(cft.za[nextb], cft.za[curb], cft.za[curc]);
+        mpz_mul_si(cft.za[nextb], cft.za[nextb], -1);
         mpz_mul(Z(zt2), Z(zt2), Z(zt2));
-        mpz_mul(Z(zt1), *curb, *curb);
+        mpz_mul(Z(zt1), cft.za[curb], cft.za[curb]);
         mpz_mul(Z(zt1), Z(zt1), Z(cf_d));
-        mpz_sub(*nextc, Z(zt2), Z(zt1));
+        mpz_sub(cft.za[nextc], Z(zt2), Z(zt1));
     }
   cf_done:
     resize_zarray(&cf_recur, cf_initial.size - split);
