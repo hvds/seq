@@ -2,15 +2,15 @@ TODO (high priority):
 - calculate even more accurate mintau()
   - and beyond oul for suppressed factors
 - fix linear search in pell.c:contfrac()
+- 'coul -p20 -x1e80 66 5' spends all its time finding allrootmod()
+  results, almost all of which are immediately greater than endr
 
 CHECKME:
 - inject failures can clash with walk_1() successes
-- random seeding in _GMP_init may stop us getting consistent timings
-- after parallelization, check if picking out semiprimes can help us
 - can best_v do better by picking the most constrained?
 
 TODO (lower priority):
-- stash walk_1 values in an array, test in order (and in parallel)
+- add parallelization support to walk_1
 - maintain a dummy alloc[0] on values[], to save lots of special handling
   - this may remove the need for m[] and t[] in walk_v()
 - cache max prime used to short-circuit "used" check
@@ -28,6 +28,5 @@ TODO (lower priority):
 - check if we can speed up has_sqrtmod()
 - for cases like n=54, t=54 we should disallow eg x=9, since we will already
   have tried all x=3 and x=6 before that
-- work out how to get the Math::Prime::Util::GMP code we need more portably
 - new option to show fixed-prime patterns, with indices
 - sharding by new option to select one or more fixed-prime patterns by index
