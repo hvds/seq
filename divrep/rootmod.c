@@ -20,7 +20,8 @@ typedef enum {
     E_RESULTS_MAX
 } e_results;
 
-t_results ra[E_RESULTS_MAX];
+uint ra_size;   /* init to E_RESULTS_MAX + maxlevels */
+t_results *ra;
 
 typedef struct s_lpow {
     ulong p;
@@ -93,8 +94,9 @@ void _swapz_r(e_results e) {
     ra[rm_base].count = 0;
 }
 
-void init_rootmod(void) {
-    memset(ra, 0, E_RESULTS_MAX * sizeof(t_results));
+void init_rootmod(uint levels) {
+    ra_size = levels + E_RESULTS_MAX;
+    ra = (t_results *)calloc(ra_size, sizeof(t_results));
     resize_results(&ra[rm_base], 16);
     for (e_rmstash e = 0; e < E_RMSTASH_MAX; ++e)
         mpz_init(Z(e));
@@ -107,7 +109,7 @@ void done_rootmod(void) {
     free(rm_nf);
     for (e_rmstash e = 0; e < E_RMSTASH_MAX; ++e)
         mpz_clear(Z(e));
-    for (uint i = 0; i < E_RESULTS_MAX; ++i) {
+    for (uint i = 0; i < ra_size; ++i) {
         t_results *rp = &ra[i];
         if (rp->size) {
             for (uint j = 0; j < rp->size; ++j)

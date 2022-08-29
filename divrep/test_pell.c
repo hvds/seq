@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     mpz_init(zy);
     _GMP_init();
     init_tau();
-    init_rootmod();
+    init_rootmod(1);
     init_pell();
     new_pell(zA, zD, in, zlimit);
     while (next_pell(zx, zy)) {

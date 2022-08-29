@@ -458,7 +458,6 @@ void init_pre(void) {
     /* we may do this again after options handled, to select real seed */
 
     init_tau();
-    init_rootmod();
     init_pell();
     ticks_per_second = sysconf(_SC_CLK_TCK);
     ticks = utime();
@@ -822,6 +821,7 @@ void init_post(void) {
     for (int i = 0; i < nf.count; ++i)
         maxfact += nf.ppow[i].e;
     maxodd = maxfact - nf.ppow[0].e;    /* n is always even */
+    init_rootmod(k * maxfact + 1);
 
     prep_fact();
     prep_maxforce();
