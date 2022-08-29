@@ -8,12 +8,6 @@
 extern void fs_init(factor_state *fs);
 extern void fs_clear(factor_state *fs);
 
-typedef struct s_results {
-    uint size;
-    uint count;
-    mpz_t *r;
-} t_results;
-
 typedef enum {
     rm_base,
     arm_scratch,
