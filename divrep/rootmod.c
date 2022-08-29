@@ -51,6 +51,10 @@ mpz_t rm_stash[E_RMSTASH_MAX];
 static inline mpz_t *ZP(e_rmstash e) { return &rm_stash[e]; }
 #define Z(e) *ZP(e)
 
+t_results *res_array(uint level) {
+    return &ra[E_RESULTS_MAX + level];
+}
+
 void resize_results(t_results *rp, uint size) {
     if (rp->size < size) {
         if (size < rp->size + 16)
@@ -550,7 +554,7 @@ void _allrootmod_kprime(mpz_t a, uint k, mpz_t n, t_lpow *nf, uint nfc) {
  * before they have finished looking at the results.
  *
  */
-uint allrootmod(mpz_t **result, mpz_t a, uint k, mpz_t n) {
+void allrootmod(uint level, mpz_t a, uint k, mpz_t n) {
     t_results *rp = &ra[rm_base];
     rp->count = 0;
 
@@ -613,8 +617,8 @@ uint allrootmod(mpz_t **result, mpz_t a, uint k, mpz_t n) {
   arm_done:
     if (rp->count > 1)
         qsort(rp->r, rp->count, sizeof(mpz_t), &_mpz_comparator);
-    *result = rp->r;
-    return rp->count;
+    /* swap from rm_base to the requested external array */
+    _swapz_r(E_RESULTS_MAX + level);
 }
 
 #undef Z

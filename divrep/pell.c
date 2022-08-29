@@ -345,16 +345,16 @@ void init_negpell(void) {
 void init_genpell(void) {
     mpz_abs(Z(aN), Z(N));
     /* if D is not a quadratic residue (mod N), there can be no solution */
-    mpz_t *qr;
-    uint qrc = allrootmod(&qr, Z(D), 2, Z(aN));
-    if (qrc == 0) {
+    allrootmod(0, Z(D), 2, Z(aN));
+    t_results *qrp = res_array(0);
+    if (qrp->count == 0) {
         type = fail;
         return;
     }
 
     zmatch.size = 0;
-    for (uint qri = 0; qri < qrc; ++qri) {
-        mpz_set(Z(cf_a), qr[qri]);
+    for (uint qri = 0; qri < qrp->count; ++qri) {
+        mpz_set(Z(cf_a), qrp->r[qri]);
         mpz_set_ui(Z(cf_b), 1);
         mpz_set(Z(cf_c), Z(aN));
         mpz_set(Z(cf_d), Z(D));
@@ -362,7 +362,7 @@ void init_genpell(void) {
         init_convergents();
         if (!next_convergent())
             continue;
-        mpz_set(Z(Pi), qr[qri]);
+        mpz_set(Z(Pi), qrp->r[qri]);
         mpz_set(Z(Qi), Z(aN));
         mpz_set(Z(Ai), Z(p));
         mpz_set(Z(Bi), Z(q));
@@ -396,7 +396,7 @@ void init_genpell(void) {
             next_convergent();
             if (mpz_cmp_ui(Z(Qn), 1) == 0) {
                 mpz_mul(Z(Gi), Z(aN), Z(Ai));
-                mpz_mul(Z(zt1), qr[qri], Z(Bi));
+                mpz_mul(Z(zt1), qrp->r[qri], Z(Bi));
                 mpz_sub(Z(Gi), Z(Gi), Z(zt1));
                 mpz_abs(Z(Gi), Z(Gi));
                 mpz_mul(Z(zt1), Z(Gi), Z(Gi));

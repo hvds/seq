@@ -1208,9 +1208,9 @@ void walk_v(t_level *cur_level, mpz_t start) {
         /* gcd(d - 1) for all divisors d of ti */
         uint xi = divisors[ti].gcddm;
         /* we need to find all r: r^x_i == o_i (mod qq_i) */
-        mpz_t *xmod;
-        uint xmc = allrootmod(&xmod, *oi, xi, *qqi);
-        if (xmc == 0)
+        allrootmod(0, *oi, xi, *qqi);
+        t_results *xr = res_array(0);
+        if (xr->count == 0)
             return;
         uint rindex = 0;
         if (mpz_sgn(Z(wv_ati)) > 0) {
@@ -1220,8 +1220,8 @@ void walk_v(t_level *cur_level, mpz_t start) {
             mpz_fdiv_qr(Z(wv_startr), Z(wv_temp), Z(wv_startr), *qqi);
             /* Note: on recover, we expect an exact match here, but on
              * normal entry we don't. */
-            for (uint xmi = 0; xmi < xmc; ++xmi) {
-                int cmp = mpz_cmp(xmod[xmi], Z(wv_temp));
+            for (uint xmi = 0; xmi < xr->count; ++xmi) {
+                int cmp = mpz_cmp(xr->r[xmi], Z(wv_temp));
                 if (cmp == 0) {
                     rindex = xmi;
                     break;
@@ -1232,11 +1232,11 @@ void walk_v(t_level *cur_level, mpz_t start) {
                     }
                     gmp_fprintf(stderr,
                         "from restart %Zu no match found for mod %Zu < %Zu\n",
-                        Z(wv_ati), Z(wv_temp), xmod[xmi]
+                        Z(wv_ati), Z(wv_temp), xr->r[xmi]
                     );
                     exit(1);
                 }
-                if (xmi + 1 == xmc) {
+                if (xmi + 1 == xr->count) {
                     if (mpz_sgn(start) == 0) {
                         rindex = 0;
                         mpz_add_ui(Z(wv_startr), Z(wv_startr), 1);
@@ -1244,7 +1244,7 @@ void walk_v(t_level *cur_level, mpz_t start) {
                     }
                     gmp_fprintf(stderr,
                         "from start %Zu no match found for mod %Zu > %Zu\n",
-                        Z(wv_ati), Z(wv_temp), xmod[xmi]
+                        Z(wv_ati), Z(wv_temp), xr->r[xmi]
                     );
                     exit(1);
                 }
@@ -1260,7 +1260,7 @@ void walk_v(t_level *cur_level, mpz_t start) {
         mpz_root(Z(wv_endr), Z(wv_endr), xi);
 
         while (1) {
-            mpz_add(Z(wv_r), Z(wv_qqr), xmod[rindex]);
+            mpz_add(Z(wv_r), Z(wv_qqr), xr->r[rindex]);
             if (mpz_cmp(Z(wv_r), Z(wv_endr)) > 0)
                 return;
             ++countwi;
@@ -1301,7 +1301,7 @@ void walk_v(t_level *cur_level, mpz_t start) {
             return;
           next_sqati:
             ++rindex;
-            if (rindex >= xmc) {
+            if (rindex >= xr->count) {
                 mpz_add(Z(wv_qqr), Z(wv_qqr), *qqi);
                 rindex = 0;
             }
