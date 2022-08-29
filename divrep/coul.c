@@ -122,17 +122,17 @@ t_square *sqspare = NULL;
 /* Each level of "recursion" allocates one prime power p^{x-1} with x | n
  * to one value v_i. It may be "forced", in which case it is part of a
  * batch of simultaneous allocations of the same p to different i (and
- * in which case derecursion should unwind the whole batch), or not, in
- * which case no other v_j will be divisible by p.
+ * in which case derecursion should unwind the whole batch), or "unforced",
+ * in which case no other v_j will be divisible by p.
  */
 typedef struct s_level {
     bool is_forced;
-    uint vi;    /* allocation of p^x into v_i */
+    uint vi;        /* allocation of p^x into v_i */
     ulong p;
     uint x;
     uint have_square;   /* number of v_i residues forced square so far */
     uint nextpi;    /* index of least prime not yet allocated */
-    /* union */
+    /* (optional) union */
         uint bi;    /* batch index, if forced */
     /* .. with */
         uint di;    /* divisor index, if unforced */
@@ -140,8 +140,8 @@ typedef struct s_level {
         ulong limp; /* limit for p */
         uint max_at;/* which max value used for limp calculation */
     /* end union */
-    mpz_t aq;   /* running LCM of allocated p^x */
-    mpz_t rq;   /* running CRT of (-i) % p^x */
+    mpz_t aq;       /* running LCM of allocated p^x */
+    mpz_t rq;       /* running CRT of (-i) % p^x */
 } t_level;
 t_level *levels = NULL;
 uint level = 0;
