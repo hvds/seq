@@ -62,17 +62,20 @@ typedef struct s_mod {
  * highest prime factor, then ascending. 'high' is the highest prime
  * factor of 'i'; 'alldiv' is the number of factors; 'highdiv' is the
  * number of factors that are a multiple of 'high'; 'sumpm' is sum{p_j - 1}
- * of the primes dividing 'i', with multiplicity.
+ * of the primes dividing 'i', with multiplicity; 'gcddm' is gcd{d_j - 1}
+ * of the divisors of i.
  * Eg divisors[18] = {
  *   alldiv = 6, highdiv = 4, high = 3, sumpm = 5 = (3-1)+(3-1)+(2-1),
- *   div = = [3, 6, 9, 18, 2, 1]
+ *   gcddm = 1, div = = [3, 6, 9, 18, 2, 1]
  * }
+ * whereas divisors[65].gcddm = gcd(1-1, 5-1, 13-1, 65-1) = 4.
  */
 typedef struct s_divisors {
     uint alldiv;    /* number of divisors of i */
     uint highdiv;   /* number of divisors that are multiples of 'high' */
     uint high;      /* highest prime dividing i */
     uint sumpm;     /* sum{p_j - 1} of primes dividing i /*/
+    uint gcddm;     /* gcd{d_j - 1} of divisors of i */
     uint *div;      /* array of divisors of i */
 } t_divisors;
 t_divisors *divisors = NULL;
@@ -615,6 +618,8 @@ ulong next_prime(ulong cur) {
  * skip x' if x' < x and high(x') == high(x).
  * mintau() wants sumpm, sum{p_j - 1} of the primes dividing t_i with
  * multiplicity.
+ * When a square is fixed, walk_v() wants gcddm, the gcd{d_j-1} of all
+ * divisors d_j of t_i.
  */
 void prep_fact(void) {
     t_fact f;
@@ -641,6 +646,11 @@ void prep_fact(void) {
                 ++dp->highdiv;
         }
         qsort(dp->div, dp->alldiv, sizeof(uint), &cmp_high);
+
+        uint g = dp->div[0] - 1;
+        for (uint di = 1; di < dp->alldiv; ++di)
+            g = tiny_gcd(g, dp->div[di] - 1);
+        dp->gcddm = g;
     }
     free_fact(&f);
 }
@@ -992,15 +1002,6 @@ bool test_zother(mpz_t qq, mpz_t o, mpz_t ati, uint t) {
     return is_taux(Z(wv_cand), t, 1);
 }
 
-uint gcd_divisors(uint t) {
-    assert(t > 1);
-    t_divisors *dp = &divisors[t];
-    uint g = dp->div[0] - 1;
-    for (uint di = 1; di < dp->alldiv; ++di)
-        g = tiny_gcd(g, dp->div[di] - 1);
-    return g;
-}
-
 /* Sort need_prime by qq multiplier ascending */
 int prime_comparator(const void *va, const void *vb) {
     uint a = *(uint *)va;
@@ -1202,7 +1203,8 @@ void walk_v(t_level *cur_level, mpz_t start) {
             /* clear_pell(); */
             return;
         }
-        uint xi = gcd_divisors(ti);
+        /* gcd(d - 1) for all divisors d of ti */
+        uint xi = divisors[ti].gcddm;
         /* we need to find all r: r^x_i == o_i (mod qq_i) */
         mpz_t *xmod;
         uint xmc = allrootmod(&xmod, *oi, xi, *qqi);
