@@ -61,7 +61,7 @@ typedef struct s_mod {
 /* 'divisors[i].div' is a list of divisors of 'i' in descending order of
  * highest prime factor, then ascending. 'high' is the highest prime
  * factor of 'i'; 'alldiv' is the number of factors; 'highdiv' is the
- * number of factors that are a multiple of 'high'; 'sumpm' is sum{p_i - 1}
+ * number of factors that are a multiple of 'high'; 'sumpm' is sum{p_j - 1}
  * of the primes dividing 'i', with multiplicity.
  * Eg divisors[18] = {
  *   alldiv = 6, highdiv = 4, high = 3, sumpm = 5 = (3-1)+(3-1)+(2-1),
@@ -69,11 +69,11 @@ typedef struct s_mod {
  * }
  */
 typedef struct s_divisors {
-    uint alldiv;
-    uint highdiv;
-    uint high;
-    uint sumpm;
-    uint *div;
+    uint alldiv;    /* number of divisors of i */
+    uint highdiv;   /* number of divisors that are multiples of 'high' */
+    uint high;      /* highest prime dividing i */
+    uint sumpm;     /* sum{p_j - 1} of primes dividing i /*/
+    uint *div;      /* array of divisors of i */
 } t_divisors;
 t_divisors *divisors = NULL;
 
@@ -612,7 +612,9 @@ ulong next_prime(ulong cur) {
  * prep_forcep() wants the full list of divisors, but in similar order.
  * For each power, recurse() also wants to know which powers to skip
  * if the previous power was a given value, but that's simply:
- * skip x' if x' < x and high(x') == high(x)
+ * skip x' if x' < x and high(x') == high(x).
+ * mintau() wants sumpm, sum{p_j - 1} of the primes dividing t_i with
+ * multiplicity.
  */
 void prep_fact(void) {
     t_fact f;
