@@ -1517,7 +1517,11 @@ bool alloc_square(t_level *cur, uint vi) {
     return 1;
 }
 
-/* returns TRUE if this newly creates a square */
+/* Allocate p^{x-1} to v_{vi}. Returns FALSE if it is invalid, or if no
+ * work to do.
+ * Updates value[vi]; checks for a new square; calls walk_1() directly
+ * if remaining tau == 1.
+ */
 bool apply_allocv(t_level *cur_level, uint vi, ulong p, uint x, mpz_t px) {
     t_value *v = &value[vi];
     t_allocation *prev = (v->vlevel) ? &v->alloc[v->vlevel - 1] : NULL;
@@ -1551,7 +1555,10 @@ bool apply_allocv(t_level *cur_level, uint vi, ulong p, uint x, mpz_t px) {
     return 1;
 }
 
-/* Allocate p^{x-1} to v_{vi}. Returns FALSE if it is invalid. */
+/* Allocate p^{x-1} to v_{vi}. Returns FALSE if it is invalid, or if
+ * no work to do.
+ * Updates level and value.
+ */
 bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     cur->vi = vi;
     cur->p = p;
