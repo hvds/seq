@@ -577,6 +577,7 @@ uint allrootmod(mpz_t **result, mpz_t a, uint k, mpz_t n) {
 
     uint ki = 0;
     uint ke = 0;
+    save_base(Z(arm_a));
     t_results *rq = &ra[arm_scratch];
     while (1) {
         _swapz_r(arm_scratch);
