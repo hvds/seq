@@ -1357,6 +1357,8 @@ void walk_1(t_level *cur_level, uint vi) {
 
     if (mpz_cmp(Z(w1_v), min) < 0)
         return;
+    ++countw;
+
     uint t[k];
     uint need_prime[k];
     uint need_square[k];
@@ -1377,7 +1379,7 @@ void walk_1(t_level *cur_level, uint vi) {
                 return;
         }
         t[vj] = ajp ? ajp->t : n;
-        if (t[vj] = 1) {
+        if (t[vj] == 1) {
             if (mpz_cmp_ui(Z(w1_j), 1) != 0)
                 return;
         } else if (t[vj] == 2)
@@ -1388,6 +1390,7 @@ void walk_1(t_level *cur_level, uint vi) {
             need_other[noc++] = vj;
         mpz_set(wv_o[vj], Z(w1_j));
     }
+    ++countwi;
     for (uint i = 0; i < npc; ++i)
         if (!_GMP_is_prob_prime(wv_o[need_prime[i]]))
             return;
