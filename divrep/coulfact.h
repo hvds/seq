@@ -3,7 +3,7 @@
 #include <gmp.h>
 
 typedef struct s_ppow {
-    uint p;
+    ulong p;
     uint e;
 } t_ppow;
 typedef struct s_fact {

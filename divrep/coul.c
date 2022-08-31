@@ -1843,7 +1843,7 @@ void insert_stack(void) {
         if (rs->count == 0)
             break;
         --rs->count;
-        uint p = rs->ppow[rs->count].p;
+        ulong p = rs->ppow[rs->count].p;
         uint x = rs->ppow[rs->count].e + 1;
 
         t_level *prev = &levels[level - 1];
