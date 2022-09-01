@@ -1726,7 +1726,12 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
             return 1;   /* skip this cycle */
         }
         /* force walk */
+#ifdef SQONLY
+        if (prev->have_square)
+            walk_v(prev, Z(zero));
+#else
         walk_v(prev, Z(zero));
+#endif
         return 0;
     } else if (limp < p + 1)
         return 1;   /* nothing to do here */
@@ -1749,7 +1754,14 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     if (mpz_fits_ulong_p(Z(r_walk))
         && mpz_get_ui(Z(r_walk)) < limp - p
     ) {
+#ifdef SQONLY
+        if (prev->have_square)
+            walk_v(prev, Z(zero));
+        else if (level > 1 && !prev->is_forced)
+            prev->p = prev->limp;
+#else
         walk_v(prev, Z(zero));
+#endif
         return 0;
     }
     cur->p = p;
@@ -1935,7 +1947,14 @@ void recurse(void) {
              * give same result each time.
              */
             if (vi == k) {
+#ifdef SQONLY
+                if (prev_level->have_square)
+                    walk_v(prev_level, Z(zero));
+                else if (level > 1 && !prev_level->is_forced)
+                    prev_level->p = prev_level->limp;
+#else
                 walk_v(prev_level, Z(zero));
+#endif
                 goto derecurse;
             }
             t_value *vp = &value[vi];
