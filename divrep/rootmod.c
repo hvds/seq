@@ -44,7 +44,7 @@ typedef enum {
     armpp_px,
     armc_n, armc_inv,
     arzpp_px,
-    armppr_a, armppr_z, armppr_px, armppr_px2,
+    armppr_a, armppr_z, armppr_px, armppr_px2, armppr_pxm, armppr_t,
     earmpp_t, earmpp_t1, earmpp_t2, earmpp_g,
     armp_a, armp_t,
     tsp_A, tsp_B, tsp_T, tsp_y, tsp_z,
@@ -205,6 +205,8 @@ void _ts_prime(mpz_t a, uint k, ulong p) {
     }
 
     ulong ke = (p - 1) / r;
+    /* note: k is prime, so does not divide r unless r == 1; hence the
+     * inverse must exist. */
     mpz_powm_ui(Z(rm_r), a, simple_invert(k % r, r), Z(rm_p));
     mpz_invert(Z(tsp_B), a, Z(rm_p));
     ulong ainv = mpz_get_ui(Z(tsp_B));
@@ -364,12 +366,21 @@ void _allrootmod_prime_power_r(mpz_t a, uint k, ulong p, uint e) {
 
     mpz_mod(Z(armppr_a), a, Z(armppr_px));
     mpz_pow_ui(Z(armppr_px2), Z(rm_p), e + 1);
+    mpz_pow_ui(Z(armppr_pxm), Z(rm_p), e - 1);
     for (uint ri = 0; ri < r2->count; ++ri) {
         _eval_armpp(r2->r[ri], a, k, Z(armppr_px), Z(armppr_px2));
         /* check if it's a solution */
         mpz_powm_ui(Z(armppr_z), Z(rm_r), k, Z(armppr_px));
-        if (mpz_cmp(Z(armppr_z), Z(armppr_a)) == 0)
+        if (mpz_cmp(Z(armppr_z), Z(armppr_a)) != 0)
+            continue;
+        /* it's a solution, save all variants r + rjp^{e-1} */
+        mpz_mul(Z(armppr_t), Z(rm_r), Z(armppr_pxm));
+        mpz_mod(Z(armppr_t), Z(armppr_t), Z(armppr_px));
+        for (uint j = 0; j < p; ++j) {
             save_base(Z(rm_r));
+            mpz_add(Z(rm_r), Z(rm_r), Z(armppr_t));
+            mpz_mod(Z(rm_r), Z(rm_r), Z(armppr_px));
+        }
     }
     /* now deduplicate */
     if (rp->count == 0)
