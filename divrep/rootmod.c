@@ -435,7 +435,7 @@ void _allrootmod_prime_power(mpz_t a, uint k, ulong p, uint e, mpz_t px) {
         return;
     }
 
-    uint v = valuation(Z(rm_r), a, p);
+    uint v = (mpz_sgn(a) == 0) ? e : valuation(Z(rm_r), a, p);
     if (v == 0) {
         _allrootmod_prime_power_r(a, k, p, e);
         return;
