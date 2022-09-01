@@ -20,7 +20,7 @@ typedef enum {
     armkp_base, armkp_new, armkp_stash,
     armc_r1,
     armpp_copy,
-    armppr_copy,
+    armppr_copy, armppr_stash,
     asmf_r1, asmf_r2,
 
     E_RESULTS_MAX
@@ -270,7 +270,7 @@ void _eval_armpp(mpz_t s, mpz_t a, uint k, mpz_t px, mpz_t px2) {
     return;
 }
 
-/* Save the kth roots of a (mod p) given k prime.
+/* Append the kth roots of a (mod p) given k prime.
  */
 void _allrootmod_prime(mpz_t za, uint k, ulong p) {
     ulong a = mpz_fdiv_r_ui(Z(armp_a), za, p);
@@ -319,6 +319,7 @@ void _allrootmod_prime(mpz_t za, uint k, ulong p) {
     }
 
     t_results *rp = &ra[rm_base];
+    uint end = rp->count + k;
     save_base(Z(rm_r));
     ulong r = mpz_get_ui(Z(rm_r));
     while (1) {
@@ -326,7 +327,7 @@ void _allrootmod_prime(mpz_t za, uint k, ulong p) {
         mpz_mod_ui(Z(rm_r), Z(rm_r), p);
         if (mpz_cmp_ui(Z(rm_r), r) == 0)
             break;
-        if (rp->count == k) {
+        if (rp->count == end) {
             fprintf(stderr,
                 "excess roots found for _allrootmod_prime(%lu, %u, %lu)",
                 a, k, p
@@ -338,22 +339,32 @@ void _allrootmod_prime(mpz_t za, uint k, ulong p) {
     return;
 }
 
-/* Save the kth roots of a (mod p^e) given k prime, a coprime to p.
+/* Append the kth roots of a (mod p^e) given k prime, a coprime to p.
  */
 void _allrootmod_prime_power_r(mpz_t a, uint k, ulong p, uint e) {
     if (e == 1) {
         _allrootmod_prime(a, k, p);
         return;
     }
+
+    t_results *rp = &ra[rm_base];
+    /* if results to append to (at top level), stash them for recursion */
+    bool append = rp->count ? 1 : 0;
+    if (append)
+        _swapz_r(armppr_stash);
+
     uint e2 = (p > 2 || e < 5) ? ((e + 1) >> 1) : ((e + 3) >> 1);
     /* Recurse until e = 1, then walk back up the stack */
     _allrootmod_prime_power_r(a, k, p, e2);
 
-    t_results *rp = &ra[rm_base];
     t_results *r2 = &ra[armppr_copy];
     if (rp->count == 0)
         return;
     _swapz_r(armppr_copy);
+
+    /* if had results to append to, we're at top level - unstash them */
+    if (append)
+        _swap_r(armppr_stash);
 
     mpz_pow_ui(Z(armppr_px), Z(rm_p), e);
     if (k != p) {
