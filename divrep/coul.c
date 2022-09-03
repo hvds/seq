@@ -596,7 +596,7 @@ void recover(void) {
 
 int cmp_high(const void *va, const void *vb) {
     uint a = *(uint *)va, b = *(uint *)vb;
-    return divisors[b].high - divisors[a].high;
+    return (int)divisors[b].high - (int)divisors[a].high;
 }
 
 /* TODO: use MPU code for ulong next_prime */
