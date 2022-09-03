@@ -20,6 +20,9 @@ points to the directory where the Math-Prime-Util-GMP source can be found.
 There is no installation process: it is intended that the code should be
 built and run in place.
 
+If you are using a compiler other than gcc, you will also need to set
+CC_OPT to an appropriate set of optimization flags for your compiler.
+
 RUN
 ===
 
