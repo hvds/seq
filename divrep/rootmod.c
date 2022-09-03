@@ -51,10 +51,6 @@ mpz_t rm_stash[E_RMSTASH_MAX];
 static inline mpz_t *ZP(e_rmstash e) { return &rm_stash[e]; }
 #define Z(e) *ZP(e)
 
-t_results *res_array(uint level) {
-    return &ra[E_RESULTS_MAX + level];
-}
-
 void resize_results(t_results *rp, uint size) {
     if (rp->size < size) {
         if (size < rp->size + 16)
@@ -64,6 +60,19 @@ void resize_results(t_results *rp, uint size) {
             mpz_init(rp->r[i]);
         rp->size = size;
     }
+}
+
+t_results *res_array(uint level) {
+    return &ra[E_RESULTS_MAX + level];
+}
+
+void res_copy(uint new_level, uint old_level) {
+    t_results *rpo = res_array(old_level);
+    t_results *rpn = res_array(new_level);
+    resize_results(rpn, rpo->count);
+    for (uint i = 0; i < rpo->count; ++i)
+        mpz_set(rpn->r[i], rpo->r[i]);
+    rpn->count = rpo->count;
 }
 
 void resize_nf(uint size) {
@@ -514,7 +523,7 @@ void _allrootmod_kprime(mpz_t a, uint k, mpz_t n, t_lpow *nf, uint nfc) {
     mpz_set_ui(Z(armkp_m), 1);
     for (uint nfi = 0; nfi < nfc; ++nfi) {
         /* loop: given previous results at r, find new results and
-         * given them, leaving the augmented list at r; when nfi == 0
+         * combine them, leaving the augmented list at r; when nfi == 0
          * there are no previous results */
         if (nfi > 0)
             _swapz_r(armkp_base);
@@ -548,7 +557,7 @@ void _allrootmod_kprime(mpz_t a, uint k, mpz_t n, t_lpow *nf, uint nfc) {
  * of kth roots x of a (mod n) having 0 <= x < n.
  *
  * Returns the number of roots found, and writes the location of the
- * (singleton) array of roots (sorted ascending) into *result.
+ * (singleton) array of roots (unordered) into *result.
  *
  * It is the caller's responsibility to avoid calling allrootmod() again
  * before they have finished looking at the results.
@@ -615,10 +624,114 @@ void allrootmod(uint level, mpz_t a, uint k, mpz_t n) {
     }
 
   arm_done:
-    if (rp->count > 1)
-        qsort(rp->r, rp->count, sizeof(mpz_t), &_mpz_comparator);
     /* swap from rm_base to the requested external array */
     _swapz_r(E_RESULTS_MAX + level);
+}
+
+/* Given positive even integer k and positive mpz_t n, a product of powers
+ * of primes fitting in ulong, builds a list of kth roots x of a_i (mod n)
+ * having 0 <= x < n for each a_i in external array old_level into
+ * external array new_level.
+ * It is legitimate to have new_level == old_level.
+ */
+void root_extract(uint new_level, uint old_level, uint k, mpz_t n) {
+    t_results *rp = &ra[rm_base];
+    t_results *rin = &ra[E_RESULTS_MAX + old_level];
+    rp->count = 0;
+
+    uint nfc = 0;
+    factor_state fs;
+    fs_init(&fs);
+    mpz_set(fs.n, n);
+    while (factor_one(&fs)) {
+        resize_nf(nfc + 1);
+        rm_nf[nfc].p = mpz_get_ui(fs.f);
+        rm_nf[nfc].e = fs.e;
+        ++nfc;
+    }
+    if (fs.state != FS_TERM) {
+        gmp_fprintf(stderr, "In allrootmod failed to factorize n=%Zu\n", fs.n);
+        exit(1);
+    }
+    fs_clear(&fs);
+
+    /* now similarly factorize k */
+    uint kfc = 0;
+    fs_init(&fs); 
+    mpz_set_ui(fs.n, k);
+    while (factor_one(&fs)) {
+        resize_kf(kfc + 1);
+        rm_kf[kfc].p = mpz_get_ui(fs.f);
+        rm_kf[kfc].e = fs.e;
+        ++kfc;
+    }
+    fs_clear(&fs);
+
+    uint ki = 0;
+    uint ke = 0;
+    while (1) {
+        for (uint i = 0; i < rin->count; ++i)
+            _allrootmod_kprime(rin->r[i], rm_kf[ki].p, n, rm_nf, nfc);
+        ++ke;
+        if (ke >= rm_kf[ki].e) {
+            ++ki;
+            ke = 0;
+            if (ki >= kfc)
+                break;
+        }
+        _swapz_r(arm_scratch);
+        rin = &ra[arm_scratch];
+    }
+    _swap_r(arm_scratch);
+    _swap_r(E_RESULTS_MAX + new_level);
+}
+
+/* Find k'th roots of a (mod p^x = px), combine them with an existing
+ * list old_level of roots (mod n), with (p, n) = 1, to give a new listw
+ * of roots (mod n p^x) at new_level.
+ * TOOD: this would be easier (and maybe more efficient: CHECKME) if the
+ * order of events in allrootmod() was switched to split by factors of n
+ * at the top level, and by factors of k at the next level.
+ */
+void root_extend(uint new_level, uint old_level, mpz_t n,
+        mpz_t a, uint k, ulong p, uint e, mpz_t px) {
+    mpz_set_ui(Z(rm_p), p);
+    factor_state fs;
+    uint kfc = 0;
+    fs_init(&fs);
+    mpz_set_ui(fs.n, k);
+    while (factor_one(&fs)) {
+        resize_kf(kfc + 1);
+        rm_kf[kfc].p = mpz_get_ui(fs.f);
+        rm_kf[kfc].e = fs.e;
+        ++kfc;
+    }
+    fs_clear(&fs);
+
+    t_results *rp = &ra[rm_base];
+    t_results *rin = &ra[arm_scratch];
+    rp->count = 0;
+    mpz_mod(Z(arm_a), a, px);
+    save_base(Z(arm_a));
+    uint ki = 0;
+    uint ke = 0;
+    while (1) {
+        _swapz_r(arm_scratch);
+        for (uint i = 0; i < rin->count; ++i)
+            _allrootmod_prime_power(rin->r[i], rm_kf[ki].p, p, e, px);
+        if (rp->count == 0)
+            goto extend_done;
+        ++ke;
+        if (ke >= rm_kf[ki].e) {
+            ++ki;
+            ke = 0;
+            if (ki >= kfc)
+                break;
+        }
+    }
+    _allrootmod_cprod(E_RESULTS_MAX + old_level, px, n);
+  extend_done:
+    _swap_r(E_RESULTS_MAX + new_level);
 }
 
 #undef Z

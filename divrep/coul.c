@@ -29,9 +29,10 @@ uint n, k;
 /* stash of mpz_t, initialized once at start */
 typedef enum {
     zero, zone,                 /* constants */
-    res_m, res_e, res_px,       /* check_residue */
     sqm_t, sqm_q, sqm_b, sqm_z, sqm_x,  /* sqrtmod_t */
     uc_minusvi,                 /* update_chinese */
+    ur_a, ur_m, ur_ipg,         /* update_residues */
+    asq_o, asq_qq, asq_m,       /* alloc_square */
     wv_ati, wv_end, wv_cand,    /* walk_v */
     wv_startr, wv_endr, wv_qqr, wv_r, wv_rx, wv_temp,
     wv_x, wv_y, wv_x2, wv_y2,
@@ -40,6 +41,7 @@ typedef enum {
     r_walk,                     /* recurse */
 
     sdm_p, sdm_r,               /* small_divmod (TODO) */
+    dm_r,                       /* divmod */
     np_p,                       /* next_prime (TODO) */
 
     MAX_ZSTASH
@@ -108,16 +110,14 @@ uint forcedp;
 uint force_all = 0;
 
 /* When allocation forces the residue of some v_i to be square, we want
- * to capture some information, and check if that is consistent with
- * existing allocations.
+ * to calculate the roots mod every allocation (before and after this one),
+ * first to check if a solution is possible, and second to avoid duplicate
+ * work when we actually use the roots in walk_v().
+ * The set of roots lives in resarray(level), but here we track what power
+ * root they are: the allocation at value[sq0].alloc[i] leaves gcddm sqg[i].
  */
-#define MAX_SQUARE 2
-typedef struct s_square {
-    uint vi;
-    mpz_t m;    /* v_{vi} = mz^2 for some z */
-} t_square;
-t_square *squares = NULL;
-t_square *sqspare = NULL;
+uint sq0 = 0;
+uint *sqg = NULL;   /* size maxfact */
 
 /* Each level of "recursion" allocates one prime power p^{x-1} with x | n
  * to one value v_i. It may be "forced", in which case it is part of a
@@ -126,6 +126,7 @@ t_square *sqspare = NULL;
  * in which case no other v_j will be divisible by p.
  */
 typedef struct s_level {
+    uint level;     /* index of this entry */
     bool is_forced;
     uint vi;        /* allocation of p^x into v_i */
     ulong p;
@@ -357,6 +358,7 @@ void init_levels(void) {
     levels = (t_level *)calloc(k * maxfact + 1, sizeof(t_level));
     for (uint i = 0; i < k * maxfact + 1; ++i) {
         t_level *l = &levels[i];
+        l->level = i;
         mpz_init(l->aq);
         mpz_init(l->rq);
     }
@@ -398,6 +400,7 @@ void done(void) {
         for (uint i = 0; i < k; ++i)
             mpz_clear(wv_o[i]);
     free(wv_o);
+    free(sqg);
     free(vlevels);
     free_value();
     free_levels();
@@ -425,9 +428,6 @@ void done(void) {
     for (t_zstash i = 0; i < MAX_ZSTASH; ++i)
         mpz_clear(Z(i));
     free(zstash);
-    for (uint i = 0; i < MAX_SQUARE + 1; ++i)
-        mpz_clear(squares[i].m);
-    free(squares);
     mpz_clear(px);
     free_fact(&nf);
     mpz_clear(max);
@@ -465,10 +465,6 @@ void init_pre(void) {
     mpz_init_set_ui(max, 0);
     init_fact(&nf);
     mpz_init(px);
-    squares = (t_square *)malloc((MAX_SQUARE + 1) * sizeof(t_square));
-    sqspare = &squares[MAX_SQUARE];
-    for (uint i = 0; i < MAX_SQUARE + 1; ++i)
-        mpz_init(squares[i].m);
     zstash = (mpz_t *)malloc(MAX_ZSTASH * sizeof(mpz_t));
     for (t_zstash i = 0; i < MAX_ZSTASH; ++i)
         mpz_init(Z(i));
@@ -828,6 +824,7 @@ void init_post(void) {
     prep_forcep();
     prep_primes();  /* needs forcedp */
     prep_mintau();
+    sqg = (uint *)malloc(maxfact * sizeof(uint));
 
     diag_delay = (debug) ? 0 : DIAG * ticks_per_second;
     log_delay = (debug) ? 0 : LOG * ticks_per_second;
@@ -936,6 +933,17 @@ ulong small_divmod(mpz_t za, mpz_t zb, ulong p) {
     mpz_mul(Z(sdm_r), Z(sdm_r), za);
     mpz_mod_ui(Z(sdm_r), Z(sdm_r), p);
     return mpz_get_ui(Z(sdm_r));
+}
+
+/* Return FALSE if no inverse exists, else sets result = (a / b) mod m.
+ */
+bool divmod(mpz_t result, mpz_t a, mpz_t b, mpz_t m) {
+    mpz_mod(Z(dm_r), b, m);
+    if (!mpz_invert(Z(dm_r), Z(dm_r), m))
+        return 0;
+    mpz_mul(result, Z(dm_r), a);
+    mpz_mod(result, result, m);
+    return 1;
 }
 
 /* This allocation uses what was the next unused prime, so find the
@@ -1207,11 +1215,10 @@ void walk_v(t_level *cur_level, mpz_t start) {
         }
         /* gcd(d - 1) for all divisors d of ti */
         uint xi = divisors[ti].gcddm;
-        /* we need to find all r: r^x_i == o_i (mod qq_i) */
-        allrootmod(0, *oi, xi, *qqi);
-        t_results *xr = res_array(0);
-        if (xr->count == 0)
-            return;
+        t_results *xr = res_array(cur_level->level);
+/* FIXME: find a home */
+extern int _mpz_comparator(const void *va, const void *vb);
+        qsort(xr->r, xr->count, sizeof(mpz_t), &_mpz_comparator);
         uint rindex = 0;
         if (mpz_sgn(Z(wv_ati)) > 0) {
             mpz_mul(Z(wv_startr), Z(wv_ati), *qqi);
@@ -1408,77 +1415,69 @@ void walk_1(t_level *cur_level, uint vi) {
     return;
 }
 
-/* return TRUE if a is a quadratic residue mod m
- * TODO: since we don't need the root, can we speed this up?
+/* When some v_j is known to be of the form m.z^g, we keep a running set
+ * of possible values of z: * ( (rq + i)/q_j )^{ 1/g } mod aq/q_j.
+ * If no such residues exist, this returns FALSE to signal that this
+ * case cannot lead to a solution.
  */
-bool has_sqrtmod(mpz_t a, mpz_t m) {
-    return sqrtmod_t(Z(sqm_x), a, m, Z(sqm_t), Z(sqm_q), Z(sqm_b), Z(sqm_z));
-}
-
-/* Return TRUE if allocating p^{x-1} at v_i is consistent with the known
- * square v_j = mz^2.
- * TODO: we probably always have mpz_fits_ulong_p(m)
- * TODO: for p > 2 see modinvert() in MPU-util.c
- * TODO: p == 2 seems like it should be easy, but existing algorithm
- * doesn't special-case it.
- */
-bool check_residue(uint vi, ulong p, uint x, uint vj, mpz_t m, bool is_forced) {
-    int d = vj - vi;
-    if (d == 0)
+bool update_residues(t_level *old, t_level *new,
+        uint vi, ulong p, uint x, mpz_t px, bool secondary) {
+    if (!old->have_square)
         return 1;
-    uint e1 = x - 1;
-    uint e2 = 0;
-    bool need_divide = 0;
 
-    if (is_forced) {
-        if (p < INT_MAX) {
-            int ip = (int)p;
-            while ((d % ip) == 0) {
-                ++e2;
-                d /= ip;
-            }
+    uint vj = sq0;
+    t_value *vjp = &value[vj];
+    uint jlevel = vjp->vlevel - 1;
+    if (vi == vj) {
+        /* Another allocation on our square, so q_j changes but aq/q_j does
+         * not. We must divide the known residues by p^((x-1)/g) mod aq/q_j,
+         * and if the required power g has changed take roots again. */
+        uint oldg = sqg[jlevel - 1];
+        uint newg = divisors[vjp->alloc[jlevel].t].gcddm;
+        uint divpow = (x - 1) / oldg;
+
+        /* note: old and new give same answer, but old has smaller values */
+        mpz_divexact(Z(ur_m), old->aq, vjp->alloc[jlevel - 1].q);
+        mpz_ui_pow_ui(Z(ur_ipg), p, divpow);
+        if (!mpz_invert(Z(ur_ipg), Z(ur_ipg), Z(ur_m)))
+            fail("Cannot find mandatory inverse for %lu^%u", p, divpow);
+
+        t_results *rsrc = res_array(old->level);
+        t_results *rdest = res_array(new->level);
+/* FIXME */
+extern void resize_results(t_results *rp, uint size);
+        resize_results(rdest, rsrc->count);
+        for (uint i = 0; i < rsrc->count; ++i) {
+            mpz_mul(rdest->r[i], rsrc->r[i], Z(ur_ipg));
+            mpz_mod(rdest->r[i], rdest->r[i], Z(ur_m));
         }
+        rdest->count = rsrc->count;
 
-        t_value *vpj = &value[vj];
-        for (uint i = 0; i < vpj->vlevel; ++i)
-            if (vpj->alloc[i].p == p) {
-                if (e2 == 0)
-                    return 0;
-                if (e1 == e2)
-                    return 1;   /* see below */
-                if (mpz_divisible_ui_p(m, p)) {
-                    need_divide = 1;
-                    --e1;
-                    --e2;
-                }
-                break;
-            }
-
-        if (e1 == e2) {
-            /* we know only that valuation(v_j, p) > e1, punt on this */
+        sqg[jlevel] = newg;
+        if (oldg == newg)
             return 1;
-        }
+
+        /* we want to upgrade the roots from oldg to newg
+         * It is guaranteed that oldg | newg. */
+        root_extract(new->level, new->level, newg / oldg, Z(ur_m));
+        if (res_array(new->level)->count == 0)
+            return 0;
+        return 1;
     }
+    /* secondary allocation cannot affect roots unless vi == vj */
+    if (secondary)
+        return 1;
 
-    if (need_divide)
-        mpz_divexact_ui(Z(res_m), m, p);
-    else
-        mpz_set(Z(res_m), m);
-
-    /* we have v_j = p^{min(e1, e2)} . m . z^2 */
-    if (p == 2)
-        mpz_mul_2exp(Z(res_px), Z(zone), (e1 < e2) ? e2 - e1 : e1 - e2);
-    else
-        mpz_set_ui(Z(res_px), p);
-
-    /* return true iff d / m (mod px) is a quadratic residue (mod px) */
-    if (!mpz_invert(Z(res_m), Z(res_m), Z(res_px)))
-        fail("logic error, p ~| m, so m should be invertible");
-    if (d != 1) {
-        mpz_mul_si(Z(res_m), Z(res_m), d);
-        mpz_mod(Z(res_m), Z(res_m), Z(res_px));
-    }
-    return has_sqrtmod(Z(res_m), Z(res_px));
+    /* propagate the existing roots */
+    uint g = sqg[jlevel];
+    mpz_set_si(Z(ur_a), (int)vj - (int)vi);
+    if (!divmod(Z(ur_a), Z(ur_a), vjp->alloc[jlevel].q, px))
+        return 0;
+    mpz_divexact(Z(ur_m), old->aq, vjp->alloc[jlevel].q);
+    root_extend(new->level, old->level, Z(ur_m), Z(ur_a), g, p, x - 1, px);
+    if (res_array(new->level)->count == 0)
+        return 0;
+    return 1;
 }
 
 void update_chinese(t_level *old, t_level *new, uint vi, mpz_t px) {
@@ -1494,31 +1493,34 @@ void update_chinese(t_level *old, t_level *new, uint vi, mpz_t px) {
     fail("chinese failed");
 }
 
-/* Record a new square at v_i; return FALSE if any v_j factor is not a
- * residue.
+/* Record a new square at v_i; return FALSE if invalid.
+ * Finds the quadratic (or higher-order) residues; stash them for later
+ * propagation if this is the first square; fail if there are none.
+ * Note: we just allocated to vi, so at least one allocation exists.
  */
 bool alloc_square(t_level *cur, uint vi) {
     t_value *v = &value[vi];
+    t_allocation *ap = &v->alloc[v->vlevel - 1];
     uint sqi = cur->have_square++;
-    t_square *sqp = (sqi < MAX_SQUARE) ? &squares[sqi] : sqspare;
-    sqp->vi = vi;
-    mpz_set_ui(sqp->m, 1);
-    for (uint ai = 0; ai < v->vlevel; ++ai) {
-        t_allocation *ap = &v->alloc[ai];
-        if (ap->x & 1)
-            continue;
-        mpz_mul_ui(sqp->m, sqp->m, ap->p);
+    uint g = divisors[ap->t].gcddm;
+    if (sqi == 0) {
+        sq0 = vi;
+        sqg[v->vlevel - 1] = g;
     }
-    /* note: we rely on cur <= levels[level + 1] */
-    for (uint j = 1; j < level; ++j) {
-        t_level *lp = &levels[j];
-        if (lp == cur)
-            break;
-        /* note: for a forced batch, we only need to check an example of
-         * the highest power involved, which is the levels[] entry itself */
-        if (!check_residue(lp->vi, lp->p, lp->x, vi, sqp->m, lp->is_forced))
-            return 0;
-    }
+
+    /* if this is first square, store in the level for further propagation;
+     * else use level 0 as temporary */
+    uint stash_level = (sqi == 0) ? cur->level : 0;
+    /* o = (rq + i) / q */
+    mpz_add_ui(Z(asq_o), cur->rq, vi);
+    mpz_divexact(Z(asq_o), Z(asq_o), ap->q);
+    /* qq = aq / q */
+    mpz_divexact(Z(asq_qq), cur->aq, ap->q);
+
+    allrootmod(stash_level, Z(asq_o), g, Z(asq_qq));
+    t_results *rp = res_array(stash_level);
+    if (rp->count == 0)
+        return 0;
     return 1;
 }
 
@@ -1527,12 +1529,14 @@ bool alloc_square(t_level *cur, uint vi) {
  * Updates value[vi]; checks for a new square; calls walk_1() directly
  * if remaining tau == 1.
  */
-bool apply_allocv(t_level *cur_level, uint vi, ulong p, uint x, mpz_t px) {
+bool apply_allocv(t_level *prev_level, t_level *cur_level,
+        uint vi, ulong p, uint x, mpz_t px, bool secondary) {
     t_value *v = &value[vi];
     t_allocation *prev = (v->vlevel) ? &v->alloc[v->vlevel - 1] : NULL;
     t_allocation *cur = &v->alloc[v->vlevel];
     ++v->vlevel;
     uint prevt = prev ? prev->t : n;
+    /* invalid if x does not divide remaining tau */
     if (prevt % x)
         return 0;
 
@@ -1543,26 +1547,24 @@ bool apply_allocv(t_level *cur_level, uint vi, ulong p, uint x, mpz_t px) {
         mpz_mul(cur->q, prev->q, px);
     else
         mpz_set(cur->q, px);
+    /* nothing more to do if we walk_1() */
     if (cur->t == 1) {
         walk_1(cur_level, vi);
         return 0;
     }
 
-    if (cur_level->have_square) {
-        t_square *sqp = &squares[0];
-        if (!check_residue(vi, p, x, sqp->vi, sqp->m, cur_level->is_forced))
-            return 0;
-    }
-
     if ((cur->t & 1) && !(prevt & 1))
         if (!alloc_square(cur_level, vi))
+            return 0;
+    if (prev_level->have_square)
+        if (!update_residues(prev_level, cur_level, vi, p, x, px, secondary))
             return 0;
     return 1;
 }
 
 /* Allocate p^{x-1} to v_{vi}. Returns FALSE if it is invalid, or if
  * no work to do.
- * Updates level and value.
+ * Updates level and value, updates or propagates square residues.
  */
 bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     cur->vi = vi;
@@ -1584,13 +1586,15 @@ bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
         return 0;
     }
 #endif
-    return apply_allocv(cur, vi, p, x, px);
+    if (!apply_allocv(prev, cur, vi, p, x, px, 0))
+        return 0;
+    return 1;
 }
 
-bool apply_secondary(t_level *cur, uint vi, ulong p, uint x) {
+bool apply_secondary(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     mpz_set_ui(px, p);
     mpz_pow_ui(px, px, x - 1);
-    return apply_allocv(cur, vi, p, x, px);
+    return apply_allocv(prev, cur, vi, p, x, px, 1);
 }
 
 /* find the best entry to progress: the one with the highest tau()
@@ -1680,7 +1684,7 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
     /* TODO: prep this */
     for (uint i = fp->p; i <= bp->vi; i += fp->p) {
         uint x = simple_valuation(i, fp->p) + 1;
-        if (!apply_secondary(cur, bp->vi - i, fp->p, x))
+        if (!apply_secondary(prev, cur, bp->vi - i, fp->p, x))
             return 0;
         vp = &value[bp->vi - i];
         if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
@@ -1688,7 +1692,7 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
     }
     for (uint i = fp->p; bp->vi + i < k; i += fp->p) {
         uint x = simple_valuation(i, fp->p) + 1;
-        if (!apply_secondary(cur, bp->vi + i, fp->p, x))
+        if (!apply_secondary(prev, cur, bp->vi + i, fp->p, x))
             return 0;
         vp = &value[bp->vi + i];
         if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
@@ -1754,6 +1758,7 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
          * k primes dividing aq.
          */
         mpz_root(Z(r_walk), Z(r_walk), 2);
+/* FIXME: we now know the actual number of roots */
         mpz_mul_2exp(Z(r_walk), Z(r_walk), level - 1);
         if (prev->have_square > 1)
             mpz_set_ui(Z(r_walk), 0);
@@ -1843,7 +1848,7 @@ void insert_stack(void) {
                 fail("missing secondary %u^%u at %u", p, x, vj);
             --rs->count;
 
-            if (!apply_secondary(cur, vj, p, x))
+            if (!apply_secondary(prev, cur, vj, p, x))
                 fail("could not apply_secondary(%u, %lu, %u)", vj, p, x);
         }
         for (uint j = p; mini + j < k; j += p) {
@@ -1855,7 +1860,7 @@ void insert_stack(void) {
                 fail("missing secondary %u^%u at %u", p, x, vj);
             --rs->count;
 
-            if (!apply_secondary(cur, vj, p, x))
+            if (!apply_secondary(prev, cur, vj, p, x))
                 fail("could not apply_secondary(%u, %lu, %u)", vj, p, x);
         }
         ++level;
@@ -2110,7 +2115,7 @@ int main(int argc, char **argv, char **envp) {
     report_init(stdout, argv[0]);
     if (rfp) report_init(rfp, argv[0]);
 #if 0
-    char s[] = "3 2^2.5 . 2.3^2 7^2 2^5 3.5^2 2 . 2^2.3 (3200400.00s)\n";
+    char s[] = "7^2 2.71^2 3^8 2^2.5^2 11^2.29^2 (0.00s)\n";
     parse_305(s);
 #endif
     if (rstack)

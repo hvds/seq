@@ -16,7 +16,6 @@ TODO (lower priority):
 - cache max prime used to short-circuit "used" check
   - use it also to implement minp
 - on recover, parse 001 line to check consistency of critical options
-- check_residue can be much faster in (almost?) all cases
 - reimplement small_divmod()
 - reimplement next_prime()
 - cater for end value > 2^64 in walk_v, if needed
@@ -25,6 +24,5 @@ TODO (lower priority):
 - prep the simple_valuation() checks for apply_batch()
 - for unforced primes, do constant apply_alloc() work in advance
 - avoid recursing when best_v() will find nothing
-- check if we can speed up has_sqrtmod()
 - new option to show fixed-prime patterns, with indices
 - sharding by new option to select one or more fixed-prime patterns by index

@@ -225,6 +225,8 @@ sub ts_prime {
     ++$e, $r /= $k while !($r % $k);
 
     my $ke = ($p - 1) / $r;
+    # FIXME: release version MPU-0.73 returns undef for invmod(0, 1),
+    # so this fails when p==17, for example.
     my $x = powmod($a, MBI(invmod($k % $r, $r)), $p);
     my $B = (powmod($x, $k, $p) * MBI(invmod($a, $p))) % $p;
     my($T, $y, $t, $A) = ($ztwo, $zone);
