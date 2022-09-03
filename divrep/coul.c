@@ -581,8 +581,10 @@ void recover(void) {
             fail("error parsing 202 line '%s'", last202);
         last202[end] = 0;
         mpz_init_set_str(cand, &last202[start], 10);
-        if (mpz_sgn(max) == 0 || mpz_cmp(max, cand) > 0)
+        if (mpz_sgn(max) == 0 || mpz_cmp(max, cand) >= 0) {
             mpz_set(max, cand);
+            ++seen_best;
+        }
         mpz_clear(cand);
     }
     if (last305)
