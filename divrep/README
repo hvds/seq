@@ -9,19 +9,23 @@ for A292580, the least integer v such that tau(v + i) = n for all
 BUILD
 =====
 
-Building this code requires also having the code from Dana Jacobsen's
-CPAN distribution "Math-Prime-Util-GMP", available from:
+This code uses the GNU multi-precision library "libgmp". It also uses
+the code from Dana Jacobsen's CPAN distribution "Math-Prime-Util-GMP",
+available from:
   https://github.com/danaj/Math-Prime-Util-GMP
 I recommend using the latest version from github where possible, since
 it has a lot of bugfixes since the last release version.
 
 To build, you should edit the first line of the Makefile so that MPUGMP
 points to the directory where the Math-Prime-Util-GMP source can be found.
-There is no installation process: it is intended that the code should be
-built and run in place.
+If your libgmp header file (gmp.h) is not in the standard include paths,
+you will also need to modify the Makefile to include the appropriate path.
 
 If you are using a compiler other than gcc, you will also need to set
 CC_OPT to an appropriate set of optimization flags for your compiler.
+
+There is no installation process: it is intended that the code should be
+built and run in place.
 
 RUN
 ===
