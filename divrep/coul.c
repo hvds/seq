@@ -1695,28 +1695,28 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
  */
 uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     uint ti = cur->ti;
-
-/* TODO: for n=54, we should disallow eg x=9 when t=54, since we
- * will already have tried all x=3 and x=6 before that.
- */
-
     uint x = divisors[ti].div[cur->di];
     uint vi = cur->vi;
     t_value *vp = &value[vi];
     t_allocation *ap = (vp->vlevel) ? &vp->alloc[vp->vlevel - 1] : NULL;
 
     /* pick up any previous unforced x */
-    uint unforced_base = (vl_forced) ? VLP(vl_forced - 1)[vi] : 0;
-    uint prevx = (vp->vlevel > unforced_base) ? ap->x : 0;
-    if (p == 0 && x <= prevx && (ti % prevx) == 0) {
-        if (x < prevx)
-            return 1;   /* skip this x, we already did the reverse */
-        p = ap->p;      /* skip smaller p, we already did the reverse */
-    } else if (p == 0)
-        p = maxforce[vi];
-    /* else we're continuing from known p */
-
     uint nextt = ti / x;
+    if (p == 0) {
+        uint unforced_base = (vl_forced) ? VLP(vl_forced - 1)[vi] : 0;
+        uint prevx = (vp->vlevel > unforced_base) ? ap->x : 0;
+        if (x == prevx)
+            p = ap->p;      /* skip smaller p, we already did the reverse */
+        else if (x <= prevx && divisors[x].high == divisors[prevx].high)
+            return 1;   /* skip this x, we already did the reverse */
+        else if (x > nextt && divisors[x].high == divisors[nextt].high)
+            /* skip this x, we already did any possible continuation in
+             * reverse. */
+            return 1;
+        else
+            p = maxforce[vi];
+    } /* else we're continuing from known p */
+
     /* try p^{x-1} for all p until q_i . p^{x-1} . minrest > max + i */
     ulong limp = limit_p(vi, x, nextt);
     if (limp == 0) {
@@ -1886,7 +1886,7 @@ void insert_stack(void) {
         /* note: must pass in p=0 for it to calculate limp */
         uint pux = prep_unforced_x(prev, cur, 0);
         if (pux != 2)
-            fail("prep_unforced_x() returns %u for %lu^%u at %u\n",
+            fail("prep_nextt %u for %lu^%u at %u\n",
                     pux, p, x, vi);
 
         /* CHECKME: this returns 0 if t=1 */

@@ -26,7 +26,5 @@ TODO (lower priority):
 - for unforced primes, do constant apply_alloc() work in advance
 - avoid recursing when best_v() will find nothing
 - check if we can speed up has_sqrtmod()
-- for cases like n=54, t=54 we should disallow eg x=9, since we will already
-  have tried all x=3 and x=6 before that
 - new option to show fixed-prime patterns, with indices
 - sharding by new option to select one or more fixed-prime patterns by index
