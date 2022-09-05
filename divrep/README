@@ -27,6 +27,29 @@ CC_OPT to an appropriate set of optimization flags for your compiler.
 There is no installation process: it is intended that the code should be
 built and run in place.
 
+Build-time options are set with defines, by passing "-D<name>" as a
+parameter to the compile step. Current build options are:
+
+-DSTANDALONE: required, this allows the Math-Prime-Util-GMP code to
+be compiled without also requiring Perl infrastructure.
+
+-DPARALLEL: in walk_v(), test factors of non-prime, non-square values
+in parallel (ie breadth first) rather than in series (depth first).
+This is expected to give substantial gains when the values to be
+factorized are large (more than 10^80 or so), but needs further
+improvement.
+
+-DSQONLY: skip any walk_v() call unless at least one value is forced
+to be a square. Temporary facility to allow faster rechecking if bugs
+are found in squares-handling code.
+
+-DCHECK_OVERFLOW: after finding that v_0 == r_q (mod a_q), check if
+that exceeds our limit. This is not enabled by default because it
+appears to cost more than it saves in almost all cases.
+
+-DVERBOSE: print verbose information about factorization timings.
+Intended to help understand how -DPARALLEL can be improved.
+
 RUN
 ===
 
