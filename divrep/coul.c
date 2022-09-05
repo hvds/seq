@@ -1575,6 +1575,15 @@ bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     mpz_set_ui(px, p);
     mpz_pow_ui(px, px, x - 1);
     update_chinese(prev, cur, vi, px);
+/* this appears to cost more than it saves in almost all cases */
+#ifdef CHECK_OVERFLOW
+    /* if rq > max, no solution <= max is possible */
+    if (mpz_cmp(cur->rq, max) > 0) {
+        /* caller expects vlevel to have been incremented on failure */
+        ++value[vi].vlevel;
+        return 0;
+    }
+#endif
     return apply_allocv(cur, vi, p, x, px);
 }
 
