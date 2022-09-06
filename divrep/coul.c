@@ -30,7 +30,7 @@ uint n, k;
 typedef enum {
     zero, zone,                 /* constants */
     sqm_t, sqm_q, sqm_b, sqm_z, sqm_x,  /* sqrtmod_t */
-    uc_minusvi,                 /* update_chinese */
+    uc_minusvi, uc_px,          /* update_chinese */
     ur_a, ur_m, ur_ipg,         /* update_residues */
     asq_o, asq_qq, asq_m,       /* alloc_square */
     wv_ati, wv_end, wv_cand,    /* walk_v */
@@ -1087,6 +1087,9 @@ void walk_v(t_level *cur_level, mpz_t start) {
         mpz_divexact(wv_o[vi], wv_o[vi], *q[vi]);
         for (uint ai = 0; ai < vp->vlevel; ++ai) {
             t_allocation *ap = &vp->alloc[ai];
+            /* the case for p=2 is handled in advance by update_chinese */
+            if (ap->p == 2)
+                continue;
             ulong inverse = small_divmod(wv_o[vi], wv_qq[vi], ap->p);
             if (inverse < ap->p) {
                 t_mod *ip = &inv[inv_count++];
@@ -1480,14 +1483,21 @@ extern void resize_results(t_results *rp, uint size);
     return 1;
 }
 
-void update_chinese(t_level *old, t_level *new, uint vi, mpz_t px) {
+void update_chinese(t_level *old, t_level *new, uint vi, mpz_t *px) {
     mpz_t zarray[4];
     mpz_set_si(Z(uc_minusvi), -(long)vi);
+
+    /* v_0 == -i (mod 2^e) can be upgraded to v_0 = 2^e - i (mod 2^{e + 1}) */
+    if (mpz_even_p(*px)) {
+        mpz_add(Z(uc_minusvi), Z(uc_minusvi), *px);
+        mpz_mul_2exp(Z(uc_px), *px, 1);
+        px = ZP(uc_px);
+    }
 
     memcpy(&zarray[0], old->rq, sizeof(mpz_t));
     memcpy(&zarray[1], Z(uc_minusvi), sizeof(mpz_t));
     memcpy(&zarray[2], old->aq, sizeof(mpz_t));
-    memcpy(&zarray[3], px, sizeof(mpz_t));
+    memcpy(&zarray[3], *px, sizeof(mpz_t));
     if (chinese(new->rq, new->aq, &zarray[0], &zarray[2], 2))
         return;
     fail("chinese failed");
@@ -1576,7 +1586,7 @@ bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
         cur->nextpi = find_nextpi(cur);
     mpz_set_ui(px, p);
     mpz_pow_ui(px, px, x - 1);
-    update_chinese(prev, cur, vi, px);
+    update_chinese(prev, cur, vi, &px);
 /* this appears to cost more than it saves in almost all cases */
 #ifdef CHECK_OVERFLOW
     /* if rq > max, no solution <= max is possible */
