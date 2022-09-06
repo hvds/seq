@@ -1662,14 +1662,23 @@ ulong limit_p(uint vi, uint x, uint nextt) {
         mpz_div(Z(lp_x), Z(lp_x), ap->q);
     /* else notional ap->q is 1 */
 
-    /* divide through by the minimum contribution that could supply the
-     * remaining tau */
-    if (nextt > 1) {
-        mintau(Z(lp_mint), vi, nextt);
-        mpz_div(Z(lp_x), Z(lp_x), Z(lp_mint));
+    if (x == nextt && divisors[x].high == x) {
+        /* We are allocating p^{x-1} with x prime, leaving x as the
+         * remaining tau; so this and the remaining allocation will
+         * be of the form p^{x-1}.q^{x-1}, and we can set the limit
+         * to max^{1/2(x-1)}.
+         */
+        mpz_root(Z(lp_x), Z(lp_x), 2 * (x - 1));
+    } else {
+        /* divide through by the minimum contribution that could supply the
+         * remaining tau */
+        if (nextt > 1) {
+            mintau(Z(lp_mint), vi, nextt);
+            mpz_div(Z(lp_x), Z(lp_x), Z(lp_mint));
+        }
+        mpz_root(Z(lp_x), Z(lp_x), x - 1);
     }
 
-    mpz_root(Z(lp_x), Z(lp_x), x - 1);
     if (maxp && mpz_cmp_ui(Z(lp_x), maxp) > 0)
         return maxp;
     if (mpz_fits_ulong_p(Z(lp_x)))
