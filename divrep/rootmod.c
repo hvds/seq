@@ -375,7 +375,7 @@ void _allrootmod_prime_power_r(mpz_t a, uint k, ulong p, uint e) {
     if (append)
         _swap_r(armppr_stash);
 
-    mpz_pow_ui(Z(armppr_px), Z(rm_p), e);
+    mpz_ui_pow_ui(Z(armppr_px), p, e);
     if (k != p) {
         for (uint ri = 0; ri < r2->count; ++ri) {
             _eval_armpp(r2->r[ri], a, k, Z(armppr_px), Z(armppr_px));
@@ -385,8 +385,8 @@ void _allrootmod_prime_power_r(mpz_t a, uint k, ulong p, uint e) {
     }
 
     mpz_mod(Z(armppr_a), a, Z(armppr_px));
-    mpz_pow_ui(Z(armppr_px2), Z(rm_p), e + 1);
-    mpz_pow_ui(Z(armppr_pxm), Z(rm_p), e - 1);
+    mpz_ui_pow_ui(Z(armppr_px2), p, e + 1);
+    mpz_ui_pow_ui(Z(armppr_pxm), p, e - 1);
     for (uint ri = 0; ri < r2->count; ++ri) {
         _eval_armpp(r2->r[ri], a, k, Z(armppr_px), Z(armppr_px2));
         /* check if it's a solution */
@@ -420,14 +420,14 @@ void _allrootmod_prime_power_r(mpz_t a, uint k, ulong p, uint e) {
  */
 void _allrootzero_prime_power(uint k, ulong p, uint e, mpz_t px) {
     uint t = (e - 1) / k + 1;
-    mpz_pow_ui(Z(arzpp_px), Z(rm_p), e - t);
+    mpz_ui_pow_ui(Z(arzpp_px), p, e - t);
     if (!mpz_fits_uint_p(Z(arzpp_px))) {
         fprintf(stderr, "_allrootzero_prime_power() overflow %lu^%u\n",
                 p, e - t);
         exit(1);
     }
     uint r = mpz_get_ui(Z(arzpp_px));
-    mpz_pow_ui(Z(arzpp_px), Z(rm_p), t);
+    mpz_ui_pow_ui(Z(arzpp_px), p, t);
     for (uint i = 0; i < r; ++i) {
         mpz_mul_ui(Z(rm_r), Z(arzpp_px), i);
         mpz_mod(Z(rm_r), Z(rm_r), px);
@@ -472,7 +472,7 @@ void _allrootmod_prime_power(mpz_t a, uint k, ulong p, uint e, mpz_t px) {
         return;
     _swapz_r(armpp_copy);
 
-    mpz_pow_ui(Z(armpp_px), Z(rm_p), m * (k - 1));
+    mpz_ui_pow_ui(Z(armpp_px), p, m * (k - 1));
     if (!mpz_fits_uint_p(Z(armpp_px))) {
         fprintf(stderr, "_allrootmod_prime_power() overflow %lu^%u\n",
                 p, m * (k - 1));
@@ -481,14 +481,14 @@ void _allrootmod_prime_power(mpz_t a, uint k, ulong p, uint e, mpz_t px) {
     uint range = mpz_get_ui(Z(armpp_px));
     resize_results(rp, range * r2->count);
 
-    mpz_pow_ui(Z(armpp_px), Z(rm_p), m);
+    mpz_ui_pow_ui(Z(armpp_px), p, m);
     for (uint ri = 0; ri < r2->count; ++ri) {
         mpz_t *r = &r2->r[ri];
         mpz_mul(*r, *r, Z(armpp_px));
         mpz_mod(*r, *r, px);
     }
 
-    mpz_pow_ui(Z(armpp_px), Z(rm_p), e - m * (k - 1));
+    mpz_ui_pow_ui(Z(armpp_px), p, e - m * (k - 1));
     for (uint ri = 0; ri < r2->count; ++ri) {
         mpz_t *r = &r2->r[ri];
         for (uint i = 0; i < range; ++i) {
@@ -535,7 +535,7 @@ void _allrootmod_kprime(mpz_t a, uint k, mpz_t n, t_lpow *nf, uint nfc) {
             mpz_set_ui(Z(armkp_px), p);
             _allrootmod_prime(a, k, p);
         } else {
-            mpz_pow_ui(Z(armkp_px), Z(rm_p), e);
+            mpz_ui_pow_ui(Z(armkp_px), p, e);
             _allrootmod_prime_power(a, k, p, e, Z(armkp_px));
         }
         if (r->count == 0)

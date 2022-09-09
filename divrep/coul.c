@@ -1392,6 +1392,8 @@ void walk_1(t_level *cur_level, uint vi) {
         t_allocation *ajp = (vjp->vlevel) ? &vjp->alloc[vjp->vlevel - 1] : NULL;
         mpz_add_ui(Z(w1_j), Z(w1_v), vj);
         if (ajp) {
+            /* FIXME: replace this with a single initial check of
+             * v_0 == rq mod aq, then use divexact */
             mpz_fdiv_qr(Z(w1_j), Z(w1_r), Z(w1_j), ajp->q);
             if (mpz_sgn(Z(w1_r)) != 0)
                 return;
@@ -1504,6 +1506,7 @@ void update_chinese(t_level *old, t_level *new, uint vi, mpz_t px) {
         pxp = ZP(uc_px);
     }
 
+    /* TODO: write a custom chinese() */
     memcpy(&zarray[0], old->rq, sizeof(mpz_t));
     memcpy(&zarray[1], Z(uc_minusvi), sizeof(mpz_t));
     memcpy(&zarray[2], old->aq, sizeof(mpz_t));
@@ -1594,9 +1597,14 @@ bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     cur->nextpi = prev->nextpi;
     if (p == sprimes[cur->nextpi])
         cur->nextpi = find_nextpi(cur);
-    mpz_set_ui(px, p);
-    mpz_pow_ui(px, px, x - 1);
+    mpz_ui_pow_ui(px, p, x - 1);
+
+    /* Note: the work for this call is wasted if x does not divide t; but
+     * that can only happen for forced primes, which is a tiny proportion
+     * of the calls (and involves the smallest numbers). Avoiding it means
+     * either duplication of other efforts or a more complicated workflow. */
     update_chinese(prev, cur, vi, px);
+
 /* this appears to cost more than it saves in almost all cases */
 #ifdef CHECK_OVERFLOW
     /* if rq > max, no solution <= max is possible */
@@ -1612,8 +1620,7 @@ bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
 }
 
 bool apply_secondary(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
-    mpz_set_ui(px, p);
-    mpz_pow_ui(px, px, x - 1);
+    mpz_ui_pow_ui(px, p, x - 1);
     return apply_allocv(prev, cur, vi, p, x, px, 1);
 }
 
@@ -1659,8 +1666,7 @@ void mintau(mpz_t mint, uint vi, uint t) {
      * t _with multiplicity_.
      */
     uint minnext = sprimes[levels[level - 1].nextpi];
-    mpz_set_ui(mint, minnext);
-    mpz_pow_ui(mint, mint, divisors[t].sumpm);
+    mpz_ui_pow_ui(mint, minnext, divisors[t].sumpm);
 }
 
 /* return the maximum prime to iterate to */
