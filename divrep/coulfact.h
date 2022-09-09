@@ -34,5 +34,6 @@ extern uint simple_valuation(ulong n, ulong p);
 extern uint simple_prime_count(ulong n);
 extern uint tiny_gcd(uint a, uint b);
 extern ulong simple_gcd(ulong a, ulong b);
+extern int _mpz_comparator(const void *va, const void *vb);
 
 #endif

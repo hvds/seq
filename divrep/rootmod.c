@@ -133,10 +133,6 @@ void done_rootmod(void) {
     }
 }
 
-int _mpz_comparator(const void *va, const void *vb) {
-    return mpz_cmp(*(mpz_t *)va, *(mpz_t *)vb);
-}
-
 void save_result(t_results *rp, mpz_t r) {
     uint i = rp->count++;
     resize_results(rp, i + 1);

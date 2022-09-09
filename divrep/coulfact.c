@@ -2,6 +2,11 @@
 #include "coulfact.h"
 #include "gmp_main.h"   /* prime_count */
 
+/* for sorting */
+int _mpz_comparator(const void *va, const void *vb) {
+    return mpz_cmp(*(mpz_t *)va, *(mpz_t *)vb);
+}
+
 void init_fact(t_fact *f) {
     f->count = 0;
     f->size = 16;

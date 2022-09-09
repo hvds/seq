@@ -1228,8 +1228,6 @@ void walk_v(t_level *cur_level, mpz_t start) {
         /* gcd(d - 1) for all divisors d of ti */
         uint xi = divisors[ti].gcddm;
         t_results *xr = res_array(cur_level->level);
-/* FIXME: find a home */
-extern int _mpz_comparator(const void *va, const void *vb);
         qsort(xr->r, xr->count, sizeof(mpz_t), &_mpz_comparator);
         uint rindex = 0;
         if (mpz_sgn(Z(wv_ati)) > 0) {
