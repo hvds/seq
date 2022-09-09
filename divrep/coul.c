@@ -1456,8 +1456,6 @@ bool update_residues(t_level *old, t_level *new,
 
         t_results *rsrc = res_array(old->level);
         t_results *rdest = res_array(new->level);
-/* FIXME */
-extern void resize_results(t_results *rp, uint size);
         resize_results(rdest, rsrc->count);
         for (uint i = 0; i < rsrc->count; ++i) {
             mpz_mul(rdest->r[i], rsrc->r[i], Z(ur_ipg));
