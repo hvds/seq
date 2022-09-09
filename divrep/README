@@ -166,7 +166,10 @@ and derecurse, else we allocate a prime and recurse further.
 For each allocation, we manage the recursion by tracking what we have
 allocated and where we have allocated it in levels[level]. We also keep
 a running calculation of "r_q" and "a_q" via the Chinese Remainder Theorem
-(CRT) such that we know v_0 == r_q (mod a_q).
+(CRT) such that we know v_0 == r_q (mod a_q). If any allocations leave
+at least one value v_j with a square for its unallocated remnant, we
+maintain the list of possible g'th roots of r_q + j (mod a_q), where
+g is the maximum power that the v_j remnant is known to require.
 
 We also track allocations to individual values in value[i]; for each
 allocation we record p, x, t and q: we have allocated p^{x-1}, the
@@ -209,14 +212,7 @@ high that this would not be sufficient.
 If need_square[] is not empty (see 'nqc' in the code), we use a different
 path: if there are multiple squares, we invoke code to solve the Pell
 equation involving the first two, and iterate over the results. If there
-is exactly one square at v_i, we decide the highest power z we can require
-as z = gcd({ d - 1: d | t_i }), find the z'th roots of o_i (mod Q_i) and
-iterate only over those.
-
-  Finding the roots is quite expensive. For the general case that's fine,
-  since the need_square[] case is rare and it still gives a big speedup
-  for this case; for cases such as n == 6 (mod 12), k >= 4, where there
-  is _always_ a square, these is an opportunity to make it faster: there
-  is work in progress to calculate the roots incrementally as allocations
-  are made.
+is exactly one square at v_i, we decide the highest power g we can require
+as g = gcd({ d - 1: d | t_i }), and iterate only over the g'th roots of
+o_i (mod Q_i) as prepared for us in recurse().
 
