@@ -1747,8 +1747,7 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     /* pick up any previous unforced x */
     uint nextt = ti / x;
     if (p == 0) {
-        uint unforced_base = (vl_forced) ? VLP(vl_forced - 1)[vi] : 0;
-        uint prevx = (vp->vlevel > unforced_base) ? ap->x : 0;
+        uint prevx = (ap && ap->p > maxforce[vi]) ? ap->x : 0;
         if (x == prevx)
             p = ap->p;      /* skip smaller p, we already did the reverse */
         else if (x <= prevx && divisors[x].high == divisors[prevx].high)
