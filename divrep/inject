@@ -26,8 +26,9 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     die "Unknown option '$arg'\n";
 }
 $| = 1;
-my($n, $k, $d) = @ARGV;
+my($n, $k, $d, @clf) = @ARGV;
 $d = MBI(ston($d));
+$_ = MBI($_) for @clf;
 
 my $type = Type->new($typename);
 $type->bind_owner('upperlim');
@@ -127,6 +128,17 @@ sub tf {
             $f = 1;
         } else {
             $f = MBI($p);
+        }
+    }
+
+    # try commandline factors
+    for my $p (@clf) {
+        if (($f % $p) == 0) {
+            $f /= $p;
+            my $x = 1;
+            $f /= $p, ++$x while ($f % $p) == 0;
+            push @fact, $x == 1 ? $p : "$p^$x";
+            $t *= $x + 1;
         }
     }
 
