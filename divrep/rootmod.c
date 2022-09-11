@@ -363,8 +363,11 @@ void _allrootmod_prime_power_r(mpz_t a, uint k, ulong p, uint e) {
     _allrootmod_prime_power_r(a, k, p, e2);
 
     t_results *r2 = &ra[armppr_copy];
-    if (rp->count == 0)
+    if (rp->count == 0) {
+        if (append)
+            _swap_r(armppr_stash);
         return;
+    }
     _swapz_r(armppr_copy);
 
     /* if had results to append to, we're at top level - unstash them */
