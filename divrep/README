@@ -84,8 +84,7 @@ difference to runtime; default gain is 1.
 If "-p50:100" is specified, it will allocate (see below) only powers of
 primes p < 100, and will allocate at least one power of a prime p > 50.
 This can be used to search more selectively to improve an upper limit.
-(**"minp" not yet implemented.**) By default it considers all possible
-allocations.
+By default it considers all possible allocations.
 
 If "-s2" is specified, it will initialize the random number generator
 with seed 2, used at least for ECM factorization. The default seed is 1,

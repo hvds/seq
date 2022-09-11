@@ -142,6 +142,7 @@ typedef struct s_level {
     uint x;
     uint have_square;   /* number of v_i residues forced square so far */
     uint nextpi;    /* index of least prime not yet allocated */
+    ulong maxp;     /* highest prime allocated so far */
     /* (optional) union */
         uint bi;    /* batch index, if forced */
     /* .. with */
@@ -208,7 +209,6 @@ ulong antigain = 0;
  * threshold that at least one allocated prime should exceed (else we can
  * skip the walk)
  */
-/* TODO: implement minp */
 uint minp = 0, maxp = 0;
 bool opt_print = 0; /* print candidates instead of fully testing them */
 int debug = 0;     /* diag and keep every case seen */
@@ -375,6 +375,7 @@ void init_levels(void) {
     mpz_set_ui(levels[0].rq, 0);
     levels[0].have_square = 0;
     levels[0].nextpi = 0;
+    levels[0].maxp = 0;
     level = 1;
 }
 
@@ -1062,6 +1063,9 @@ void walk_v(t_level *cur_level, mpz_t start) {
     if (!cur_level->have_square)
         return;
 #endif
+    if (minp && cur_level->maxp <= minp)
+        return;
+
     mpz_t *q[k];
     mpz_t *m = &cur_level->rq;
     uint t[k];
@@ -1370,6 +1374,9 @@ void walk_1(t_level *cur_level, uint vi) {
     if (!cur_level->have_square)
         return;
 #endif
+    if (minp && cur_level->maxp <= minp)
+        return;
+
     t_value *vip = &value[vi];
     t_allocation *aip = &vip->alloc[vip->vlevel - 1];
     mpz_sub_ui(Z(w1_v), aip->q, vi);
@@ -1593,6 +1600,7 @@ bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     cur->nextpi = prev->nextpi;
     if (p == sprimes[cur->nextpi])
         cur->nextpi = find_nextpi(cur);
+    cur->maxp = (p > prev->maxp) ? p : prev->maxp;
     mpz_ui_pow_ui(px, p, x - 1);
 
     /* Note: the work for this call is wasted if x does not divide t; but
