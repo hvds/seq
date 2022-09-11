@@ -1832,7 +1832,6 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
 void insert_stack(void) {
     /* first insert forced primes */
     for (uint fpi = 0; fpi < forcedp; ++fpi) {
-        STOREVL(vl_forced++);
         t_forcep *fp = &forcep[fpi];
         uint p = fp->p;
         uint maxx = 0, mini;
@@ -1849,7 +1848,7 @@ void insert_stack(void) {
         /* find the batch */
         if (maxx == 0) {
             if (fp->batch[fp->count -1].x != 0)
-                fail("no forced prime %u found", p);
+                goto insert_check;
             /* this prime unforced, so any remaining ones are too */
             break;
         }
@@ -1867,6 +1866,7 @@ void insert_stack(void) {
             break;
         }
 
+        STOREVL(vl_forced++);
         --rstack[mini].count;
         t_level *prev = &levels[level - 1];
         t_level *cur = &levels[level];
@@ -1946,6 +1946,7 @@ void insert_stack(void) {
             fail("could not apply_alloc(%u, %lu, %u)", vi, p, x);
         ++level;
     }
+  insert_check:
     /* check we found them all */
     for (uint vi = 0; vi < k; ++vi) {
         t_fact *rs = &rstack[vi];
