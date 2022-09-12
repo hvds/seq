@@ -1791,15 +1791,17 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     mpz_add_ui(Z(r_walk), max, vi);
     mpz_fdiv_q(Z(r_walk), Z(r_walk), prev->aq);
     if (prev->have_square) {
-        /* If we fix a square, expect to actually walk sqrt(r_walk)
-         * times number of roots mod cur->aq, typically 2^k if there are
-         * k primes dividing aq.
-         */
-        mpz_root(Z(r_walk), Z(r_walk), 2);
-/* FIXME: we now know the actual number of roots */
-        mpz_mul_2exp(Z(r_walk), Z(r_walk), level - 1);
-        if (prev->have_square > 1)
+        if (prev->have_square == 1) {
+            /* if we fix a square, expect to actually walk only the g'th
+             * roots of rq mod aq */
+            uint g = sqg[value[sq0].vlevel - 1];
+            mpz_root(Z(r_walk), Z(r_walk), g);
+            mpz_mul_ui(Z(r_walk), Z(r_walk), res_array(prev->level)->count);
+        } else {
+            /* if we fix multiple squares, we'll solve a Pell equation;
+             * treat that as effectively free */
             mpz_set_ui(Z(r_walk), 0);
+        }
     }
     if (gain > 1)
         mpz_mul_ui(Z(r_walk), Z(r_walk), gain);
