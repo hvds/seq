@@ -4,6 +4,12 @@ TODO (high priority):
 - fix linear search in pell.c:contfrac()
 - 'coul -p20 -x1e80 66 5' spends all its time finding allrootmod()
   results, almost all of which are immediately greater than endr
+- when n=36 and we allocate p^5, the remainder cannot allocate p^2 so
+  we can require a 5th power. But our "have_square" support is predicated
+  on the assumption of a square: how readily can we extend it to cater
+  for this case? This case kicks in when (x > t/2 && x.high == t.high),
+  and will be useful for n in { 36, 54, 72, 100 }. n=18 is a more extreme
+  case.
 
 CHECKME:
 - inject failures can clash with walk_1() successes
