@@ -23,5 +23,3 @@ TODO (lower priority):
 - prep the simple_valuation() checks for apply_batch()
 - for unforced primes, do constant apply_alloc() work in advance
 - avoid recursing when best_v() will find nothing
-- new option to show fixed-prime patterns, with indices
-- sharding by new option to select one or more fixed-prime patterns by index

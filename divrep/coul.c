@@ -211,6 +211,14 @@ ulong antigain = 0;
  */
 uint minp = 0, maxp = 0;
 bool opt_print = 0; /* print candidates instead of fully testing them */
+/* If opt_alloc is true and opt_batch < 0, just show the forced-prime
+ * allocation; if opt_alloc is true and opt_batch >= 0, just process
+ * the specified batch_alloc.
+ */
+bool opt_alloc = 0;
+int opt_batch = -1;
+int batch_alloc = 0;   /* index of forced-prime allocations */
+
 int debug = 0;     /* diag and keep every case seen */
 ulong randseed = 1; /* for ECM, etc */
 
@@ -341,6 +349,14 @@ void diag_walk_pell(uint pc) {
                 diag_buf, pc, seconds(t1));
         logt = t1 + log_delay;
     }
+}
+
+void disp_batch(t_level *lp) {
+    prep_show_v();      /* into diag_buf */
+    printf("203 b%u: %s", batch_alloc, diag_buf);
+    if (lp->have_square)
+        printf(" [sq=%u]", lp->have_square);
+    printf("\n");
 }
 
 void candidate(mpz_t c) {
@@ -1737,6 +1753,18 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
         if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
             return 0;
     }
+
+    if (opt_alloc && next_prime(fp->p) > maxforce[bp->vi]) {
+        if (batch_alloc == opt_batch) {
+            /* this is the one batch we want to process */
+            ++batch_alloc;
+            return 1;
+        }
+        if (opt_batch < 0)
+            disp_batch(cur);
+        ++batch_alloc;
+        return 0;
+    }
     return 1;
 }
 
@@ -2070,6 +2098,17 @@ void recurse(void) {
             if (fp->batch[bi].x == 0) {
                 cur_level->is_forced = 0;
                 FETCHVL(--vl_forced);
+                if (opt_alloc) {
+                    if (batch_alloc == opt_batch) {
+                        /* this is the one batch we want to process */
+                        ++batch_alloc;
+                        goto unforced;
+                    }
+                    if (opt_batch < 0)
+                        disp_batch(prev_level);
+                    ++batch_alloc;
+                    goto derecurse;
+                }
                 goto unforced;
             }
             if (!apply_batch(prev_level, cur_level, fp, bi)) {
@@ -2137,7 +2176,12 @@ int main(int argc, char **argv, char **envp) {
             force_all = strtoul(&arg[2], NULL, 10);
         else if (arg[1] == 's')
             randseed = strtoul(&arg[2], NULL, 10);
-        else if (strncmp("-o", arg, 2) == 0)
+        else if (strncmp("-a", arg, 2) == 0)
+            opt_alloc = 1;
+        else if (arg[1] == 'b') {
+            opt_batch = strtoul(&arg[2], NULL, 10);
+            opt_alloc = 1;
+        } else if (strncmp("-o", arg, 2) == 0)
             opt_print = 1;
         else if (strncmp("-d", arg, 2) == 0)
             ++debug;
