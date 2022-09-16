@@ -95,6 +95,14 @@ a certain point, but will instead print them as a possible candidate.
 (**Not yet implemented.**) The default is to fully factorize numbers
 as far as needed to prove whether they are or are not a candidate.
 
+If "-a" is specified, it will establish only each valid set of batch
+allocations of forced primes, and output those sets assigning an index
+to each one (for use by '-b' below).
+
+If "-b100" is specified, it will find the set of batch allocations of
+forced primes with index 100, and run the normal calculations only
+over that batch.
+
 Specifying "-d" enables debugging. By default, progress is shown on the
 terminal every 1 seconds (see "DIAG" in coul.c), overwriting the previous
 progress line each time. With "-d", it instead shows progress at every
