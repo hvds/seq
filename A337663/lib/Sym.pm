@@ -25,6 +25,11 @@ sub check_loc {
     return $loc->[0] == $l2->[0] && $loc->[1] == $l2->[1];
 }
 
+sub transform_loc {
+    my($class, $g, $loc) = @_;
+    return $class->_transform_loc($g->x, $g->y, $loc);
+}
+
 # null symmetry
 package Sym::xy {
     use parent qw{ Sym };
@@ -38,7 +43,7 @@ package Sym::xy {
         return 1;
     }
 
-    sub transform_loc {
+    sub _transform_loc {
         my($class, $x, $y, $loc) = @_;
         return [ @$loc ];
     }
@@ -64,7 +69,7 @@ package Sym::xY {
         }, @$vals;
     }
 
-    sub transform_loc {
+    sub _transform_loc {
         my($class, $x, $y, $loc) = @_;
         return [ $loc->[0], $y - 1 - $loc->[1] ];
     }
@@ -91,7 +96,7 @@ package Sym::Xy {
         }, 0 .. ($x + 1) >> 1;
     }
 
-    sub transform_loc {
+    sub _transform_loc {
         my($class, $x, $y, $loc) = @_;
         return [ $x - 1 - $loc->[0], $loc->[1] ];
     }
@@ -119,7 +124,7 @@ package Sym::XY {
         }, 0 .. $x;
     }
 
-    sub transform_loc {
+    sub _transform_loc {
         my($class, $x, $y, $loc) = @_;
         return [ $x - 1 - $loc->[0], $y - 1 - $loc->[1] ];
     }
@@ -150,7 +155,7 @@ package Sym::yx {
         return 1;
     }
 
-    sub transform_loc {
+    sub _transform_loc {
         my($class, $x, $y, $loc) = @_;
         return [ $loc->[1], $loc->[0] ];
     }
@@ -184,7 +189,7 @@ package Sym::yX {
         return 1;
     }
 
-    sub transform_loc {
+    sub _transform_loc {
         my($class, $x, $y, $loc) = @_;
         return [ $loc->[1], $x - 1 - $loc->[0] ];
     }
@@ -218,7 +223,7 @@ package Sym::Yx {
         return 1;
     }
 
-    sub transform_loc {
+    sub _transform_loc {
         my($class, $x, $y, $loc) = @_;
         return [ $y - 1 - $loc->[1], $loc->[0] ];
     }
@@ -252,7 +257,7 @@ package Sym::YX {
         return 1;
     }
 
-    sub transform_loc {
+    sub _transform_loc {
         my($class, $x, $y, $loc) = @_;
         return [ $y - 1 - $loc->[1], $x - 1 - $loc->[0] ];
     }
