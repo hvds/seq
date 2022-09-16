@@ -7,6 +7,7 @@
 
 typedef struct hist_s {
     int type;
+    int mult;
     int index;
     int group_index;
     loc_t l1;
@@ -82,21 +83,26 @@ board_t *init_board(int n0, int freq0, char *start_hist) {
             in_hist[in_histc].type = _d1(s);
             switch (in_hist[in_histc].type) {
                 case 1:
+                    /* new group */
+                    in_hist[in_histc].mult = _d1(s);
                     in_hist[in_histc].index = _d2(s);
                     break;
                 case 2:
                     in_hist[in_histc].group_index = _d1(s);
+                    in_hist[in_histc].mult = _d1(s);
                     in_hist[in_histc].l1.x = _d2(s);
                     in_hist[in_histc].l1.y = _d2(s);
                     break;
                 case 3:
                     in_hist[in_histc].group_index = _d1(s);
+                    in_hist[in_histc].mult = _d1(s);
                     in_hist[in_histc].index = _d2(s);
                     in_hist[in_histc].l1.x = _d2(s);
                     in_hist[in_histc].l1.y = _d2(s);
                     break;
                 case 4:
                     in_hist[in_histc].group_index = _d1(s);
+                    in_hist[in_histc].mult = _d1(s);
                     in_hist[in_histc].index = _d2(s);
                     in_hist[in_histc].l1.x = _d2(s);
                     in_hist[in_histc].l1.y = _d2(s);
@@ -177,20 +183,20 @@ void recurse(board_t *b, int unused, group_t *g0, group_t *g1) {
                 break;
             switch (h.type) {
                 case 1:
-                    sprintf(s, "%01d%02d",
-                            h.type, h.index);
+                    sprintf(s, "%01d%01d%02d",
+                            h.type, h.mult, h.index);
                     break;
                 case 2:
-                    sprintf(s, "%01d%01d%02d%02d",
-                            h.type, h.group_index, h.l1.x, h.l1.y);
+                    sprintf(s, "%01d%01d%01d%02d%02d",
+                            h.type, h.group_index, h.mult, h.l1.x, h.l1.y);
                     break;
                 case 3:
-                    sprintf(s, "%01d%01d%02d%02d%02d",
-                            h.type, h.group_index, h.index, h.l1.x, h.l1.y);
+                    sprintf(s, "%01d%01d%01d%02d%02d%02d",
+                            h.type, h.group_index, h.mult, h.index, h.l1.x, h.l1.y);
                     break;
                 case 4:
-                    sprintf(s, "%01d%01d%02d%02d%02d%02d%02d",
-                            h.type, h.group_index, h.index,
+                    sprintf(s, "%01d%01d%01d%02d%02d%02d%02d%02d",
+                            h.type, h.group_index, h.mult, h.index,
                             h.l1.x, h.l1.y, h.l2.x, h.l2.y);
                     break;
             }
@@ -242,20 +248,25 @@ void try_board(board_t *b) {
 
     /* try making a new group */
     if (unused >= k && h.type <= 1) {
-        int next_unused = unused - k;
-        grouplist_t *gl = group_seed(k);
-        int start_index = (h.type == 1) ? h.index : 0;
-        oh->type = 1;
-        for (int i = start_index; i < gl->count; ++i) {
-            oh->index = i;
-            if (groups) {
-                recurse(b, next_unused, g0, gl->g[i]);
-            } else {
-                recurse(b, next_unused, gl->g[i], (group_t *)NULL);
+        int start_mult = (h.type == 1) ? h.mult : 1;
+        for (int m = start_mult; m * k <= unused; ++m) {
+            int targ = m * k;
+            int next_unused = unused - targ;
+            grouplist_t *gl = group_seed(targ);
+            int start_index = (h.type == 1) ? h.index : 0;
+            oh->type = 1;
+            oh->mult = m;
+            for (int i = start_index; i < gl->count; ++i) {
+                oh->index = i;
+                if (groups) {
+                    recurse(b, next_unused, g0, gl->g[i]);
+                } else {
+                    recurse(b, next_unused, gl->g[i], (group_t *)NULL);
+                }
             }
+            /* seed lists are persistent */
+            /* free_grouplist(gl); */
         }
-        /* seed lists are persistent */
-        /* free_grouplist(gl); */
     }
 
     int start_group = (h.type > 1) ? h.group_index : 0;
@@ -263,59 +274,61 @@ void try_board(board_t *b) {
         group_t *gi = b->group[ig];
         int *headsi = gi->sum_heads;
         int *chainsi = gi->sum_chains;
-        int spare = unused;
-
-        if (spare > 8)
-            spare = 8;
-        if (spare > k)
-            spare = k;
-
         oh->group_index = ig;
 
         /* try extending an existing group */
         if (h.type < 4) {
             bool hist_wait = (h.type > 1 && h.type < 4) ? 1 : 0;
-            for (int diff = 0; diff <= spare; ++diff) {
-                int rest = k - diff;
+            for (int m = 1; m * k <= gi->maxsum + unused; ++m) {
+                int targ = m * k;
+                int spare = unused;
+                if (spare > 8)
+                    spare = 8;
+                if (spare > targ)
+                    spare = targ;
+                oh->mult = m;
+                for (int diff = 0; diff <= spare; ++diff) {
+                    int rest = targ - diff;
 
-                if (rest > gi->maxsum)
-                    continue;
-                for (int chain = headsi[rest]; chain >= 0; chain = chainsi[chain]) {
-                    int xi = chain / (gi->y + 2) - 1, yi = chain % (gi->y + 2) - 1;
-                    int p_start = 0;
-                    if (hist_wait) {
-                        if (xi != h.l1.x || yi != h.l1.y)
-                            continue;
-                        hist_wait = 0;
-                        p_start = h.index;
-                    }
-                    if (diff == 0) {
-                        group_t *gn = group_place(gi, (loc_t){ xi, yi }, k);
-                        oh->type = 2;
-                        oh->l1.x = xi;
-                        oh->l1.y = yi;
-                        if (ig) {
-                            recurse(b, unused, g0, gn);
-                        } else {
-                            recurse(b, unused, gn, g1);
+                    if (rest > gi->maxsum)
+                        continue;
+                    for (int chain = headsi[rest]; chain >= 0; chain = chainsi[chain]) {
+                        int xi = chain / (gi->y + 2) - 1, yi = chain % (gi->y + 2) - 1;
+                        int p_start = 0;
+                        if (hist_wait) {
+                            if (xi != h.l1.x || yi != h.l1.y)
+                                continue;
+                            hist_wait = 0;
+                            p_start = h.index;
                         }
-                    } else {
-                        int next_unused = unused - diff;
-                        grouplist_t *gl = group_place_with(
-                            gi, (loc_t){ xi, yi }, k, diff
-                        );
-                        oh->type = 3;
-                        oh->l1.x = xi;
-                        oh->l1.y = yi;
-                        for (int p = p_start; p < gl->count; ++p) {
-                            oh->index = p;
+                        if (diff == 0) {
+                            group_t *gn = group_place(gi, (loc_t){ xi, yi }, k);
+                            oh->type = 2;
+                            oh->l1.x = xi;
+                            oh->l1.y = yi;
                             if (ig) {
-                                recurse(b, next_unused, g0, gl->g[p]);
+                                recurse(b, unused, g0, gn);
                             } else {
-                                recurse(b, next_unused, gl->g[p], g1);
+                                recurse(b, unused, gn, g1);
                             }
+                        } else {
+                            int next_unused = unused - diff;
+                            grouplist_t *gl = group_place_with(
+                                gi, (loc_t){ xi, yi }, k, diff
+                            );
+                            oh->type = 3;
+                            oh->l1.x = xi;
+                            oh->l1.y = yi;
+                            for (int p = p_start; p < gl->count; ++p) {
+                                oh->index = p;
+                                if (ig) {
+                                    recurse(b, next_unused, g0, gl->g[p]);
+                                } else {
+                                    recurse(b, next_unused, gl->g[p], g1);
+                                }
+                            }
+                            free_grouplist(gl);
                         }
-                        free_grouplist(gl);
                     }
                 }
             }
@@ -329,47 +342,56 @@ void try_board(board_t *b) {
             bool iwait = (h.type == 4) ? 1 : 0;
 
             oh->type = 4;
-            for (int si = 1; si < k && si < gi->maxsum; ++si) {
-                int need = k - si;
-                int min = (need - unused < 1) ? 1 : (need - unused);
+            for (int m = 1; m * k <= gi->maxsum + gj->maxsum + unused; ++m) {
+                int targ = m * k;
+                int spare = unused;
+                if (spare > 8)
+                    spare = 8;
+                if (spare > targ)
+                    spare = targ;
+                oh->mult = m;
+                for (int si = 1; si < k && si < gi->maxsum; ++si) {
+                    int need = targ - si;
+                    int min = (need - unused < 1) ? 1 : (need - unused);
 
-                for (int ci = headsi[si]; ci >= 0; ci = chainsi[ci]) {
-                    loc_t li = (loc_t){
-                        ci / (gi->y + 2) - 1, ci % (gi->y + 2) - 1
-                    };
-                    int jwait = 0;
-                    if (iwait) {
-                        if (li.x != h.l1.x || li.y != h.l1.y)
-                            continue;
-                        iwait = 0;
-                        jwait = 1;
-                    }
-                    oh->l1.x = li.x;
-                    oh->l1.y = li.y;
-                    for (int sj = min; sj <= need && sj < gj->maxsum; ++sj) {
-                        for (int cj = headsj[sj]; cj >= 0; cj = chainsj[cj]) {
-                            loc_t lj = (loc_t){
-                                cj / (gj->y + 2) - 1, cj % (gj->y + 2) - 1
-                            }; 
-                            int p_start = 0;
-                            if (jwait) {
-                                if (lj.x != h.l2.x || lj.y != h.l2.y)
-                                    continue;
-                                jwait = 0;
-                                p_start = h.index;
+                    for (int ci = headsi[si]; ci >= 0; ci = chainsi[ci]) {
+                        loc_t li = (loc_t){
+                            ci / (gi->y + 2) - 1, ci % (gi->y + 2) - 1
+                        };
+                        int jwait = 0;
+                        if (iwait) {
+                            if (li.x != h.l1.x || li.y != h.l1.y)
+                                continue;
+                            iwait = 0;
+                            jwait = 1;
+                        }
+                        oh->l1.x = li.x;
+                        oh->l1.y = li.y;
+                        for (int sj = min; sj <= need && sj < gj->maxsum; ++sj) {
+                            for (int cj = headsj[sj]; cj >= 0; cj = chainsj[cj]) {
+                                loc_t lj = (loc_t){
+                                    cj / (gj->y + 2) - 1, cj % (gj->y + 2) - 1
+                                }; 
+                                int p_start = 0;
+                                if (jwait) {
+                                    if (lj.x != h.l2.x || lj.y != h.l2.y)
+                                        continue;
+                                    jwait = 0;
+                                    p_start = h.index;
+                                }
+                                int use = need - sj;
+                                int next_unused = unused - use;
+                                grouplist_t *gl = coalesce_group(
+                                    gi, li, gj, lj, k, use
+                                );
+                                oh->l2.x = lj.x;
+                                oh->l2.y = lj.y;
+                                for (int p = p_start; p < gl->count; ++p) {
+                                    oh->index = p;
+                                    recurse(b, next_unused, gl->g[p], (group_t *)NULL);
+                                }
+                                free_grouplist(gl);
                             }
-                            int use = need - sj;
-                            int next_unused = unused - use;
-                            grouplist_t *gl = coalesce_group(
-                                gi, li, gj, lj, k, use
-                            );
-                            oh->l2.x = lj.x;
-                            oh->l2.y = lj.y;
-                            for (int p = p_start; p < gl->count; ++p) {
-                                oh->index = p;
-                                recurse(b, next_unused, gl->g[p], (group_t *)NULL);
-                            }
-                            free_grouplist(gl);
                         }
                     }
                 }
