@@ -63,10 +63,14 @@ tee("100 $0 -y$typename $n $k $d\n");
 my $wi = length($k+1);
 my $wt = length($n) + 1;
 my($good, $allgood) = (1, 0);
+my $diag;
+$| = 1;
 for (my $i = 0; $good; ++$i) {
+    diag($diag = "i$i ");
     my($ok, $t, $f) = tf($d + $i);
     $allgood = 1 if $i == $k && $good;
     $good = 0 unless $ok;
+    diag('');
     tee(sprintf "211 Sequence %*s: %*s = tau(%s = %s)\n",
             $wi, $i, $wt, $t, $d + $i, $f);
 }
@@ -109,9 +113,11 @@ sub tf {
     {
         my @f = trial_factor($f, $hlim);
         $f = MBI(pop @f);
+        diag($diag .= "@f ") if @f;
         while (1) {
             my($p, $f2) = trial_factor($f, $hlim);
             push @f, $p;
+            diag($diag .= "$p ");
             last unless $f2;
             $f = MBI($f2);
         }
@@ -281,4 +287,13 @@ sub roughness {
         $s += $e * ($p - 1);
     }
     return $s;
+}
+
+{
+    my $s; BEGIN { $s = '' }
+    sub diag {
+        print "\x08 \x08" x length($s);
+        print $s = join '', @_;
+        return;
+    }
 }
