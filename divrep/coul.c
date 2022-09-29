@@ -573,7 +573,9 @@ void recover(void) {
             off_t offset = ftello(rfp);
             if (offset == -1)
                 fail("could not ask offset: %s", strerror(errno));
-            (void) !ftruncate(fileno(rfp), offset - nread);
+            if (ftruncate(fileno(rfp), offset - nread) != 0)
+                fail("could not truncate %s to %lu: %s", rpath, offset - nread,
+                        strerror(errno));
             if (freopen(NULL, "a+", rfp) == NULL)
                 fail("could not reopen %s: %s", rpath, strerror(errno));
             break;
