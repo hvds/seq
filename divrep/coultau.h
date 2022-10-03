@@ -45,7 +45,7 @@ typedef struct s_tm {
 } t_tm;
 extern t_tm *taum;
 
-extern void init_tau(void);
+extern void init_tau(uint test_rough);
 extern void done_tau(void);
 extern void fs_init(factor_state* fs);
 extern void fs_clear(factor_state* fs);

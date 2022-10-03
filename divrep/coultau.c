@@ -1,6 +1,7 @@
 #include <gmp.h>
 #include "ptypes.h"
 
+#include "coul.h"
 #include "coultau.h"
 #include "factor.h"
 #include "primality.h"
@@ -19,7 +20,8 @@
 t_tm *taum = NULL;
 uint taum_alloc = 0;
 uint taum_size;
-mpz_t tmf;
+uint test_rough = 0;
+mpz_t tmf, tmp_lim;
 #define SIMPQS_SIZE 66
 mpz_t simpqs_array[SIMPQS_SIZE];
 
@@ -157,8 +159,9 @@ static unsigned short primes_small[NPRIMES_SMALL];
 
 void init_tmfbl(void);
 void done_tmfbl(void);
-void init_tau(void) {
+void init_tau(uint rough) {
     UV pn;
+    test_rough = rough;
     PRIME_ITERATOR(iter);
     primes_small[0] = 0;
     primes_small[1] = 2;
@@ -166,6 +169,7 @@ void init_tau(void) {
         primes_small[pn] = prime_iterator_next(&iter);
     prime_iterator_destroy(&iter);
     mpz_init(tmf);
+    mpz_init(tmp_lim);
     init_tmfbl();
     for (uint i = 0; i < SIMPQS_SIZE; ++i)
         mpz_init(simpqs_array[i]);
@@ -180,6 +184,7 @@ void done_tau(void) {
             mpz_clear(taum[i].n);
     free(taum);
     mpz_clear(tmf);
+    mpz_clear(tmp_lim);
 }
 
 void alloc_taum(uint size) {
@@ -673,11 +678,25 @@ bool tau_multi_prep(uint i) {
     UV p;
     UV sp = 2;
     UV tlim = (nbits > 80) ? 4001 * 4001 : 16001 * 16001;
+    if (test_rough && t >= test_rough) {
+        uint roughness = divisors[t].sumpm;
+        mpz_root(tmp_lim, tm->n, roughness);
+        if (mpz_fits_uint_p(tmp_lim)) {
+            ulong lim = mpz_get_ui(tmp_lim);
+            tlim = lim * lim;
+        }
+        /* else what? */
+    }
+
     UV un = mpz_cmp_ui(tm->n, 2 * tlim) >= 0
         ? 2 * tlim
         : mpz_get_ui(tm->n);
     UV lim = (tlim < un) ? tlim : un;
-    for (p = primes_small[sp]; p * p < lim; p = primes_small[++sp]) {
+    PRIME_ITERATOR(iter);
+    while (1) {
+        p = prime_iterator_next(&iter);
+        if (p * p >= lim)
+            break;
         while (mpz_divisible_ui_p(tm->n, p)) {
             mpz_divexact_ui(tm->n, tm->n, p);
             ++ep;
@@ -685,26 +704,40 @@ bool tau_multi_prep(uint i) {
         if (ep) {
             if ((t % (ep + 1)) != 0) {
                 dz("div: %u ~| t=%u", ep + 1, t);
+                prime_iterator_destroy(&iter);
                 return 0;
             }
             t /= ep + 1;
             if (t == 1) {
                 dz("div: t=1");
+                prime_iterator_destroy(&iter);
                 return prep_abort(tm, mpz_cmp_ui(tm->n, 1) == 0);
             } else if (t == 2) {
                 dz("div: t=2");
+                prime_iterator_destroy(&iter);
                 return prep_abort(tm, ct_prime(tm->n));
             } else if (mpz_cmp_ui(tm->n, 1) == 0) {
                 dz("div: n=1");
+                prime_iterator_destroy(&iter);
                 return 0;
             }
             ep = 0;
+            if (test_rough && t >= test_rough) {
+                uint roughness = divisors[t].sumpm;
+                mpz_root(tmp_lim, tm->n, roughness);
+                if (mpz_fits_uint_p(tmp_lim)) {
+                    ulong lim = mpz_get_ui(tmp_lim);
+                    tlim = lim * lim;
+                }
+                /* else what? */
+            }
             un = mpz_cmp_ui(tm->n, 2 * tlim) > 0
                 ? 2 * tlim
                 : mpz_get_ui(tm->n);
             lim = (tlim < un) ? tlim : un;
         }
     }
+    prime_iterator_destroy(&iter);
 
     if (un < p * p) {
         dz("div: tail is prime");
@@ -715,6 +748,13 @@ bool tau_multi_prep(uint i) {
     } else if (t == 2) {
         dz("div: t == 2");
         return prep_abort(tm, ct_prime(tm->n));
+    }
+    if (test_rough && t >= test_rough) {
+        mpz_ui_pow_ui(tmp_lim, p, divisors[t].sumpm);
+        if (mpz_cmp(tm->n, tmp_lim) < 0) {
+            dz("div: rough[%u]", divisors[t].sumpm);
+            return 0;
+        }
     }
     dz("div: done, t=%u", t);
     if (ct_prime(tm->n))

@@ -192,6 +192,7 @@ ulong antigain = 0;
  * skip the walk)
  */
 uint minp = 0, maxp = 0;
+uint rough = 0;     /* test roughness if tau >= rough */
 bool opt_print = 0; /* print candidates instead of fully testing them */
 /* If opt_alloc is true and opt_batch < 0, just show the forced-prime
  * allocation; if opt_alloc is true and opt_batch >= 0, just process
@@ -465,7 +466,6 @@ void init_pre(void) {
     init_randstate(1);
     /* we may do this again after options handled, to select real seed */
 
-    init_tau();
     init_pell();
     ticks_per_second = sysconf(_SC_CLK_TCK);
     ticks = utime();
@@ -807,6 +807,7 @@ void prep_forcep(void) {
 }
 
 void init_post(void) {
+    init_tau(rough);
     alloc_taum(k);
     if (randseed != 1) {
         /* hard to guarantee we haven't used any randomness before this.
@@ -893,6 +894,8 @@ void report_init(FILE *fp, char *prog) {
     }
     if (randseed != 1)
         fprintf(fp, " -s%lu", randseed);
+    if (rough)
+        fprintf(fp, " -h%u", rough);
     fprintf(fp, "\n");
 }
 
@@ -2166,6 +2169,8 @@ int main(int argc, char **argv, char **envp) {
             force_all = strtoul(&arg[2], NULL, 10);
         else if (arg[1] == 's')
             randseed = strtoul(&arg[2], NULL, 10);
+        else if (arg[1] == 'h')
+            rough = strtoul(&arg[2], NULL, 10);
         else if (strncmp("-a", arg, 2) == 0)
             opt_alloc = 1;
         else if (arg[1] == 'b') {
