@@ -558,7 +558,7 @@ void recover(void) {
     char *last305 = NULL;
     char *last202 = NULL;
     char *curbuf = NULL;
-    size_t len = 120;
+    size_t len = 120, len305 = 0, len202 = 0;
 
     while (1) {
         ssize_t nread = getline(&curbuf, &len, rfp);
@@ -584,10 +584,16 @@ void recover(void) {
             char *t = last305;
             last305 = curbuf;
             curbuf = t;
+            size_t lt = len305;
+            len305 = len;
+            len = lt;
         } else if (strncmp("202 ", curbuf, 4) == 0) {
             char *t = last202;
             last202 = curbuf;
             curbuf = t;
+            size_t lt = len202;
+            len202 = len;
+            len = lt;
         } else if (strncmp("001 ", curbuf, 4) == 0) {
             /* TODO: parse and check for consistent options */
             start_seen = 1;
