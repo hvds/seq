@@ -1559,13 +1559,12 @@ bool alloc_square(t_level *cur, uint vi) {
     return 1;
 }
 
-/* Allocate p^{x-1} to v_{vi}. Returns FALSE if it is invalid, or if no
- * work to do.
- * Updates value[vi]; checks for a new square; calls walk_1() directly
- * if remaining tau == 1.
+/* Allocate p^{x-1} to v_{vi}. Returns FALSE if it is invalid.
+ * Updates value[vi], and checks if this creates a new square.
+ * Does not update existing square residues, see update_residues() for that.
  */
 bool apply_allocv(t_level *prev_level, t_level *cur_level,
-        uint vi, ulong p, uint x, mpz_t px, bool secondary) {
+        uint vi, ulong p, uint x, mpz_t px) {
     t_value *v = &value[vi];
     t_allocation *prev = (v->vlevel) ? &v->alloc[v->vlevel - 1] : NULL;
     t_allocation *cur = &v->alloc[v->vlevel];
@@ -1582,18 +1581,12 @@ bool apply_allocv(t_level *prev_level, t_level *cur_level,
         mpz_mul(cur->q, prev->q, px);
     else
         mpz_set(cur->q, px);
-    /* nothing more to do if we walk_1() */
-    if (cur->t == 1) {
-        walk_1(cur_level, vi);
-        return 0;
-    }
 
-    if ((cur->t & 1) && !(prevt & 1))
+    /* is this newly a square? */
+    if ((cur->t > 1) && (cur->t & 1) && !(prevt & 1))
         if (!alloc_square(cur_level, vi))
             return 0;
-    if (prev_level->have_square)
-        if (!update_residues(prev_level, cur_level, vi, p, x, px, secondary))
-            return 0;
+
     return 1;
 }
 
@@ -1630,14 +1623,77 @@ bool apply_single(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     }
 #endif
 
-    if (!apply_allocv(prev, cur, vi, p, x, px, 0))
+    /* this can fail only by requiring an impossible square */
+    if (!apply_allocv(prev, cur, vi, p, x, px))
         return 0;
+
+    t_value *vp = &value[vi];
+    uint t = vp->alloc[ vp->vlevel - 1 ].t;
+    if (t == 1) {
+        walk_1(cur, vi);
+        /* nothing more to do */
+        return 0;
+    }
+
+    /* did we already have a square? */
+    if (prev->have_square) {
+        if (!update_residues(prev, cur, vi, p, x, px, 0))
+            return 0;
+    }
     return 1;
 }
 
 bool apply_secondary(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     mpz_ui_pow_ui(px, p, x - 1);
-    return apply_allocv(prev, cur, vi, p, x, px, 1);
+    if (!apply_allocv(prev, cur, vi, p, x, px))
+        return 0;
+    t_value *vp = &value[vi];
+    uint t = vp->alloc[ vp->vlevel - 1 ].t;
+    if (t == 1) {
+        /* FIXME: this will do the wrong thing part-way through a batch */
+        walk_1(cur, vi);
+        /* nothing more to do */
+        return 0;
+    }
+
+    /* did we already have a square? */
+    if (prev->have_square) {
+        /* FIXME: this can do the wrong thing part-way through a batch */
+        if (!update_residues(prev, cur, vi, p, x, px, 1))
+            return 0;
+    }
+    return 1;
+}
+
+bool apply_primary(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
+    apply_level(prev, cur, vi, p, x);
+    mpz_ui_pow_ui(px, p, x - 1);
+    /* this is wasted effort if x does not divide v_i.t, but we need it
+     * for the apply_square() calculation */
+    update_chinese(prev, cur, vi, px);
+    if (!apply_allocv(prev, cur, vi, p, x, px))
+        return 0;
+
+    /* check if we overshot */
+    t_value *vp = &value[vi];
+    if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
+        return 0;
+
+    uint t = vp->alloc[ vp->vlevel - 1 ].t;
+    if (t == 1) {
+        /* FIXME: this will do the wrong thing part-way through a batch */
+        walk_1(cur, vi);
+        /* nothing more to do */
+        return 0;
+    }
+
+    /* did we already have a square? */
+    if (prev->have_square) {
+        /* FIXME: this can do the wrong thing part-way through a batch */
+        if (!update_residues(prev, cur, vi, p, x, px, 0))
+            return 0;
+    }
+    return 1;
 }
 
 bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
@@ -1647,18 +1703,7 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
     cur->bi = bi;
     t_forcebatch *bp = &fp->batch[bi];
 
-    /* apply the primary */
-    apply_level(prev, cur, bp->vi, fp->p, bp->x);
-    mpz_ui_pow_ui(px, fp->p, bp->x - 1);
-    /* this is wasted effort if x does not divide v_i.t, but we need it
-     * for the apply_square() calculation */
-    update_chinese(prev, cur, bp->vi, px);
-    if (!apply_allocv(prev, cur, bp->vi, fp->p, bp->x, px, 0))
-        return 0;
-
-    /* check if we overshot */
-    vp = &value[bp->vi];
-    if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
+    if (!apply_primary(prev, cur, bp->vi, fp->p, bp->x))
         return 0;
 
     /* TODO: prep this */
