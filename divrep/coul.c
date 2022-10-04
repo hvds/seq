@@ -1637,6 +1637,52 @@ bool apply_secondary(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     return apply_allocv(prev, cur, vi, p, x, px, 1);
 }
 
+bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
+    assert(fp->count > bi);
+    t_value *vp;
+    cur->is_forced = 1;
+    cur->bi = bi;
+
+    t_forcebatch *bp = &fp->batch[bi];
+    if (!apply_alloc(prev, cur, bp->vi, fp->p, bp->x))
+        return 0;
+    /* check if we overshot */
+    vp = &value[bp->vi];
+    if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
+        return 0;
+
+    /* TODO: prep this */
+    for (uint i = fp->p; i <= bp->vi; i += fp->p) {
+        uint x = simple_valuation(i, fp->p) + 1;
+        if (!apply_secondary(prev, cur, bp->vi - i, fp->p, x))
+            return 0;
+        vp = &value[bp->vi - i];
+        if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
+            return 0;
+    }
+    for (uint i = fp->p; bp->vi + i < k; i += fp->p) {
+        uint x = simple_valuation(i, fp->p) + 1;
+        if (!apply_secondary(prev, cur, bp->vi + i, fp->p, x))
+            return 0;
+        vp = &value[bp->vi + i];
+        if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
+            return 0;
+    }
+
+    if (opt_alloc && next_prime(fp->p) > maxforce[bp->vi]) {
+        if (batch_alloc == opt_batch) {
+            /* this is the one batch we want to process */
+            ++batch_alloc;
+            return 1;
+        }
+        if (opt_batch < 0)
+            disp_batch(cur);
+        ++batch_alloc;
+        return 0;
+    }
+    return 1;
+}
+
 /* find the best entry to progress: the one with the highest tau()
  * still to fulfil, or (on equality) with the highest q, but having
  * at least one factor to allocate.
@@ -1713,52 +1759,6 @@ ulong limit_p(uint vi, uint x, uint nextt) {
     if (mpz_fits_ulong_p(Z(lp_x)))
         return mpz_get_ui(Z(lp_x));
     return 0;
-}
-
-bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
-    assert(fp->count > bi);
-    t_value *vp;
-    cur->is_forced = 1;
-    cur->bi = bi;
-
-    t_forcebatch *bp = &fp->batch[bi];
-    if (!apply_alloc(prev, cur, bp->vi, fp->p, bp->x))
-        return 0;
-    /* check if we overshot */
-    vp = &value[bp->vi];
-    if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
-        return 0;
-
-    /* TODO: prep this */
-    for (uint i = fp->p; i <= bp->vi; i += fp->p) {
-        uint x = simple_valuation(i, fp->p) + 1;
-        if (!apply_secondary(prev, cur, bp->vi - i, fp->p, x))
-            return 0;
-        vp = &value[bp->vi - i];
-        if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
-            return 0;
-    }
-    for (uint i = fp->p; bp->vi + i < k; i += fp->p) {
-        uint x = simple_valuation(i, fp->p) + 1;
-        if (!apply_secondary(prev, cur, bp->vi + i, fp->p, x))
-            return 0;
-        vp = &value[bp->vi + i];
-        if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
-            return 0;
-    }
-
-    if (opt_alloc && next_prime(fp->p) > maxforce[bp->vi]) {
-        if (batch_alloc == opt_batch) {
-            /* this is the one batch we want to process */
-            ++batch_alloc;
-            return 1;
-        }
-        if (opt_batch < 0)
-            disp_batch(cur);
-        ++batch_alloc;
-        return 0;
-    }
-    return 1;
 }
 
 /*
