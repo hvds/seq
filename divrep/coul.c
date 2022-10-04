@@ -1597,11 +1597,10 @@ bool apply_allocv(t_level *prev_level, t_level *cur_level,
     return 1;
 }
 
-/* Allocate p^{x-1} to v_{vi}. Returns FALSE if it is invalid, or if
- * no work to do.
- * Updates level and value, updates or propagates square residues.
+/* Update level structure for the allocation of p^{x-1} to v_{vi}.
+ * Does not update level.rq, level.aq: see update_chinese() for that.
  */
-bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
+void apply_level(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     cur->vi = vi;
     cur->p = p;
     cur->x = x;
@@ -1610,15 +1609,18 @@ bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     if (p == sprimes[cur->nextpi])
         cur->nextpi = find_nextpi(cur);
     cur->maxp = (p > prev->maxp) ? p : prev->maxp;
-    mpz_ui_pow_ui(px, p, x - 1);
+}
 
-    /* Note: the work for this call is wasted if x does not divide t; but
-     * that can only happen for forced primes, which is a tiny proportion
-     * of the calls (and involves the smallest numbers). Avoiding it means
-     * either duplication of other efforts or a more complicated workflow. */
+/* Allocate a non-fixed (non-batch) prime p^{x-1} to v_{vi}. Returns FALSE
+ * if it is invalid, or if no work to do.
+ * Updates level and value, updates or propagates square residues.
+ */
+bool apply_single(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
+    apply_level(prev, cur, vi, p, x);
+    mpz_ui_pow_ui(px, p, x - 1);
     update_chinese(prev, cur, vi, px);
 
-/* this appears to cost more than it saves in almost all cases */
+/* CHECKME: this appears to cost more than it saves in almost all cases */
 #ifdef CHECK_OVERFLOW
     /* if rq > max, no solution <= max is possible */
     if (mpz_cmp(cur->rq, max) > 0) {
@@ -1627,6 +1629,7 @@ bool apply_alloc(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
         return 0;
     }
 #endif
+
     if (!apply_allocv(prev, cur, vi, p, x, px, 0))
         return 0;
     return 1;
@@ -1642,10 +1645,17 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
     t_value *vp;
     cur->is_forced = 1;
     cur->bi = bi;
-
     t_forcebatch *bp = &fp->batch[bi];
-    if (!apply_alloc(prev, cur, bp->vi, fp->p, bp->x))
+
+    /* apply the primary */
+    apply_level(prev, cur, bp->vi, fp->p, bp->x);
+    mpz_ui_pow_ui(px, fp->p, bp->x - 1);
+    /* this is wasted effort if x does not divide v_i.t, but we need it
+     * for the apply_square() calculation */
+    update_chinese(prev, cur, bp->vi, px);
+    if (!apply_allocv(prev, cur, bp->vi, fp->p, bp->x, px, 0))
         return 0;
+
     /* check if we overshot */
     vp = &value[bp->vi];
     if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
@@ -1897,8 +1907,8 @@ void insert_stack(void) {
         cur->bi = bi;
 
         /* CHECKME: this returns 0 if t=1 */
-        if (!apply_alloc(prev, cur, mini, p, maxx))
-            fail("could not apply_alloc(%u, %lu, %u)", mini, p, maxx);
+        if (!apply_single(prev, cur, mini, p, maxx))
+            fail("could not apply_single(%u, %lu, %u)", mini, p, maxx);
         /* TODO: prep this, per apply_batch */
         for (uint j = p; j <= mini; j += p) {
             uint vj = mini - j;
@@ -1965,8 +1975,8 @@ void insert_stack(void) {
                     pux, p, x, vi);
 
         /* CHECKME: this returns 0 if t=1 */
-        if (!apply_alloc(prev, cur, vi, p, x))
-            fail("could not apply_alloc(%u, %lu, %u)", vi, p, x);
+        if (!apply_single(prev, cur, vi, p, x))
+            fail("could not apply_single(%u, %lu, %u)", vi, p, x);
         ++level;
     }
   insert_check:
@@ -2131,7 +2141,7 @@ void recurse(void) {
                 if (p == levels[li].p)
                     goto redo_unforced;
             /* note: this returns 0 if t=1 */
-            if (!apply_alloc(prev_level, cur_level, cur_level->vi, p, cur_level->x)) {
+            if (!apply_single(prev_level, cur_level, cur_level->vi, p, cur_level->x)) {
                 if (utime() >= diagt)
                     diag_plain();
                 --value[cur_level->vi].vlevel;
