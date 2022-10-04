@@ -1676,7 +1676,7 @@ bool apply_primary(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
 
     /* check if we overshot */
     t_value *vp = &value[vi];
-    if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
+    if (mpz_cmp(cur->rq, max) > 0)
         return 0;
 
     uint t = vp->alloc[ vp->vlevel - 1 ].t;
@@ -1711,16 +1711,10 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
         uint x = simple_valuation(i, fp->p) + 1;
         if (!apply_secondary(prev, cur, bp->vi - i, fp->p, x))
             return 0;
-        vp = &value[bp->vi - i];
-        if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
-            return 0;
     }
     for (uint i = fp->p; bp->vi + i < k; i += fp->p) {
         uint x = simple_valuation(i, fp->p) + 1;
         if (!apply_secondary(prev, cur, bp->vi + i, fp->p, x))
-            return 0;
-        vp = &value[bp->vi + i];
-        if (mpz_cmp(vp->alloc[vp->vlevel - 1].q, max) > 0)
             return 0;
     }
 
