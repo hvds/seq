@@ -1444,15 +1444,15 @@ void walk_1(t_level *cur_level, uint vi) {
 }
 
 /* When some v_j is known to be of the form m.z^g, we keep a running set
- * of possible values of z: * ( (rq + i)/q_j )^{ 1/g } mod aq/q_j.
+ * of possible values of z: z == ((rq + i)/q_j)^{ 1/g } mod aq/q_j.
  * If no such residues exist, this returns FALSE to signal that this
  * case cannot lead to a solution.
+ * For a batch allocation where we apply p^x at v_i and a secondary
+ * p^x' at v_j, we call this twice: first with (j, p, x') and then
+ * with (i, p, x - x'). For the second call we set retry=1.
  */
 bool update_residues(t_level *old, t_level *new,
-        uint vi, ulong p, uint x, mpz_t px, bool secondary) {
-    if (!old->have_square)
-        return 1;
-
+        uint vi, ulong p, uint x, mpz_t px, uint retry) {
     uint vj = sq0;
     t_value *vjp = &value[vj];
     uint jlevel = vjp->vlevel - 1;
@@ -1464,7 +1464,8 @@ bool update_residues(t_level *old, t_level *new,
         uint newg = divisors[vjp->alloc[jlevel].t].gcddm;
         uint divpow = (x - 1) / oldg;
 
-        /* note: old and new give same answer, but old has smaller values */
+        /* note: if this is the secondary of a batch, new may have
+         * inappropriate values for this stage */
         mpz_divexact(Z(ur_m), old->aq, vjp->alloc[jlevel - 1].q);
         mpz_ui_pow_ui(Z(ur_ipg), p, divpow);
         if (!mpz_invert(Z(ur_ipg), Z(ur_ipg), Z(ur_m)))
@@ -1490,17 +1491,23 @@ bool update_residues(t_level *old, t_level *new,
             return 0;
         return 1;
     }
-    /* secondary allocation cannot affect roots unless vi == vj */
-    if (secondary)
-        return 1;
 
     /* propagate the existing roots */
     uint g = sqg[jlevel];
     mpz_set_si(Z(ur_a), (int)vj - (int)vi);
-    if (!divmod(Z(ur_a), Z(ur_a), vjp->alloc[jlevel].q, px))
+    /* in the non-retry case, m = old->aq / q_j; in the retry case,
+     * we need to take the previous value of q_j */
+    uint mlevel = retry ? jlevel - 1 : jlevel;
+    if (retry) {
+        mpz_ui_pow_ui(Z(ur_m), p, retry);
+        mpz_divexact(Z(ur_a), Z(ur_a), Z(ur_m));
+    }
+    if (!divmod(Z(ur_a), Z(ur_a), vjp->alloc[mlevel].q, px))
         return 0;
-    mpz_divexact(Z(ur_m), old->aq, vjp->alloc[jlevel].q);
-    root_extend(new->level, old->level, Z(ur_m), Z(ur_a), g, p, x - 1, px);
+    mpz_divexact(Z(ur_m), old->aq, vjp->alloc[mlevel].q);
+    /* on retry, residues to update are already at new */
+    uint from = retry ? new->level : old->level;
+    root_extend(new->level, from, Z(ur_m), Z(ur_a), g, p, x - 1, px);
     if (res_array(new->level)->count == 0)
         return 0;
     return 1;
@@ -1647,21 +1654,6 @@ bool apply_secondary(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     mpz_ui_pow_ui(px, p, x - 1);
     if (!apply_allocv(prev, cur, vi, p, x, px))
         return 0;
-    t_value *vp = &value[vi];
-    uint t = vp->alloc[ vp->vlevel - 1 ].t;
-    if (t == 1) {
-        /* FIXME: this will do the wrong thing part-way through a batch */
-        walk_1(cur, vi);
-        /* nothing more to do */
-        return 0;
-    }
-
-    /* did we already have a square? */
-    if (prev->have_square) {
-        /* FIXME: this can do the wrong thing part-way through a batch */
-        if (!update_residues(prev, cur, vi, p, x, px, 1))
-            return 0;
-    }
     return 1;
 }
 
@@ -1679,20 +1671,6 @@ bool apply_primary(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     if (mpz_cmp(cur->rq, max) > 0)
         return 0;
 
-    uint t = vp->alloc[ vp->vlevel - 1 ].t;
-    if (t == 1) {
-        /* FIXME: this will do the wrong thing part-way through a batch */
-        walk_1(cur, vi);
-        /* nothing more to do */
-        return 0;
-    }
-
-    /* did we already have a square? */
-    if (prev->have_square) {
-        /* FIXME: this can do the wrong thing part-way through a batch */
-        if (!update_residues(prev, cur, vi, p, x, px, 0))
-            return 0;
-    }
     return 1;
 }
 
@@ -1716,6 +1694,39 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
         uint x = simple_valuation(i, fp->p) + 1;
         if (!apply_secondary(prev, cur, bp->vi + i, fp->p, x))
             return 0;
+    }
+
+    for (uint i = bp->vi % fp->p; i < k; i += fp->p) {
+        t_value *vp = &value[i];
+        uint t = vp->alloc[ vp->vlevel - 1 ].t;
+        if (t == 1) {
+            walk_1(cur, i);
+            /* nothing more to do */
+            return 0;
+        }
+    }
+
+    /* did we already have a square? */
+    if (prev->have_square) {
+        uint diff = abs((int)bp->vi - (int)sq0);
+        /* need extra care only when a secondary hits the square */
+        if (diff == 0 || diff % fp->p) {
+            mpz_ui_pow_ui(px, fp->p, bp->x - 1);
+            if (!update_residues(prev, cur, bp->vi, fp->p, bp->x, px, 0))
+                return 0;
+        } else {
+            /* apply the secondary first, then the primary */
+            uint x = simple_valuation(diff, fp->p) + 1;
+            mpz_ui_pow_ui(px, fp->p, x - 1);
+            if (!update_residues(prev, cur, sq0, fp->p, x, px, 0))
+                return 0;
+            uint x2 = bp->x - x + 1;
+            if (x2 > 1) {
+                mpz_ui_pow_ui(px, fp->p, x2 - 1);
+                if (!update_residues(prev, cur, bp->vi, fp->p, x2, px, x - 1))
+                    return 0;
+            }
+        }
     }
 
     if (opt_alloc && next_prime(fp->p) > maxforce[bp->vi]) {
