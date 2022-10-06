@@ -21,7 +21,7 @@ t_tm *taum = NULL;
 uint taum_alloc = 0;
 uint taum_size;
 uint test_rough = 0;
-mpz_t tmf, tmp_lim;
+mpz_t tmf, tmf2, tmp_lim;
 #define SIMPQS_SIZE 66
 mpz_t simpqs_array[SIMPQS_SIZE];
 
@@ -169,6 +169,7 @@ void init_tau(uint rough) {
         primes_small[pn] = prime_iterator_next(&iter);
     prime_iterator_destroy(&iter);
     mpz_init(tmf);
+    mpz_init(tmf2);
     mpz_init(tmp_lim);
     init_tmfbl();
     for (uint i = 0; i < SIMPQS_SIZE; ++i)
@@ -184,6 +185,7 @@ void done_tau(void) {
             mpz_clear(taum[i].n);
     free(taum);
     mpz_clear(tmf);
+    mpz_clear(tmf2);
     mpz_clear(tmp_lim);
 }
 
@@ -898,6 +900,30 @@ int taum_comparator(const void *va, const void *vb) {
     return mpz_cmp(tma->n, tmb->n);
 }
 
+mpz_t *tm_factor(t_tm *tm) {
+    if (ct_prime(tmf))
+        return &tmf;
+    /* we have a composite factor */
+    mpz_divexact(tmf2, tm->n, tmf);
+    if (ct_prime(tmf2))
+        return &tmf2;
+    /* .. leaving a composite residue */
+    factor_state fs;
+    fs_init(&fs);
+    if (mpz_cmp(tmf, tmf2) < 0)
+        mpz_set(fs.n, tmf);
+    else
+        mpz_set(fs.n, tmf2);
+    fs.state = FS_POWER;
+    if (!factor_one(&fs)) {
+        gmp_fprintf(stderr, "no factor found for composite %Zd\n", fs.n);
+        exit(1);
+    }
+    mpz_set(tmf, fs.f);
+    fs_clear(&fs);
+    return &tmf;
+}
+
 bool tau_multi_run(uint count) {
     uint i = 0;
     /* Shuffle the entries that did not complete by trial division to
@@ -935,15 +961,18 @@ bool tau_multi_run(uint count) {
                 tm->state = i + 1;
                 continue;
             }
+
+            /* make sure we have a _prime_ factor */
+            mpz_t *f = tm_factor(tm);
             uint e = 0;
-            while (mpz_divisible_p(tm->n, tmf)) {
+            while (mpz_divisible_p(tm->n, *f)) {
                 ++e;
-                mpz_divexact(tm->n, tm->n, tmf);
+                mpz_divexact(tm->n, tm->n, *f);
             }
             if (e == 0) {
                 gmp_fprintf(stderr,
                     "state %d found non-divisible factor %Zd for %Zd\n",
-                    tm->state, tmf, tm->n
+                    tm->state, *f, tm->n
                 );
                 exit(1);
             }
