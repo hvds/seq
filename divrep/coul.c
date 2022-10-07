@@ -866,7 +866,14 @@ void init_post(void) {
 }
 
 void report_init(FILE *fp, char *prog) {
-    fprintf(fp, "001 %scoul(%u %u)", (start_seen ? "recover " : ""), n, k);
+    fprintf(fp, "001 %s%scoul(%u %u)", (start_seen ? "recover " : ""),
+#ifdef PARALLEL
+        "p"
+#else
+        ""
+#endif
+
+            , n, k);
     if (opt_print)
         fprintf(fp, " -o");
     if (minp || maxp) {
