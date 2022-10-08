@@ -1345,9 +1345,14 @@ void walk_v(t_level *cur_level, mpz_t start) {
         }
     }
 
-    if (!mpz_fits_ulong_p(Z(wv_end)))
-        fail("TODO: walk_v.end > 2^64");
-    ulong end = mpz_get_ui(Z(wv_end));
+    bool would_fail = 0;
+    ulong end;
+    if (mpz_fits_ulong_p(Z(wv_end)))
+        end = mpz_get_ui(Z(wv_end));
+    else {
+        end = ULONG_MAX;
+        would_fail = 1;
+    }
     for (ulong ati = mpz_get_ui(Z(wv_ati)); ati <= end; ++ati) {
         ++countwi;
         if (utime() >= diagt)
@@ -1383,6 +1388,8 @@ void walk_v(t_level *cur_level, mpz_t start) {
       next_ati:
         ;
     }
+    if (would_fail)
+        fail("TODO: walk_v.end > 2^64");
 }
 
 void walk_1(t_level *cur_level, uint vi) {
