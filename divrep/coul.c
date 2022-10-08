@@ -304,7 +304,7 @@ void diag_walk_zv(mpz_t ati, mpz_t end) {
     clock_t t1 = utime();
 
     prep_show_v();  /* into diag_buf */
-    if (!(debug && mpz_sgn(ati)))
+    if (!(debug == 1 && mpz_sgn(ati)))
         diag("%s: %Zu / %Zu", diag_buf, ati, end);
     if (debug)
         keep_diag();
