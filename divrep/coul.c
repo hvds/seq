@@ -199,7 +199,7 @@ bool opt_print = 0; /* print candidates instead of fully testing them */
  * the specified batch_alloc.
  */
 bool opt_alloc = 0;
-int opt_batch = -1;
+int opt_batch_min = -1, opt_batch_max;
 int batch_alloc = 0;   /* index of forced-prime allocations */
 
 int debug = 0;     /* diag and keep every case seen */
@@ -903,6 +903,14 @@ void report_init(FILE *fp, char *prog) {
         fprintf(fp, " -s%lu", randseed);
     if (rough)
         fprintf(fp, " -h%u", rough);
+    if (opt_batch_min >= 0) {
+        fprintf(fp, " -b%u", opt_batch_min);
+        if (opt_batch_min != opt_batch_max) {
+            fprintf(fp, ":");
+            if (opt_batch_max < INT_MAX)
+                fprintf(fp, "%u", opt_batch_max);
+        }
+    }
     fprintf(fp, "\n");
 }
 
@@ -946,6 +954,19 @@ void set_cap(char *s) {
         minp = 0;
         maxp = strtoul(s, NULL, 10);
     }
+}
+
+void set_batch(char *s) {
+    char *t = strchr(s, ':');
+    if (t) {
+        *t = 0;
+        opt_batch_min = *s ? strtoul(s, NULL, 10) : 0;
+        opt_batch_max = t[1] ? strtoul(&t[1], NULL, 10) : INT_MAX;
+    } else {
+        opt_batch_min = strtoul(s, NULL, 10);
+        opt_batch_max = opt_batch_min;
+    }
+    opt_alloc = 1;
 }
 
 /* Return p if no inverse exists.
@@ -1744,12 +1765,15 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
     }
 
     if (opt_alloc && next_prime(fp->p) > maxforce[bp->vi]) {
-        if (batch_alloc == opt_batch) {
-            /* this is the one batch we want to process */
+        if (opt_batch_min >= 0
+            && batch_alloc >= opt_batch_min
+            && batch_alloc <= opt_batch_max
+        ) {
+            /* we want to process this batch */
             ++batch_alloc;
             return 1;
         }
-        if (opt_batch < 0)
+        if (opt_batch_min < 0)
             disp_batch(cur);
         ++batch_alloc;
         return 0;
@@ -2166,12 +2190,15 @@ void recurse(void) {
                 cur_level->is_forced = 0;
                 FETCHVL(--vl_forced);
                 if (opt_alloc) {
-                    if (batch_alloc == opt_batch) {
+                    if (opt_batch_min >= 0
+                        && batch_alloc >= opt_batch_min
+                        && batch_alloc <= opt_batch_max
+                    ) {
                         /* this is the one batch we want to process */
                         ++batch_alloc;
                         goto unforced;
                     }
-                    if (opt_batch < 0)
+                    if (opt_batch_min < 0)
                         disp_batch(prev_level);
                     ++batch_alloc;
                     goto derecurse;
@@ -2247,10 +2274,9 @@ int main(int argc, char **argv, char **envp) {
             rough = strtoul(&arg[2], NULL, 10);
         else if (strncmp("-a", arg, 2) == 0)
             opt_alloc = 1;
-        else if (arg[1] == 'b') {
-            opt_batch = strtoul(&arg[2], NULL, 10);
-            opt_alloc = 1;
-        } else if (strncmp("-o", arg, 2) == 0)
+        else if (arg[1] == 'b')
+            set_batch(&arg[2]);
+        else if (strncmp("-o", arg, 2) == 0)
             opt_print = 1;
         else if (strncmp("-d", arg, 2) == 0)
             ++debug;
