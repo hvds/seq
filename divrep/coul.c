@@ -1859,12 +1859,18 @@ ulong limit_p(uint vi, uint x, uint nextt) {
     return 0;
 }
 
-/*
- * return 0 if nothing more to do at this level for any x;
- * return 1 if nothing more to do for this x;
- * return 2 if prepped for this x with work to do.
+typedef enum {
+    PUX_NOTHING_TO_DO = 0,
+    PUX_SKIP_THIS_X,
+    PUX_DO_THIS_X
+} e_pux;
+
+/* returns:
+ *   PUX_NOTHING_TO_DO if nothing more to do at this level for any x;
+ *   PUX_SKIP_THIS_X if nothing more to do for this x;
+ *   PUX_DO_THIS_X if prepped for this x with work to do.
  */
-uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
+e_pux prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     uint ti = cur->ti;
     uint x = divisors[ti].div[cur->di];
     uint vi = cur->vi;
@@ -1878,11 +1884,11 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
         if (x == prevx)
             p = ap->p;      /* skip smaller p, we already did the reverse */
         else if (x <= prevx && divisors[x].high == divisors[prevx].high)
-            return 1;   /* skip this x, we already did the reverse */
+            return PUX_SKIP_THIS_X; /* we already did the reverse */
         else if (x > nextt && divisors[x].high == divisors[nextt].high)
             /* skip this x, we already did any possible continuation in
              * reverse. */
-            return 1;
+            return PUX_SKIP_THIS_X;
         else
             p = maxforce[vi];
     } /* else we're continuing from known p */
@@ -1895,7 +1901,7 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
             keep_diag();
             report("002 %s: outsize limit %Zu without square\n",
                     diag_buf, Z(lp_x));
-            return 1;   /* skip this cycle */
+            return PUX_SKIP_THIS_X; /* skip this cycle */
         }
         /* force walk */
 #ifdef SQONLY
@@ -1904,9 +1910,9 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
 #else
         walk_v(prev, Z(zero));
 #endif
-        return 0;
+        return PUX_NOTHING_TO_DO;
     } else if (limp < p + 1)
-        return 1;   /* nothing to do here */
+        return PUX_SKIP_THIS_X; /* nothing to do here */
     mpz_add_ui(Z(r_walk), max, vi);
     mpz_fdiv_q(Z(r_walk), Z(r_walk), prev->aq);
     if (prev->have_square) {
@@ -1937,7 +1943,7 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
 #else
         walk_v(prev, Z(zero));
 #endif
-        return 0;
+        return PUX_NOTHING_TO_DO;
     }
     cur->p = p;
     cur->x = x;
@@ -1945,7 +1951,7 @@ uint prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     cur->max_at = seen_best;
     /* TODO: do some constant alloc stuff in advance */
     /* TODO: special case for nextt == 1 */
-    return 2;
+    return PUX_DO_THIS_X;
 }
 
 /* On recovery, set up the recursion stack to the point we had reached.
@@ -2057,8 +2063,8 @@ void insert_stack(void) {
         cur->di = di;
 
         /* note: must pass in p=0 for it to calculate limp */
-        uint pux = prep_unforced_x(prev, cur, 0);
-        if (pux != 2)
+        e_pux pux = prep_unforced_x(prev, cur, 0);
+        if (pux != PUX_DO_THIS_X)
             fail("prep_nextt %u for %lu^%u at %u\n",
                     pux, p, x, vi);
 
@@ -2150,14 +2156,11 @@ void recurse(void) {
             if (cur_level->di >= divisors[cur_level->ti].highdiv)
                 goto derecurse;
             switch (prep_unforced_x(prev_level, cur_level, 0)) {
-                case 0:
-                    /* nothing to do for any x */
+                case PUX_NOTHING_TO_DO:
                     goto derecurse;
-                case 1:
-                    /* nothing to do for this x */
+                case PUX_SKIP_THIS_X:
                     goto continue_unforced_x;
-                case 2:
-                    /* ok, continue for this x */
+                case PUX_DO_THIS_X:
                     ;
             }
             goto continue_unforced;
@@ -2220,8 +2223,10 @@ void recurse(void) {
             ulong p = cur_level->p;
             /* recalculate limit if we have an improved maximum */
             if (seen_best > cur_level->max_at)
-                if (!prep_unforced_x(prev_level, cur_level, p))
+                switch (prep_unforced_x(prev_level, cur_level, p)) {
+                  case PUX_NOTHING_TO_DO:
                     goto continue_unforced_x;
+                }
             /* note: only valid to use from just below here */
           redo_unforced:
             p = next_prime(p);
