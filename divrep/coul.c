@@ -1861,6 +1861,7 @@ ulong limit_p(uint vi, uint x, uint nextt) {
 
 typedef enum {
     PUX_NOTHING_TO_DO = 0,
+    PUX_ALL_DONE,
     PUX_SKIP_THIS_X,
     PUX_DO_THIS_X
 } e_pux;
@@ -1910,7 +1911,7 @@ e_pux prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
 #else
         walk_v(prev, Z(zero));
 #endif
-        return PUX_NOTHING_TO_DO;
+        return PUX_ALL_DONE;
     } else if (limp < p + 1)
         return PUX_SKIP_THIS_X; /* nothing to do here */
     mpz_add_ui(Z(r_walk), max, vi);
@@ -1943,7 +1944,7 @@ e_pux prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
 #else
         walk_v(prev, Z(zero));
 #endif
-        return PUX_NOTHING_TO_DO;
+        return PUX_ALL_DONE;
     }
     cur->p = p;
     cur->x = x;
@@ -2064,9 +2065,14 @@ void insert_stack(void) {
 
         /* note: must pass in p=0 for it to calculate limp */
         e_pux pux = prep_unforced_x(prev, cur, 0);
-        if (pux != PUX_DO_THIS_X)
-            fail("prep_nextt %u for %lu^%u at %u\n",
-                    pux, p, x, vi);
+        switch (pux) {
+          case PUX_NOTHING_TO_DO:
+          case PUX_SKIP_THIS_X:
+            fail("prep_nextt %u for %lu^%u at %u\n", pux, p, x, vi);
+          case PUX_ALL_DONE:
+            /* we have now acted on this */
+            goto insert_check;
+        }
 
         /* CHECKME: this returns 0 if t=1 */
         if (!apply_single(prev, cur, vi, p, x))
@@ -2157,6 +2163,7 @@ void recurse(void) {
                 goto derecurse;
             switch (prep_unforced_x(prev_level, cur_level, 0)) {
                 case PUX_NOTHING_TO_DO:
+                case PUX_ALL_DONE:
                     goto derecurse;
                 case PUX_SKIP_THIS_X:
                     goto continue_unforced_x;
@@ -2225,6 +2232,7 @@ void recurse(void) {
             if (seen_best > cur_level->max_at)
                 switch (prep_unforced_x(prev_level, cur_level, p)) {
                   case PUX_NOTHING_TO_DO:
+                  case PUX_ALL_DONE:
                     goto continue_unforced_x;
                 }
             /* note: only valid to use from just below here */
