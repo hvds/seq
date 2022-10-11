@@ -206,6 +206,7 @@ void fs_init(factor_state* fs) {
     fs->sp = 0;
     fs->log = get_verbose_level();
     fs->ntofac = 0;
+    fs->tlim = 0;
     return;
 }
 
@@ -769,6 +770,7 @@ bool tau_multi_prep(uint i) {
     if (!(t & 1) && !(tm->e & 1))
         return 0;
     tm->t = t;
+    tm->tlim = tlim;
     return 1;
 }
 
@@ -910,6 +912,7 @@ mpz_t *tm_factor(t_tm *tm) {
     /* .. leaving a composite residue */
     factor_state fs;
     fs_init(&fs);
+    fs.tlim = tm->tlim;
     if (mpz_cmp(tmf, tmf2) < 0)
         mpz_set(fs.n, tmf);
     else
@@ -1015,9 +1018,11 @@ bool tau_multi_run(uint count) {
             if (j < count) {
                 mpz_swap(taum[j].n, taum[count].n);
                 taum[j].t = taum[count].t;
-                taum[j].e = taum[count].e;
                 taum[j].state = taum[count].state;
+                taum[j].e = taum[count].e;
                 taum[j].bits = taum[count].bits;
+                taum[j].B1 = taum[count].B1;
+                taum[j].tlim = taum[count].tlim;
             }
             goto tmr_redo;
         }
