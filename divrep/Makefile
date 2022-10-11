@@ -19,5 +19,8 @@ pcoul: Makefile coul.c ${COUL} ${HOUL} ${CFACTOR} ${HFACTOR}
 dcoul: Makefile coul.c ${COUL} ${HOUL} ${CFACTOR} ${HFACTOR}
 	gcc -o dcoul -g -O0 -DSTANDALONE coul.c ${COUL} ${CFACTOR} -I${MPUGMP} -lgmp -lm
 
+dpcoul: Makefile coul.c ${COUL} ${HOUL} ${CFACTOR} ${HFACTOR}
+	gcc -o dpcoul -g -O0 -DPARALLEL -DSTANDALONE coul.c ${COUL} ${CFACTOR} -I${MPUGMP} -lgmp -lm
+
 test_pell: Makefile test_pell.c ${COUL} ${HOUL} ${CFACTOR} ${HFACTOR}
 	gcc -o test_pell -g ${CC_OPT} -DSTANDALONE test_pell.c ${COUL} ${CFACTOR} -I${MPUGMP} -lgmp -lm
