@@ -160,7 +160,7 @@ sub tf {
                 if $t >= $n;
         my $rough = roughness($n / $t);
         return (0, "!$n", _fact(\@fact, $f, "R_{$rough}"))
-                if (MBI($hlim) + 1) ** $rough > $f;
+                if $e == 1 && (MBI($hlim) + 1) ** $rough > $f;
         if (is_prime($f)) {
             $t *= $e + 1;
             return ($t == $n, $t, _fact(\@fact, $f, 'P', $e));
