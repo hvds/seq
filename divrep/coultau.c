@@ -1033,3 +1033,19 @@ bool tau_multi_run(uint count) {
     );
     exit(1);
 }
+
+bool tau_single_try(uint i) {
+    t_tm *tm = &taum[i];
+    for (uint i = TM_INIT; i < TM_MAX; ++i) {
+        if (!(tm->bits & (1UL << i)))
+            continue;
+        if (!(*tmfa[i])(tm)) {
+            tm->state = i + 1;
+            continue;
+        }
+
+        mpz_set(tm->n, tmf);
+        return 1;
+    }
+    return 0;
+}

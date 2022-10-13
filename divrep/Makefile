@@ -24,3 +24,6 @@ dpcoul: Makefile coul.c ${COUL} ${HOUL} ${CFACTOR} ${HFACTOR}
 
 test_pell: Makefile test_pell.c ${COUL} ${HOUL} ${CFACTOR} ${HFACTOR}
 	gcc -o test_pell -g ${CC_OPT} -DSTANDALONE test_pell.c ${COUL} ${CFACTOR} -I${MPUGMP} -lgmp -lm
+
+ftest: Makefile ftest.c coultau.c ${HOUL} ${CFACTOR} ${HFACTOR}
+	gcc -o ftest -g ${CC_OPT} -DPARALLEL -DSTANDALONE ftest.c coultau.c ${CFACTOR} -I${MPUGMP} -lgmp -lm
