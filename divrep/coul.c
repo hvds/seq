@@ -1274,7 +1274,10 @@ void walk_v(t_level *cur_level, mpz_t start) {
         if (mpz_sgn(Z(wv_ati)) > 0) {
             mpz_mul(Z(wv_startr), Z(wv_ati), *qqi);
             mpz_add(Z(wv_startr), Z(wv_startr), *oi);
-            mpz_root(Z(wv_startr), Z(wv_startr), xi);
+            /* need ceiling of the root */
+            mpz_rootrem(Z(wv_startr), Z(wv_temp), Z(wv_startr), xi);
+            if (mpz_sgn(Z(wv_temp)))
+                mpz_add_ui(Z(wv_startr), Z(wv_startr), 1);
             mpz_fdiv_qr(Z(wv_startr), Z(wv_temp), Z(wv_startr), *qqi);
             /* Note: on recover, we expect an exact match here, but on
              * normal entry we don't. */
