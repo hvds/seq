@@ -958,7 +958,7 @@ bool tau_multi_run(uint count) {
           tmr_redo:
             if (tm->state > i)
                 continue;
-            if (!(tm->bits & (1 << i)))
+            if (!(tm->bits & (1UL << i)))
                 continue;
             if (!(*tmfa[i])(tm)) {
                 tm->state = i + 1;
