@@ -686,7 +686,7 @@ void root_extract(uint new_level, uint old_level, uint k, mpz_t n) {
 }
 
 /* Find k'th roots of a (mod p^x = px), combine them with an existing
- * list old_level of roots (mod n), with (p, n) = 1, to give a new listw
+ * list old_level of roots (mod n), with (p, n) = 1, to give a new list
  * of roots (mod n p^x) at new_level.
  * TOOD: this would be easier (and maybe more efficient: CHECKME) if the
  * order of events in allrootmod() was switched to split by factors of n
