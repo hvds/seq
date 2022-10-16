@@ -1377,6 +1377,10 @@ void walk_v(t_level *cur_level, mpz_t start) {
         end = ULONG_MAX;
         would_fail = 1;
     }
+#ifdef LARGE_MIN
+    if (!mpz_fits_ulong_p(Z(wv_ati)))
+        fail("TODO: non-square min > 2^64");
+#endif
     for (ulong ati = mpz_get_ui(Z(wv_ati)); ati <= end; ++ati) {
         ++countwi;
         if (utime() >= diagt)
@@ -1918,6 +1922,9 @@ e_pux prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     } else if (limp < p + 1)
         return PUX_SKIP_THIS_X; /* nothing to do here */
     mpz_add_ui(Z(r_walk), max, vi);
+#ifdef LARGE_MIN
+    mpz_sub(Z(r_walk), Z(r_walk), min);
+#endif
     mpz_fdiv_q(Z(r_walk), Z(r_walk), prev->aq);
     if (prev->have_square) {
         if (prev->have_square == 1) {

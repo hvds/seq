@@ -50,6 +50,11 @@ appears to cost more than it saves in almost all cases.
 -DVERBOSE: print verbose information about factorization timings.
 Intended to help understand how -DPARALLEL can be improved.
 
+-DLARGE_MIN: add extra checks to cope better with runs where the
+minimum value to check is relatively large (as specified with -x<min>:<max>).
+For the majority case where min is 0 or small, we assume these checks
+are an unnecessary expense; hence we do not enable them by default.
+
 RUN
 ===
 
