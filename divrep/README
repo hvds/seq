@@ -55,6 +55,12 @@ minimum value to check is relatively large (as specified with -x<min>:<max>).
 For the majority case where min is 0 or small, we assume these checks
 are an unnecessary expense; hence we do not enable them by default.
 
+-DTRY_HARDER: (only with -DPARALLEL) also try slower factorization
+tests before giving up. This adds 10 more ECM trials, the first taking
+about 15 minutes and each subsequent one doubling the time.
+Generally this isn't worthwhile: if we didn't find a factor before
+these tests, ECM probably won't find it.
+
 RUN
 ===
 
