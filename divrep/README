@@ -27,17 +27,27 @@ CC_OPT to an appropriate set of optimization flags for your compiler.
 There is no installation process: it is intended that the code should be
 built and run in place.
 
-Build-time options are set with defines, by passing "-D<name>" as a
-parameter to the compile step. Current build options are:
+The 'make' targets are:
+coul: optimized non-parallel search
+pcoul: optimized parallel search
+dcoul: debugging non-parallel search
+dpcoul: debugging parallel search
+test_pell: a tool to solve Pell equations
+ftest: test a specific factorization
 
--DSTANDALONE: required, this allows the Math-Prime-Util-GMP code to
-be compiled without also requiring Perl infrastructure.
+Build-time options are set with defines, by passing "-D<name>" as a
+parameter to the compile step. For PARALLEL this is done by selecting
+the target to build ("pcoul", "dpcoul" or "ftest"); the others can be
+used by setting them on the command line before the invocation of make,
+like:
+  CHECK_OVERFLOW=1 make pcoul
+
+The current build options are:
 
 -DPARALLEL: in walk_v(), test factors of non-prime, non-square values
 in parallel (ie breadth first) rather than in series (depth first).
 This is expected to give substantial gains when the values to be
-factorized are large (more than 10^80 or so), but needs further
-improvement.
+factorized are large (more than 10^80 or so).
 
 -DSQONLY: skip any walk_v() call unless at least one value is forced
 to be a square. Temporary facility to allow faster rechecking if bugs
