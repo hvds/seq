@@ -54,6 +54,7 @@ typedef enum {
     sdm_p, sdm_r,               /* small_divmod (TODO) */
     dm_r,                       /* divmod */
     np_p,                       /* next_prime (TODO) */
+    s_exp, uls_temp,            /* ston, ulston */
 
     MAX_ZSTASH
 } t_zstash;
@@ -914,21 +915,42 @@ void report_init(FILE *fp, char *prog) {
     fprintf(fp, "\n");
 }
 
+void ston(mpz_t targ, char *s) {
+    char *t = strchr(s, 'e');
+    if (t) {
+        *t = 0;
+        mpz_set_str(targ, s, 10);
+        ulong exp = strtoul(&t[1], NULL, 10);
+        mpz_ui_pow_ui(Z(s_exp), 10, exp);
+        mpz_mul(targ, targ, Z(s_exp));
+        *t = 'e';
+    } else {
+        mpz_set_str(targ, s, 10);
+    }
+}
+
+ulong ulston(char *s) {
+    ston(Z(uls_temp), s);
+    if (mpz_fits_ulong_p(Z(uls_temp)))
+        return mpz_get_ui(Z(uls_temp));
+    fail("value '%s' out of range of ulong", s);
+}
+
 void set_minmax(char *s) {
     char *t = strchr(s, ':');
     if (t) {
         *t = 0;
         if (*s)
-            mpz_set_str(min, s, 10);
+            ston(min, s);
         else
             mpz_set_ui(min, 0);
         if (t[1])
-            mpz_set_str(max, &t[1], 10);
+            ston(max, &t[1]);
         else
             mpz_set_ui(max, 0);
     } else {
         mpz_set_ui(min, 0);
-        mpz_set_str(max, s, 10);
+        ston(max, s);
     }
 }
 
@@ -936,11 +958,11 @@ void set_gain(char *s) {
     char *t = strchr(s, ':');
     if (t) {
         *t = 0;
-        antigain = *s ? strtoul(s, NULL, 10) : 0;
-        gain = t[1] ? strtoul(&t[1], NULL, 10) : 0;
+        antigain = *s ? ulston(s) : 0;
+        gain = t[1] ? ulston(&t[1]) : 0;
     } else {
         antigain = 0;
-        gain = strtoul(s, NULL, 10);
+        gain = ulston(s);
     }
 }
 
@@ -948,11 +970,11 @@ void set_cap(char *s) {
     char *t = strchr(s, ':');
     if (t) {
         *t = 0;
-        minp = *s ? strtoul(s, NULL, 10) : 0;
-        maxp = t[1] ? strtoul(&t[1], NULL, 10) : 0;
+        minp = *s ? ulston(s) : 0;
+        maxp = t[1] ? ulston(&t[1]) : 0;
     } else {
         minp = 0;
-        maxp = strtoul(s, NULL, 10);
+        maxp = ulston(s);
     }
 }
 

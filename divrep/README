@@ -93,14 +93,17 @@ as fully forced primes (see below). By default, force_all is set to k
 
 If "-x100:1000" is specified, it will look for solutions v_0 with
 100 < v_0 <= 1000. "-x:1000" or "-x1000" are equivalent to "-x0:1000".
+Also supports exponential notation (without decimal), so "-x13e6"
+is equivalent to "-x13000000".
 The default minimum is zero; there is no default maximum: this is a
 required option.
 
 If "-g2:3" is specified, it will set gain = 3/2. This is a multiplier
 used to control the transition from recurse() to walk_v() (see below).
 A higher gain means it spends more time in recurse(), a lower gain means
-it spends more time in walk_v(). Fine-tuning the gain can make a big
-difference to runtime; default gain is 1.
+it spends more time in walk_v().  Also supports exponential notation
+(without decimal), so "-g13e6" is equivalent to "-g13000000".
+Fine-tuning the gain can make a big difference to runtime; default gain is 1.
 
 If "-p50:100" is specified, it will allocate (see below) only powers of
 primes p < 100, and will allocate at least one power of a prime p > 50.
