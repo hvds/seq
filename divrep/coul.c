@@ -1,3 +1,6 @@
+/* needed on FreeBSD for getline() to be exported from stdio.h */
+#define _WITH_GETLINE
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
