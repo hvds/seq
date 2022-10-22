@@ -2239,7 +2239,7 @@ void recurse(void) {
                         && batch_alloc >= opt_batch_min
                         && batch_alloc <= opt_batch_max
                     ) {
-                        /* this is the one batch we want to process */
+                        /* this is a batch we want to process */
                         ++batch_alloc;
                         goto unforced;
                     }
@@ -2346,8 +2346,14 @@ int main(int argc, char **argv, char **envp) {
     char s[] = "7^2 2.71^2 3^8 2^2.5^2 11^2.29^2 (0.00s)\n";
     parse_305(s);
 #endif
-    if (rstack)
+    if (rstack) {
         insert_stack();
+        /* FIXME: temporary fix for recovering a single batch run.
+         * It won't do the right thing for a range of batches.
+         */
+        if (opt_batch_min >= 0)
+            batch_alloc = opt_batch_min + 1;
+    }
     recurse();
     keep_diag();
 
