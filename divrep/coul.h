@@ -1,5 +1,6 @@
 #ifndef COUL_H
 #define COUL_H
+#include "types.h"
 
 /* 'divisors[i].div' is a list of divisors of 'i' in descending order of
  * highest prime factor, then ascending. 'high' is the highest prime

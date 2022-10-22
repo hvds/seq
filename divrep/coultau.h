@@ -2,6 +2,7 @@
 #define COULTAU_H
 
 #include <gmp.h>
+#include "types.h"
 #include "ptypes.h"
 
 typedef unsigned char bool;

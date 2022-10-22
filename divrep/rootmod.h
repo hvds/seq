@@ -2,6 +2,7 @@
 #define ROOTMOD_H 1
 
 #include <gmp.h>
+#include "types.h"
 #include "factor.h"
 
 typedef struct s_results {

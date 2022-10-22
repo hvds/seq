@@ -1,5 +1,6 @@
 #ifndef COULFACT_H
 #define COULFACT_H 1
+#include "types.h"
 #include <gmp.h>
 
 typedef struct s_ppow {

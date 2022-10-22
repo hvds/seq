@@ -2,6 +2,7 @@
 #define PELL_H 1
 
 #include <gmp.h>
+#include "types.h"
 
 typedef unsigned char bool;
 
