@@ -30,7 +30,8 @@ ifdef TRY_HARDER
     DEFINES += -DTRY_HARDER
 endif
 
-all: pcoul
+default: pcoul
+all: coul pcoul dcoul dpcoul
 
 coul pcoul dcoul dpcoul: Makefile coul.c ${COUL} ${HOUL} ${CFACTOR} ${HFACTOR}
 	gcc -o $@ -g ${CC_OPT} ${DEFINES} coul.c ${COUL} ${CFACTOR} -I${MPUGMP} -lgmp -lm

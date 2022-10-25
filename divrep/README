@@ -74,9 +74,9 @@ these tests, ECM probably won't find it.
 RUN
 ===
 
-The Makefile will typically build a binary called 'coul'. The standard
+The Makefile will typically build a binary called 'pcoul'. The standard
 way to run it is:
-  ./coul [-r<path to logfile>] [-f<force primes>] -x<min:max>
+  ./pcoul [-r<path to logfile>] [-f<force primes>] -x<min:max>
       [-g<damp:gain] [-p<minp:maxp>] [-s<randseed>] [-o] [-d]
       [-j<strategy>] <n> <k>
 
