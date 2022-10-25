@@ -205,6 +205,7 @@ bool opt_print = 0; /* print candidates instead of fully testing them */
 bool opt_alloc = 0;
 int opt_batch_min = -1, opt_batch_max;
 int batch_alloc = 0;   /* index of forced-prime allocations */
+uint strategy = 0;  /* best_v() strategy */
 
 int debug = 0;     /* diag and keep every case seen */
 ulong randseed = 1; /* for ECM, etc */
@@ -876,8 +877,10 @@ void report_init(FILE *fp, char *prog) {
 #else
         ""
 #endif
-
             , n, k);
+
+    if (strategy)
+        fprintf(fp, " -j%u", strategy);
     if (opt_print)
         fprintf(fp, " -o");
     if (minp || maxp) {
@@ -1813,12 +1816,11 @@ bool apply_batch(t_level *prev, t_level *cur, t_forcep *fp, uint bi) {
     return 1;
 }
 
-/* find the best entry to progress: the one with the highest tau()
- * still to fulfil, or (on equality) with the highest q, but having
- * at least one factor to allocate.
+/* Choose that v_i with the highest t_i still to fulfil, or (on equality)
+ * with the highest q_i, but having at least one factor to allocate.
  * If there is no best entry, returns k.
  */
-uint best_v(void) {
+uint best_v1(void) {
     uint vi, ti = 0;
     mpz_t *qi;
     for (uint vj = 0; vj < k; ++vj) {
@@ -1845,6 +1847,55 @@ uint best_v(void) {
         qi = qj;
     }
     return ti ? vi : k;
+}
+
+/* Choose that v_i with the highest prime dividing t_i still to fulfil,
+ * or on equality with the highest t_i, or on equality with the highest
+ * q_i.
+ * If there is no best entry, returns k.
+ */
+uint best_v2(void) {
+    uint vi, ti = 0;
+    mpz_t *qi;
+    for (uint vj = 0; vj < k; ++vj) {
+        t_value *vpj = &value[vj];
+        t_allocation *apj = (vpj->vlevel) ? &vpj->alloc[vpj->vlevel - 1] : NULL;
+        uint tj = apj ? apj->t : n;
+        mpz_t *qj = apj ? &apj->q : ZP(zone);
+
+        /* skip if no odd prime factor */
+        if (divisors[tj].high <= 2)
+            continue;
+        /* skip prime powers when capped */
+        if (maxp && (tj & 1) && divisors[tj].alldiv == 2)
+            continue;
+        if (ti) {
+            uint hi = divisors[ti].high;
+            uint hj = divisors[tj].high;
+            if (hj < hi)
+                continue;
+            if (hj == hi && tj < ti)
+                continue;
+            if (tj == ti && mpz_cmp(*qj, *qi) <= 0)
+                continue;
+        }
+        vi = vj;
+        ti = tj;
+        qi = qj;
+    }
+    return ti ? vi : k;
+}
+
+typedef uint (*t_strategy)(void);
+#define NUM_STRATEGIES 2
+t_strategy strategies[NUM_STRATEGIES] = {
+    &best_v1, &best_v2
+};
+/* Find the best entry to progress, using the selected strategy
+ * If there is no best entry, returns k.
+ */
+uint best_v(void) {
+    return strategies[strategy]();
 }
 
 /* Calculate the minimum contribution from primes satisfying the given tau.
@@ -2328,7 +2379,11 @@ int main(int argc, char **argv, char **envp) {
             opt_print = 1;
         else if (strncmp("-d", arg, 2) == 0)
             ++debug;
-        else
+        else if (arg[1] == 'j') {
+            strategy = strtoul(&arg[2], NULL, 10);
+            if (strategy >= NUM_STRATEGIES)
+                fail("Invalid strategy %u", strategy);
+        } else
             fail("unknown option '%s'", arg);
     }
     if (i + 2 == argc) {

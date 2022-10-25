@@ -77,7 +77,8 @@ RUN
 The Makefile will typically build a binary called 'coul'. The standard
 way to run it is:
   ./coul [-r<path to logfile>] [-f<force primes>] -x<min:max>
-      [-g<damp:gain] [-p<minp:maxp>] [-s<randseed>] [-o] [-d] <n> <k>
+      [-g<damp:gain] [-p<minp:maxp>] [-s<randseed>] [-o] [-d]
+      [-j<strategy>] <n> <k>
 
 Options:
 If "-r/path/to/logfile" is specified, progress is regularly written to the
@@ -126,6 +127,14 @@ to each one (for use by '-b' below).
 If "-b100" is specified, it will find the set of batch allocations of
 forced primes with index 100, and run the normal calculations only
 over that batch.
+
+If "-j1" is specified, it will use "strategy 1" when determining the
+next position to which to allocate another prime power (default
+"strategy 0"). For D(120,2) with pattern "2^7 3^4", for example,
+strategy 0 will pick the second position and start allocating p^2,
+since it has the highest remaining tau to fulfill; strategy 1 will
+pick the first position and start allocating p^4, since it has the
+highest prime dividing the remaining tau to fulfill.
 
 Specifying "-d" enables debugging. By default, progress is shown on the
 terminal every 1 seconds (see "DIAG" in coul.c), overwriting the previous
