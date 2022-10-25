@@ -1980,13 +1980,6 @@ e_pux prep_unforced_x(t_level *prev, t_level *cur, ulong p) {
     /* try p^{x-1} for all p until q_i . p^{x-1} . minrest > max + i */
     ulong limp = limit_p(vi, x, nextt);
     if (limp == 0) {
-        if (!prev->have_square) {
-            diag_plain();
-            keep_diag();
-            report("002 %s: outsize limit %Zu without square\n",
-                    diag_buf, Z(lp_x));
-            return PUX_SKIP_THIS_X; /* skip this cycle */
-        }
         /* force walk */
 #ifdef SQONLY
         if (prev->have_square)
