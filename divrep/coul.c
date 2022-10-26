@@ -11,7 +11,8 @@
 #ifdef HAVE_SETPROCTITLE
 #   include <sys/types.h>
 #endif
-#include <sys/times.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include "coul.h"
 #include "coulfact.h"
@@ -178,13 +179,13 @@ static inline void FETCHVL(uint vli) {
 uint *sprimes = NULL;
 uint nsprimes;
 
-long ticks_per_second;
 /* set to utime at start of run, minus last timestamp of recovery file */
-clock_t ticks = 0;
-struct tms time_buf;
-static inline clock_t utime(void) {
-    times(&time_buf);
-    return time_buf.tms_utime;
+double t0 = 0;
+struct rusage rusage_buf;
+static inline double utime(void) {
+    getrusage(RUSAGE_SELF, &rusage_buf);
+    return (double)rusage_buf.ru_utime.tv_sec
+            + (double)rusage_buf.ru_utime.tv_usec / 1000000;
 }
 
 mpz_t min, max;     /* limits to check for v_0 */
@@ -227,7 +228,7 @@ mpz_t px;       /* p^x */
 
 #define DIAG 1
 #define LOG 600
-clock_t diag_delay, log_delay, diagt, logt;
+double diag_delay, log_delay, diagt, logt;
 ulong countr, countw, countwi;
 #define DIAG_BUFSIZE (3 + k * maxfact * (20 + 1 + 5 + 1) + 1)
 char *diag_buf = NULL;
@@ -269,12 +270,12 @@ void report(char *format, ...) {
     }
 }
 
-double seconds(clock_t t1) {
-    return (double)(t1 - ticks) / ticks_per_second;
+double seconds(double t1) {
+    return (t1 - t0);
 }
 
 void diag_plain(void) {
-    clock_t t1 = utime();
+    double t1 = utime();
 
     prep_show_v();  /* into diag_buf */
     diag("%s", diag_buf);
@@ -289,7 +290,7 @@ void diag_plain(void) {
 }
 
 void diag_walk_v(ulong ati, ulong end) {
-    clock_t t1 = utime();
+    double t1 = utime();
 
     prep_show_v();  /* into diag_buf */
     if (!(debug == 1 && ati))
@@ -306,7 +307,7 @@ void diag_walk_v(ulong ati, ulong end) {
 }
 
 void diag_walk_zv(mpz_t ati, mpz_t end) {
-    clock_t t1 = utime();
+    double t1 = utime();
 
     prep_show_v();  /* into diag_buf */
     if (!(debug == 1 && mpz_sgn(ati)))
@@ -323,7 +324,7 @@ void diag_walk_zv(mpz_t ati, mpz_t end) {
 }
 
 void diag_walk_pell(uint pc) {
-    clock_t t1 = utime();
+    double t1 = utime();
 
     prep_show_v();  /* into diag_buf */
     if (!(debug && pc))
@@ -349,7 +350,7 @@ void disp_batch(t_level *lp) {
 
 void candidate(mpz_t c) {
     keep_diag();
-    clock_t t1 = utime();
+    double t1 = utime();
     report("202 Candidate %Zu (%.2fs)\n", c, seconds(t1));
     if (mpz_cmp(c, max) <= 0) {
         mpz_set(max, c);
@@ -472,8 +473,7 @@ void init_pre(void) {
     /* we may do this again after options handled, to select real seed */
 
     init_pell();
-    ticks_per_second = sysconf(_SC_CLK_TCK);
-    ticks = utime();
+    t0 = utime();
     mpz_init_set_ui(min, 0);
     mpz_init_set_ui(max, 0);
     init_fact(&nf);
@@ -538,7 +538,7 @@ void parse_305(char *s) {
     }
     if (EOF == sscanf(s, " (%lfs)\n", &dtime))
         fail("could not parse 305 time: '%s'", s);
-    ticks -= (clock_t)dtime * ticks_per_second;
+    t0 -= dtime;
 }
 
 void recover(void) {
@@ -848,8 +848,8 @@ void init_post(void) {
     prep_mintau();
     sqg = (uint *)malloc(maxfact * sizeof(uint));
 
-    diag_delay = (debug) ? 0 : DIAG * ticks_per_second;
-    log_delay = (debug) ? 0 : LOG * ticks_per_second;
+    diag_delay = (debug) ? 0 : DIAG;
+    log_delay = (debug) ? 0 : LOG;
     diagt = diag_delay;
     logt = log_delay;
 
@@ -2405,7 +2405,7 @@ int main(int argc, char **argv, char **envp) {
     recurse();
     keep_diag();
 
-    clock_t tz = utime();
+    double tz = utime();
     report("367 coul(%u, %u): recurse %lu, walk %lu, walkc %lu (%.2fs)\n",
             n, k, countr, countw, countwi, seconds(tz));
     if (seen_best)

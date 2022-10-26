@@ -1,7 +1,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <gmp.h>
-#include <sys/times.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include "coul.h"
 #include "coultau.h"
@@ -13,24 +14,23 @@
 
 extern bool tau_single_try(uint i);
 t_divisors *divisors = NULL;
-long ticks_per_second;
-clock_t ticks = 0;
-struct tms time_buf;
-static inline clock_t utime(void) {
-    times(&time_buf);
-    return time_buf.tms_utime;
+double t0 = 0;
+struct rusage rusage_buf;
+static inline double utime(void) {
+    getrusage(RUSAGE_SELF, &rusage_buf);
+    return (double)rusage_buf.ru_utime.tv_sec
+            + (double)rusage_buf.ru_utime.tv_usec / 1000000;
 }
 
-double seconds(clock_t t1) {
-    return (double)(t1 - ticks) / ticks_per_second;
+double seconds(double t1) {
+    return t1 - t0;
 }
 
 int main(int argc, char **argv) {
     _GMP_init();
     init_tau(0);
     alloc_taum(1);
-    ticks_per_second = sysconf(_SC_CLK_TCK);
-    ticks = utime();
+    t0 = utime();
 
     t_tm *tm = &taum[0];
     /* some tests assume this already set */
