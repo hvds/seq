@@ -547,6 +547,7 @@ void recover(void) {
     char *curbuf = NULL;
     size_t len = 120, len305 = 0, len202 = 0;
 
+    fseek(rfp, 0L, SEEK_SET);
     while (1) {
         ssize_t nread = getline(&curbuf, &len, rfp);
         if (nread < 0) {
@@ -589,6 +590,7 @@ void recover(void) {
         else
             fail("unexpected log line %.3s in %s", curbuf, rpath);
     }
+    fseek(rfp, 0L, SEEK_END);
     if (last202) {
         int start, end;
         mpz_t cand;
