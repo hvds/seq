@@ -54,7 +54,7 @@ static inline double utime(void) {
             + (double)rusage_buf.ru_utime.tv_usec / 1000000;
 }
 
-void diag_plain(void) {
+static inline void diag_plain(void) {
     double t1 = utime();
     char buf[2 * e + 1];
     uint j = 0;
@@ -72,98 +72,105 @@ void diag_plain(void) {
     }
 }
 
-void try_set(uint ei, uint d);
-void try_next(void) {
-    /* find first unallocated edge */
-    uint ei = si;
-
-    /* if all edges were allocated, we have a solution */
-    if (ei >= e) {
-        ++count;
-        return;
-    }
-
+static inline uint set_edge(uint ei, e_direction d, uint more) {
+    t_stack *sp = &stack[si];
     t_edge *ep = &edges[ei];
+    uint vector = ep->left ^ ep->right;
     t_vertex *lp = &vertices[ep->left];
     t_vertex *rp = &vertices[ep->right];
 
-    if (lp->in == halfn) {
-        /* forced out */
-        if (rp->in == halfn)
-            return; /* but that's not possible */
-        stack[si].more = 0;
-        try_set(ei, e_out);
-        return;
+    /* allocate */
+    sp->edge = ei;
+    sp->direction = d;
+    sp->more = more;
+    ++si;
+
+    ep->allocated = 1;
+    lp->allocated |= vector;
+    rp->allocated |= vector;
+    if (d == e_in) {
+        ++lp->in;
+        ++rp->out;
+        if (lp->in > halfn || rp->out > halfn)
+            return 0;
+    } else {
+        ++lp->out;
+        ++rp->in;
+        if (lp->out > halfn || rp->in > halfn)
+            return 0;
     }
-    if (lp->out == halfn) {
-        /* forced in */
-        if (rp->out == halfn)
-            return; /* but that's not possible */
-        stack[si].more = 0;
-        try_set(ei, e_in);
-        return;
-    }
-    /* both are possible */
-    stack[si].more = 1;
-    try_set(ei, e_in);
-    stack[si].more = 0;
-    try_set(ei, e_out);
+    return 1;
 }
 
-void try_set(uint ei, uint d) {
-    ++count_try;
-    if (utime() >= diagt)
-        diag_plain();
-    uint tnsi = si;
-    {
-        t_stack *sp = &stack[si];
-        t_edge *ep = &edges[ei];
-        uint vector = ep->left ^ ep->right;
-        t_vertex *lp = &vertices[ep->left];
-        t_vertex *rp = &vertices[ep->right];
+static inline void unset_edge(uint ei, e_direction d) {
+    t_edge *ep = &edges[ei];
+    uint vector = ep->left ^ ep->right;
+    t_vertex *lp = &vertices[ep->left];
+    t_vertex *rp = &vertices[ep->right];
 
-        /* allocate */
-        sp->edge = ei;
-        sp->direction = d;
-        ++si;
-
-        ep->allocated = 1;
-        lp->allocated |= vector;
-        rp->allocated |= vector;
-        if (d == e_in) {
-            ++lp->in;
-            ++rp->out;
-            if (lp->in > halfn || rp->out > halfn)
-                goto destack;
-        } else {
-            ++lp->out;
-            ++rp->in;
-            if (lp->out > halfn || rp->in > halfn)
-                goto destack;
-        }
+    ep->allocated = 0;
+    lp->allocated &= ~vector;
+    rp->allocated &= ~vector;
+    if (d == e_in) {
+        --lp->in;
+        --rp->out;
+    } else {
+        --lp->out;
+        --rp->in;
     }
+}
 
-    /* find the next edge to try, and recurse until done */
-    try_next();
+void recurse(void) {
+    while (1) {
+        ++count_try;
+        if (utime() >= diagt)
+            diag_plain();
+        /* go deeper */
+        {
+            /* find first unallocated edge */
+            uint ei = si;
 
-  destack:
-    while (si > tnsi) {
-        --si;
-        t_stack *sp = &stack[si];
-        t_edge *ep = &edges[sp->edge];
-        uint vector = ep->left ^ ep->right;
-        t_vertex *lp = &vertices[ep->left];
-        t_vertex *rp = &vertices[ep->right];
+            /* if all edges were allocated, we have a solution */
+            if (ei >= e) {
+                ++count;
+                goto destack;
+            }
 
-        ep->allocated = 0;
-        lp->allocated &= ~vector;
-        rp->allocated &= ~vector;
-        if (sp->direction == e_in) {
-            --lp->in;
-            --rp->out;
-        } else {
-            --lp->out;
-            --rp->in;
+            t_edge *ep = &edges[ei];
+            t_vertex *lp = &vertices[ep->left];
+            t_vertex *rp = &vertices[ep->right];
+            uint more = 0;
+            e_direction d;
+
+            if (lp->in == halfn) {
+                /* forced out */
+                if (rp->in == halfn)
+                    goto destack; /* but that's not possible */
+                d = e_out;
+            } else if (lp->out == halfn) {
+                /* forced in */
+                if (rp->out == halfn)
+                    goto destack; /* but that's not possible */
+                d = e_in;
+            } else {
+                /* both are possible */
+                more = 1;
+                d = e_in;
+            }
+            if (set_edge(ei, d, more))
+                continue;   /* recurse deeper */
+            goto destack;   /* or fail */
+        }
+      destack:
+        {
+            if (si == 0)
+                break;
+            --si;
+            t_stack *sp = &stack[si];
+            unset_edge(sp->edge, sp->direction);
+            if (sp->more && set_edge(sp->edge, e_out, 0))
+                continue;   /* recurse deeper */
+            goto destack;
         }
     }
 }
@@ -172,10 +179,19 @@ void run(void) {
     count = 0UL;
     count_try = 0UL;
     si = 0;
-    try_set(0, 1);
+    for (uint i = 0; i < n; ++i)
+        set_edge(i, (i < halfn) ? e_in : e_out, 0);
+    uint mult = 1;
+    for (uint i = n; i > 0; --i) {
+        if (i > halfn)
+            mult *= i;
+        else
+            mult /= i;
+    }
+    recurse();
     keep_diag();
     printf("For n=%u found %lu eulerian graphs (recurse %lu)\n",
-            n, count * 2, count_try);
+            n, count * mult, count_try);
 }
 
 void init(void) {
