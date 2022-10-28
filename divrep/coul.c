@@ -1023,11 +1023,10 @@ bool divmod(mpz_t result, mpz_t a, mpz_t b, mpz_t m) {
     return 1;
 }
 
-/* This allocation uses what was the next unused prime, so find the
+/* This allocation uses what was the next unused prime, to find the
  * index of the new next unused prime.
  */
-uint find_nextpi(t_level *cur) {
-    uint pi = cur->nextpi;
+uint find_nextpi(uint pi) {
     while (1) {
         ++pi;
         uint p = sprimes[pi];
@@ -1679,7 +1678,7 @@ void apply_level(t_level *prev, t_level *cur, uint vi, ulong p, uint x) {
     cur->have_square = prev->have_square;
     cur->nextpi = prev->nextpi;
     if (p == sprimes[cur->nextpi])
-        cur->nextpi = find_nextpi(cur);
+        cur->nextpi = find_nextpi(cur->nextpi);
     cur->maxp = (p > prev->maxp) ? p : prev->maxp;
 }
 
@@ -1900,15 +1899,67 @@ uint best_v(void) {
     return strategies[strategy]();
 }
 
-/* Calculate the minimum contribution from primes satisfying the given tau.
+/* Calculate the minimum contribution from unused primes satisfying
+ * the given tau.
  */
 void mintau(mpz_t mint, uint vi, uint t) {
-    /* quick version: given the minimum prime p that can be used, we
-     * calculate p^k where k = sum{p_i - 1} over the primes dividing
-     * t _with multiplicity_.
-     */
-    uint minnext = sprimes[levels[level - 1].nextpi];
-    mpz_ui_pow_ui(mint, minnext, divisors[t].sumpm);
+    uint pi = levels[level - 1].nextpi;
+    uint p = sprimes[pi];
+    switch(t) {
+      case 1:
+        mpz_set_ui(mint, 1);
+        break;
+      case 2:
+        mpz_set_ui(mint, p);
+        break;
+      case 4: {
+        uint q = sprimes[find_nextpi(pi)];
+        if (p * p < q)
+            mpz_ui_pow_ui(mint, p, 3);
+        else {
+            mpz_set_ui(mint, p);
+            mpz_mul_ui(mint, mint, q);
+        }
+        break;
+      }
+      case 6: {
+        uint q = sprimes[find_nextpi(pi)];
+        /* safe against overflow for p < 1627, which is ample */
+        if (p * p * p < q)
+            mpz_ui_pow_ui(mint, p, 5);
+        else {
+            mpz_ui_pow_ui(mint, p, 2);
+            mpz_mul_ui(mint, mint, q);
+        }
+        break;
+      }
+      case 8: {
+        uint qi = find_nextpi(pi);
+        uint q = sprimes[qi];
+        uint r = sprimes[find_nextpi(qi)];
+        if (p * p < r) {
+            /* safe against overflow for p < 257, which is ample */
+            if (p * p * p * p < q)
+                mpz_ui_pow_ui(mint, p, 7);
+            else {
+                mpz_ui_pow_ui(mint, p, 3);
+                mpz_mul_ui(mint, mint, q);
+            }
+        } else {
+            mpz_set_ui(mint, p);
+            mpz_mul_ui(mint, mint, q);
+            mpz_mul_ui(mint, mint, r);
+        }
+        break;
+      }
+      default:
+        /* quick version: given the minimum prime p that can be used, we
+         * calculate p^k where k = sum{p_i - 1} over the primes dividing
+         * t _with multiplicity_.
+         */
+        mpz_ui_pow_ui(mint, p, divisors[t].sumpm);
+        break;
+    }
 }
 
 /* return the maximum prime to iterate to */
