@@ -75,10 +75,7 @@ void diag_plain(void) {
 void try_set(uint ei, uint d);
 void try_next(void) {
     /* find first unallocated edge */
-    uint ei;
-    for (ei = 0; ei < e; ++ei)
-        if (!edges[ei].allocated)
-            break;
+    uint ei = si;
 
     /* if all edges were allocated, we have a solution */
     if (ei >= e) {
