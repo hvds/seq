@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
@@ -21,6 +22,7 @@ typedef enum {
 } e_direction;
 
 uint *vectors = NULL;
+char *available = NULL;
 
 typedef struct s_vertex {
     uint in;
@@ -32,7 +34,6 @@ t_vertex *vertices = NULL;
 typedef struct s_edge {
     uint left;
     uint right;
-    uint allocated;
 } t_edge;
 t_edge *edges = NULL;
 
@@ -84,7 +85,7 @@ static inline uint set_edge(uint ei, e_direction d, uint more) {
     sp->more = more;
     ++si;
 
-    ep->allocated = 1;
+    available[ei / 8] &= ~(1 << (ei % 8));
     if (d == e_in) {
         ++lp->in;
         ++rp->out;
@@ -105,7 +106,7 @@ static inline void unset_edge(uint ei, e_direction d) {
     t_vertex *lp = &vertices[ep->left];
     t_vertex *rp = &vertices[ep->right];
 
-    ep->allocated = 0;
+    available[ei / 8] |= 1 << (ei % 8);
     if (d == e_in) {
         --lp->in;
         --rp->out;
@@ -214,10 +215,14 @@ void init(void) {
                 continue;
             edges[ec].left = i;
             edges[ec].right = j;
-            edges[ec].allocated = 0;
             ++ec;
         }
     }
+
+    available = (char*)malloc((e + 7) / 8);
+    memset(available, 0xff, (e + 7) / 8);
+    for (uint i = e; i & 7; ++i)
+        available[i / 8] &= ~(1 << (i % 8));
 
     stack = (t_stack *)malloc((e + 1) * sizeof(t_stack));
 }
