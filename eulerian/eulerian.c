@@ -23,10 +23,13 @@ typedef enum {
 
 uint *vectors = NULL;
 char *available = NULL;
+uint *choice = NULL;
+uint ci;
 
 typedef struct s_vertex {
     uint in;
     uint out;
+    uint *edges;
 } t_vertex;
 t_vertex *vertices = NULL;
 
@@ -37,13 +40,14 @@ typedef struct s_edge {
 } t_edge;
 t_edge *edges = NULL;
 
-typedef struct s_stack {
+typedef struct s_alloc {
     uint edge;
-    uint direction;
-    uint more;
-} t_stack;
-t_stack *stack;
+    e_direction direction;
+} t_alloc;
+t_alloc *stack;
 uint si;
+t_alloc *pend = NULL;
+uint pi;
 
 double diag_delay = 1, diagt = 1;
 double t0 = 0;
@@ -56,13 +60,11 @@ static inline double utime(void) {
 
 static inline void diag_plain(void) {
     double t1 = utime();
-    char buf[2 * e + 1];
+    /* overkill worst case for d=6, will fail for d > 6 */
+    char buf[192 * 4];
     uint j = 0;
-    for (uint i = 0; i < si; ++i) {
-        if (stack[i].more)
-            buf[j++] = '*';
-        buf[j++] = stack[i].direction ? '1' : '0';
-    }
+    for (uint i = 0; i < ci; ++i)
+        j += sprintf(&buf[j], "%u ", choice[i]);
     buf[j] = 0;
     diag(buf);
     diagt = t1 + diag_delay;
@@ -72,8 +74,26 @@ static inline void diag_plain(void) {
     }
 }
 
-static inline uint set_edge(uint ei, e_direction d, uint more) {
-    t_stack *sp = &stack[si];
+static inline void add_pend(uint v, e_direction d) {
+    t_vertex *vp = &vertices[v];
+    uint spare = halfn - ((d == e_in) ? vp->in : vp->out);
+    for (uint i = 0; i < n; ++i) {
+        uint ei = vp->edges[i];
+        if (available[ei / 8] & (1 << (ei % 8))) {
+            t_alloc *pp = &pend[pi++];
+            pp->edge = ei;
+            pp->direction = (edges[ei].left == v) ? d : 1 - d;
+            --spare;
+            if (spare == 0)
+                return;
+        }
+    }
+    fprintf(stderr, "out of edges\n");
+    exit(1);
+}
+
+static inline uint set_edge(uint ei, e_direction d) {
+    t_alloc *sp = &stack[si];
     t_edge *ep = &edges[ei];
     uint vector = ep->left ^ ep->right;
     t_vertex *lp = &vertices[ep->left];
@@ -82,7 +102,6 @@ static inline uint set_edge(uint ei, e_direction d, uint more) {
     /* allocate */
     sp->edge = ei;
     sp->direction = d;
-    sp->more = more;
     ++si;
 
     available[ei / 8] &= ~(1 << (ei % 8));
@@ -91,11 +110,19 @@ static inline uint set_edge(uint ei, e_direction d, uint more) {
         ++rp->out;
         if (lp->in > halfn || rp->out > halfn)
             return 0;
+        if (lp->in == halfn && lp->out < halfn)
+            add_pend(ep->left, e_out);
+        if (rp->out == halfn && rp->in < halfn)
+            add_pend(ep->right, e_in);
     } else {
         ++lp->out;
         ++rp->in;
         if (lp->out > halfn || rp->in > halfn)
             return 0;
+        if (lp->out == halfn && lp->in < halfn)
+            add_pend(ep->left, e_in);
+        if (rp->in == halfn && rp->out < halfn)
+            add_pend(ep->right, e_out);
     }
     return 1;
 }
@@ -121,21 +148,38 @@ void recurse(void) {
         ++count_try;
         if (utime() >= diagt)
             diag_plain();
+
+        /* make forced moves first */
+        while (pi) {
+            t_alloc *pp = &pend[--pi];
+            uint ei = pp->edge;
+            if (!(available[ei / 8] & (1 << (ei % 8))))
+                continue;
+            if (!set_edge(ei, pp->direction))
+                goto destack;
+        }
+
         /* go deeper */
         {
             /* find first unallocated edge */
-            uint ei = si;
+            uint ei;
+            for (uint i = 0; i < e / 8; ++i)
+                if (available[i])
+                    for (uint j = 0; j < 8; ++j)
+                        if (available[i] & (1 << j)) {
+                            ei = i * 8 + j;
+                            goto got_ei;
+                        }
 
             /* if all edges were allocated, we have a solution */
-            if (ei >= e) {
-                ++count;
-                goto destack;
-            }
+            ++count;
+            goto destack;
 
+          got_ei:
+            ;
             t_edge *ep = &edges[ei];
             t_vertex *lp = &vertices[ep->left];
             t_vertex *rp = &vertices[ep->right];
-            uint more = 0;
             e_direction d;
 
             if (lp->in == halfn) {
@@ -150,22 +194,26 @@ void recurse(void) {
                 d = e_in;
             } else {
                 /* both are possible */
-                more = 1;
+                choice[ci++] = si;
                 d = e_in;
             }
-            if (set_edge(ei, d, more))
+            if (set_edge(ei, d))
                 continue;   /* recurse deeper */
             goto destack;   /* or fail */
         }
+
       destack:
         {
-            if (si == 0)
+            pi = 0; /* remaining forced moves no longer relevant */
+            if (ci == 0)
                 break;
-            --si;
-            t_stack *sp = &stack[si];
-            unset_edge(sp->edge, sp->direction);
-            if (sp->more && set_edge(sp->edge, e_out, 0))
-                continue;   /* recurse deeper */
+            uint target = choice[--ci];
+            while (si > target) {
+                t_alloc *sp = &stack[--si];
+                unset_edge(sp->edge, sp->direction);
+            }
+            if (set_edge(stack[si].edge, e_out))
+                continue;
             goto destack;
         }
     }
@@ -175,8 +223,10 @@ void run(void) {
     count = 0UL;
     count_try = 0UL;
     si = 0;
+    ci = 0;
+    pi = 0;
     for (uint i = 0; i < n; ++i)
-        set_edge(i, (i < halfn) ? e_in : e_out, 0);
+        set_edge(i, (i < halfn) ? e_in : e_out);
     uint mult = 1;
     for (uint i = n; i > 0; --i) {
         if (i > halfn)
@@ -205,6 +255,8 @@ void init(void) {
     /* for each vertex we track the count of +ve edges allocated,
      * and the set of vectors allocated */
     vertices = (t_vertex *)calloc(v, sizeof(t_vertex));
+    for (uint i = 0; i < v; ++i)
+        vertices[i].edges = (uint *)malloc(n * sizeof(uint));
 
     edges = (t_edge *)malloc(e * sizeof(t_edge));
     uint ec = 0;
@@ -215,6 +267,12 @@ void init(void) {
                 continue;
             edges[ec].left = i;
             edges[ec].right = j;
+            vertices[i].edges[vertices[i].in++] = ec;
+            if (vertices[i].in == n)
+                vertices[i].in = 0;
+            vertices[j].edges[vertices[j].in++] = ec;
+            if (vertices[j].in == n)
+                vertices[j].in = 0;
             ++ec;
         }
     }
@@ -224,7 +282,9 @@ void init(void) {
     for (uint i = e; i & 7; ++i)
         available[i / 8] &= ~(1 << (i % 8));
 
-    stack = (t_stack *)malloc((e + 1) * sizeof(t_stack));
+    stack = (t_alloc *)malloc((e + 1) * sizeof(t_alloc));
+    choice = (uint *)malloc(e * sizeof(uint));
+    pend = (t_alloc *)malloc(e * sizeof(t_alloc));
 }
 
 int main(int argc, char **argv) {
@@ -241,8 +301,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "<n> must be at least 2, not %u\n", n);
         return 1;
     }
-    if (n > 8)
-        fprintf (stderr, "n > 8 may cause problems, use at own risk\n");
+    if (n > 6) {
+        fprintf(stderr, "For n > 6, must at least increase diag buf\n");
+        return 1;
+    }
 
     init_diag();
     init();
