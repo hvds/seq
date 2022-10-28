@@ -968,7 +968,6 @@ sub fill_mintau {
     my @mint;
 
     my @p;
-    my %smallp;
     sub prep_mintau {
         # Max tau we care about
         my $maxt = $n / $nf->[-1][0];
@@ -990,9 +989,6 @@ sub fill_mintau {
 
         # Forced primes are always allocated, so never part of mintau.
         @p = grep $_ > $k, @p;
-
-        # A prime p allocated at i + xp is not suppressed at i.
-        $smallp{$_} = 1 for grep $_ < $k, @p;
 
         # Prepare all possible mintau() for all relevant tau
         $mint[$_] = fill_mintau($_, \@p) for divisors($maxt);
