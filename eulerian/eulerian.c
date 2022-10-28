@@ -23,7 +23,6 @@ typedef enum {
 uint *vectors = NULL;
 
 typedef struct s_vertex {
-    uint allocated;
     uint in;
     uint out;
 } t_vertex;
@@ -86,8 +85,6 @@ static inline uint set_edge(uint ei, e_direction d, uint more) {
     ++si;
 
     ep->allocated = 1;
-    lp->allocated |= vector;
-    rp->allocated |= vector;
     if (d == e_in) {
         ++lp->in;
         ++rp->out;
@@ -109,8 +106,6 @@ static inline void unset_edge(uint ei, e_direction d) {
     t_vertex *rp = &vertices[ep->right];
 
     ep->allocated = 0;
-    lp->allocated &= ~vector;
-    rp->allocated &= ~vector;
     if (d == e_in) {
         --lp->in;
         --rp->out;
