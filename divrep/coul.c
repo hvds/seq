@@ -723,8 +723,10 @@ void prep_maxforce(void) {
 void prep_primes(void) {
     /* We can certainly not allocate more than (each of the forced primes)
      * plus (one per odd prime factor for each v_i); in practice it will
-     * usually be less. */
-    nsprimes = maxodd * k + forcedp;
+     * usually be less.
+     * In mintau() we may need maxfact primes beyond what may have been
+     * allocated in k-1 places. */
+    nsprimes = maxodd * k + forcedp + (maxfact - maxodd);
     sprimes = (uint *)malloc(nsprimes * sizeof(uint));
     uint p = 1;
     for (uint i = 0; i < nsprimes; ++i) {
