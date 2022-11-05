@@ -698,7 +698,7 @@ bool tau_multi_prep(uint i) {
     PRIME_ITERATOR(iter);
     while (1) {
         p = prime_iterator_next(&iter);
-        if (p * p >= lim)
+        if (p * p > lim)
             break;
         while (mpz_divisible_ui_p(tm->n, p)) {
             mpz_divexact_ui(tm->n, tm->n, p);
@@ -763,7 +763,11 @@ bool tau_multi_prep(uint i) {
     if (ct_prime(tm->n))
         return prep_abort(tm, t == 2);
     tm->e = ct_power(tm->n);
-    if (!tm->e)
+    if (tm->e) {
+        /* we found a power, did it leave a prime? */
+        if (ct_prime(tm->n))
+            return prep_abort(tm, t == tm->e + 1);
+    } else
         tm->e = 1;
     if ((t & 1) && (tm->e & 1))
         return 0;
