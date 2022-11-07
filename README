@@ -17,6 +17,7 @@ jacobsthal:
 divrep:
   Investigation of sequences involving arithmetic series related to tau(n),
   including A064491, A088430, A165497, A165498, A165499, A165500, A165501.
+  **Note** now moved to its own repo, see https://github.com/hvds/divrep
 
 zerofree:
   Given a calculation such as s->s^2, find the minimal set that includes 2
