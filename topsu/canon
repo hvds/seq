@@ -1,0 +1,12 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+
+use lib 'lib';
+use Topsu;
+
+my $t = Topsu->new_fh(\*STDIN);
+print "\n";
+print $t->canon_str, "\n";
+print $t->canon_px_str, "\n";
+printf "%s (%.2fs)\n", $t->canon_count, (times())[0];
