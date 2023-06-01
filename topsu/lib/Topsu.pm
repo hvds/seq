@@ -97,15 +97,23 @@ sub init {
 }
 
 sub _canon_mkstr {
-    my($self, $x, $y, $z, $xy) = @_;
+    my($self, $x, $y, $xy) = @_;
     my $size = $self->{size};
     my @out;
     for (@{ $self->{p} }) {
         my($px, $py, $pz) = @$_;
         if ($xy) {
-            $out[ $y->[$py] ][ $x->[$px] ] = $z->[$pz];
+            $out[ $y->[$py] ][ $x->[$px] ] = $pz;
         } else {
-            $out[ $x->[$px] ][ $y->[$py] ] = $z->[$pz];
+            $out[ $x->[$px] ][ $y->[$py] ] = $pz;
+        }
+    }
+    my @lookup;
+    my $next = 0;
+    for my $xi (0 .. $size - 1) {
+        for my $yi (0 .. $size - 1) {
+            my $pz = $out[$xi][$yi] // next;
+            $out[$xi][$yi] = $lookup[$pz] //= $next++;
         }
     }
     return join "\xfe", map {
@@ -118,19 +126,13 @@ sub _canon_mkstr {
 sub _init_canon {
     my($self) = @_;
     my $size = $self->{size};
-    my $best = $self->_canon_mkstr(([ 0 .. $size - 1 ]) x 3, 0);
+    my $best = $self->_canon_mkstr(([ 0 .. $size - 1 ]) x 2, 0);
     return {
         best => $best,
+        best_at => [ ([ 0 .. $size - 1 ]) x 2, 0 ],
         size => $size,
         self => $self,
     };
-}
-
-sub _canon_z {
-    my($ctx, $v, $z) = @_;
-    ++$ctx->{count}[$v];
-    my %seen = map +($_ => 1), @$z;
-    return [ grep !$seen{$_}, 0 .. $ctx->{size} - 1 ];
 }
 
 sub _canon_x {
@@ -149,10 +151,10 @@ sub _canon_y {
 
 sub _check_canon {
     my($ctx) = @_;
-    my $this = $ctx->{self}->_canon_mkstr(@$ctx{qw{ x y z xy }});
+    my $this = $ctx->{self}->_canon_mkstr(@$ctx{qw{ x y xy }});
     if ($this lt $ctx->{best}) {
         $ctx->{best} = $this;
-        $ctx->{best_at} = [ @$ctx{qw{ x y z xy }} ];
+        $ctx->{best_at} = [ @$ctx{qw{ x y xy }} ];
     }
     return;
 }
@@ -164,8 +166,7 @@ sub _final_canon {
         best => $best,
         x => $best_at->[0],
         y => $best_at->[1],
-        z => $best_at->[2],
-        xy => $best_at->[3],
+        xy => $best_at->[2],
         count => $ctx->{count},
     };
 }
@@ -175,25 +176,20 @@ sub canon {
     return $self->{canon} //= do {
         my $size = $self->{size};
         my $ctx = _init_canon($self);
-        my(@cx, @cy, @cz);
+        my(@cx, @cy);
         for my $v (0 .. $size - 1) {
             push @cx, sub { _canon_x($ctx, $v, [ @_ ]) };
             push @cy, sub { _canon_y($ctx, $v, [ @_ ]) };
-            push @cz, sub { _canon_z($ctx, $v, [ @_ ]) };
         }
-        my $iterz = NestedLoops(\@cz);
-        while (my @z = $iterz->()) {
-            local $ctx->{z} = \@z;
-            for my $xy (0, 1) {
-                local $ctx->{xy} = $xy;
-                my $iterx = NestedLoops(\@cx);
-                while (my @x = $iterx->()) {
-                    local $ctx->{x} = \@x;
-                    my $itery = NestedLoops(\@cy);
-                    while (my @y = $itery->()) {
-                        local $ctx->{y} = \@y;
-                        _check_canon($ctx);
-                    }
+        for my $xy (0, 1) {
+            local $ctx->{xy} = $xy;
+            my $iterx = NestedLoops(\@cx);
+            while (my @x = $iterx->()) {
+                local $ctx->{x} = \@x;
+                my $itery = NestedLoops(\@cy);
+                while (my @y = $itery->()) {
+                    local $ctx->{y} = \@y;
+                    _check_canon($ctx);
                 }
             }
         }
@@ -215,10 +211,9 @@ sub canon_str {
 sub canon_px_str {
     my($self) = @_;
     my $c = $self->canon;
-    return sprintf 'x=[%s] y=[%s] z=[%s] xy=%s',
+    return sprintf 'x=[%s] y=[%s] xy=%s',
         join(' ', @{ $c->{x} }),
         join(' ', @{ $c->{y} }),
-        join(' ', @{ $c->{z} }),
         $c->{xy};
 }
 
