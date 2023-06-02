@@ -142,6 +142,12 @@ sub _canon_x {
     my($ctx, $v, $x) = @_;
     ++$ctx->{count}[$v + $ctx->{size}];
     my %seen = map +($_ => 1), @$x;
+    if (@$x) {
+        my $bi = $ctx->{self}{bi}[ $x->[-1] ];
+        my $band = $ctx->{self}{band}[$bi];
+        my $band_unused = [ grep !$seen{$_}, $band->[0] .. $band->[1] ];
+        return $band_unused if @$band_unused;
+    }
     return [ grep !$seen{$_}, 0 .. $ctx->{size} - 1 ];
 }
 
@@ -149,6 +155,12 @@ sub _canon_y {
     my($ctx, $v, $y) = @_;
     ++$ctx->{count}[$v + $ctx->{size} * 2];
     my %seen = map +($_ => 1), @$y;
+    if (@$y) {
+        my $si = $ctx->{self}{si}[ $y->[-1] ];
+        my $stack = $ctx->{self}{stack}[$si];
+        my $stack_unused = [ grep !$seen{$_}, $stack->[0] .. $stack->[1] ];
+        return $stack_unused if @$stack_unused;
+    }
     return [ grep !$seen{$_}, 0 .. $ctx->{size} - 1 ];
 }
 
