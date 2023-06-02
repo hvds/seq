@@ -99,13 +99,16 @@ sub init {
 sub _canon_mkstr {
     my($self, $x, $y, $xy) = @_;
     my $size = $self->{size};
+    my @set = (0 .. $size - 1);
+    my $tx = [ @{ +{map +($x->[$_] => $_), @set} }{@set} ];
+    my $ty = [ @{ +{map +($y->[$_] => $_), @set} }{@set} ];
     my @out;
     for (@{ $self->{p} }) {
         my($px, $py, $pz) = @$_;
         if ($xy) {
-            $out[ $y->[$py] ][ $x->[$px] ] = $pz;
+            $out[ $ty->[$py] ][ $tx->[$px] ] = $pz;
         } else {
-            $out[ $x->[$px] ][ $y->[$py] ] = $pz;
+            $out[ $tx->[$px] ][ $ty->[$py] ] = $pz;
         }
     }
     my @lookup;
