@@ -130,9 +130,39 @@ sub _init_canon {
     my($self) = @_;
     my $size = $self->{size};
     my $best = $self->_canon_mkstr(([ 0 .. $size - 1 ]) x 2, 0);
+    my $max = 1;
+    my @max;
+    for my $r (@{ $self->{region} }) {
+        my(@x, @y);
+        for my $p (@{ $r->{p} }) {
+            ++$x[ $p->[0] ];
+            ++$y[ $p->[1] ];
+        }
+        for (0 .. $size - 1) {
+            my $x = $x[$_] or next;
+            if ($x > $max) {
+                @max = ();
+                $max = $x;
+            }
+            if ($x == $max) {
+                push @max, [ 0, $_, $r->{b}, $r->{s} ];
+            }
+        }
+        for (0 .. $size - 1) {
+            my $y = $y[$_] or next;
+            if ($y > $max) {
+                @max = ();
+                $max = $y;
+            }
+            if ($y == $max) {
+                push @max, [ 1, $_, $r->{b}, $r->{s} ];
+            }
+        }
+    }
     return {
         best => $best,
         best_at => [ ([ 0 .. $size - 1 ]) x 2, 0 ],
+        max => \@max,
         size => $size,
         self => $self,
     };
@@ -147,12 +177,39 @@ sub _canon_x {
         my $band = $ctx->{self}{band}[$bi];
         my $band_unused = [ grep !$seen{$_}, $band->[0] .. $band->[1] ];
         return $band_unused if @$band_unused;
+    } else {
+        # require that the first region in the first row can be maximal
+        my $y0 = $ctx->{y}[0];
+        my $xy = $ctx->{xy};
+        if ($xy == 0) {
+            # pick any good row that coincides with this stack
+            my $si = $ctx->{self}{si}[$y0];
+            return [
+                sort { $a <=> $b }
+                    map $_->[1],
+                        grep $_->[0] == 0 && $_->[3] == $si,
+                            @{ $ctx->{max} }
+            ];
+        } else {
+            # pick any good band that coincides with this column
+            my @bands = map $_->[2],
+                grep $_->[0] == 1 && $_->[1] == $y0,
+                    @{ $ctx->{max} };
+            return [
+                sort { $a <=> $b }
+                    map $_->[0] .. $_->[1],
+                        @{ $ctx->{self}{band} }[ @bands ]
+            ];
+        }
     }
     return [ grep !$seen{$_}, 0 .. $ctx->{size} - 1 ];
 }
 
 sub _canon_y {
     my($ctx, $v, $y) = @_;
+    if ($v) {
+        $y = [ $ctx->{y}[0], @$y ];
+    }
     ++$ctx->{count}[$v + $ctx->{size} * 2];
     my %seen = map +($_ => 1), @$y;
     if (@$y) {
@@ -198,13 +255,16 @@ sub canon {
         }
         for my $xy (0, 1) {
             local $ctx->{xy} = $xy;
-            my $iterx = NestedLoops(\@cx);
-            while (my @x = $iterx->()) {
-                local $ctx->{x} = \@x;
-                my $itery = NestedLoops(\@cy);
-                while (my @y = $itery->()) {
-                    local $ctx->{y} = \@y;
-                    _check_canon($ctx);
+            for my $y0 (@{ _canon_y($ctx, 0, []) }) {
+                local $ctx->{y} = [ $y0 ];
+                my $iterx = NestedLoops(\@cx);
+                while (my @x = $iterx->()) {
+                    local $ctx->{x} = \@x;
+                    my $itery = NestedLoops([ @cy[1 .. $#cy] ]);
+                    while (my @y = $itery->()) {
+                        local $ctx->{y} = [ $y0, @y ];
+                        _check_canon($ctx);
+                    }
                 }
             }
         }
