@@ -116,7 +116,9 @@ sub _solvable {
 
 # True if:
 # - each row, column and region has at least two points;
-# - each point can form part of a complete solution.
+# - each point can form part of a complete solution;
+# - the regions are connected;
+# - rows in each band and columns in each stack are connected.
 sub is_valid {
     my($self) = @_;
     my $size = $self->{size};
@@ -124,12 +126,100 @@ sub is_valid {
     for my $i (0 .. $size - 1) {
         return 0 if grep +($_->[$i] // 0) < 2, @$self{qw{ x y z }};
     }
+    return 0 unless $self->is_connected;
     # each point must form part of a complete solution
     my %valid;
     my @p = @{ $self->{p} };
     for my $p (@p) {
         next if $valid{"$p->[0]-$p->[1]-$p->[2]"};
         return 0 unless _solvable($size, \%valid, \@p, [], $p);
+    }
+    return 1;
+}
+
+sub is_connected {
+    my($self) = @_;
+
+    # check if regions are connected
+    my(@r) = @{ $self->{region} };
+    my $r0 = pop @r;
+    my @pend = ([ 0, $r0 ], [ 1, $r0 ]);
+    while (@pend) {
+        my($dim, $rp) = @{ pop @pend };
+        if ($dim == 0) {
+            for my $i (reverse 0 .. $#r) {
+                my $ri = $r[$i];
+                next if $ri->{b} != $rp->{b};
+                push @pend, [ 1, $ri ];
+                splice @r, $i, 1;
+            }
+        } else {
+            for my $i (reverse 0 .. $#r) {
+                my $ri = $r[$i];
+                next if $ri->{s} != $rp->{s};
+                push @pend, [ 0, $ri ];
+                splice @r, $i, 1;
+            }
+        }
+    }
+    return 0 if @r;
+
+    my(@b, @s);
+    for my $r (@{ $self->{region} }) {
+        push @{ $b[$r->{b}] }, $r;
+        push @{ $s[$r->{s}] }, $r;
+    }
+
+    # check if rows are connected within each band
+    for my $bi (0 .. $#b) {
+        my($bmin, $bmax) = @{ $self->{band}[$bi] };
+        my $br = $b[$bi];
+        next if @$br <= 1;
+        my @vec = map {
+            my $r = $_;
+            my $v = 0;
+            for my $p (@{ $r->{p} }) {
+                $v |= 1 << ($p->[0] - $bmin);
+            }
+            $v;
+        } @$br;
+        my($v, $w) = (pop(@vec), 0);
+        while ($v) {
+            $w |= $v;
+            $v = 0;
+            for my $i (reverse 0 .. $#vec) {
+                next if ($w & $vec[$i]) == 0;
+                $v |= $vec[$i];
+                splice @vec, $i, 1;
+            }
+        }
+        return 0 if @vec;
+    }
+
+    # check if columns are connected within each stack
+    for my $si (0 .. $#s) {
+        my($smin, $smax) = @{ $self->{stack}[$si] };
+        my $sr = $s[$si];
+        next if @$sr <= 1;
+        my @vec = map {
+            my $r = $_;
+            my $v = 0;
+            for my $p (@{ $r->{p} }) {
+                $v |= 1 << ($p->[1] - $smin);
+            }
+            $v;
+        } @$sr;
+        my($v, $w) = (pop @vec, 0);
+        while ($v) {
+            $w |= $v;
+            $v = 0;
+            for my $i (reverse 0 .. $#vec) {
+                next if ($w & $vec[$i]) == 0;
+                $v |= $vec[$i];
+                splice @vec, $i, 1;
+            }
+        }
+        return 0 if @vec;
     }
     return 1;
 }
