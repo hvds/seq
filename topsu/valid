@@ -1,0 +1,10 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+
+use lib 'lib';
+use Topsu;
+
+my $t = Topsu->new_fh(\*STDIN);
+print "\n";
+print +($t->is_valid ? "valid" : "not valid"), "\n";

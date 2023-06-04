@@ -96,6 +96,44 @@ sub init {
     return;
 }
 
+sub _solvable {
+    my($size, $valid, $unused, $used, $p) = @_;
+    if (@$used == $size - 1) {
+        # solution, mark all used entries as valid
+        $valid->{"$_->[0]-$_->[1]-$_->[2]"} = 1 for (@$used, $p);
+        return 1;
+    }
+    $used = [ @$used, $p ];
+    $unused = [
+        grep $_->[0] != $p->[0] && $_->[1] != $p->[1] && $_->[2] != $p->[2],
+                @$unused
+    ];
+    for (@$unused) {
+        return 1 if _solvable($size, $valid, $unused, $used, $_);
+    }
+    return 0;
+}
+
+# True if:
+# - each row, column and region has at least two points;
+# - each point can form part of a complete solution.
+sub is_valid {
+    my($self) = @_;
+    my $size = $self->{size};
+    # every row, column and region must have at least two points
+    for my $i (0 .. $size - 1) {
+        return 0 if grep +($_->[$i] // 0) < 2, @$self{qw{ x y z }};
+    }
+    # each point must form part of a complete solution
+    my %valid;
+    my @p = @{ $self->{p} };
+    for my $p (@p) {
+        next if $valid{"$p->[0]-$p->[1]-$p->[2]"};
+        return 0 unless _solvable($size, \%valid, \@p, [], $p);
+    }
+    return 1;
+}
+
 sub _canon_mkstr {
     my($self, $x, $y, $xy) = @_;
     my $size = $self->{size};
