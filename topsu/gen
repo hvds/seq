@@ -13,6 +13,7 @@ for my $size (2 .. $weight) {
     next if $size * $size < $size + $weight;
     my $band_iter = split_iter([ $size ]);
     my %seen;
+    my %rseen;
     # for each way of splitting the rows into bands ...
     while (my $band = $band_iter->()) {
         # start the iterator at $band to avoid duplication
@@ -32,17 +33,23 @@ for my $size (2 .. $weight) {
             while (my $reg = $r_iter->()) {
 # count (2..9) 1 2 7 20 76 270 1313 6172
 # 100t         0 0 0 0  2  11  165  1957
-++$count; next;
+#++$count; next;
+                # skip if we've seen the same shape
+                next if $rseen{rcanon($reg)}++;
+# count (2..9) 1 2 6 13 30 
+# 100t         0 0 3 71 3185
+#++$count; next;
                 my $spare_iter = spare_iter(
                         $size, $weight, $band, $stack, $reg);
                 while (my $spare = $spare_iter->()) {
-# count (2..9) 1 2 9 32 136 613 3124 17067
+# count (2..9) 1 2 8 24 74   613 3124 17067
+# 100t         0 0 3 71 3191
 #++$count; next;
                     my $a_iter = assign_iter(
                             $size, $band, $stack, $reg, $spare);
                     while (my $pos = $a_iter->()) {
-# count (2..6) 1 12 562 7590 476148 ...
-# 100t         0  0   2   58   9655
+# count (2..6) 1 12 547 7078 395146 ...
+# 100t         0  0   2   58  12117
 #++$count; next;
                         next unless $pos->is_valid;
 # count (2..6) 1 3 38 298 3803 ...
@@ -300,7 +307,7 @@ sub assign_region {
     return \@pos;
 }
 
-sub dispr {
+sub _rset {
     my($reg) = @_;
     my @s;
     for my $ri (0 .. $#$reg) {
@@ -311,7 +318,19 @@ sub dispr {
             }
         }
     }
-    for (@s) {
+    return \@s;
+}
+
+# FIXME: full regions is worst case for Topsu->canon, but can be much
+# faster with a dedicated algorithm.
+sub rcanon {
+    my $t = Topsu->new(_rset(@_));
+    return $t->canon_str;
+}
+
+sub dispr {
+    my $set = _rset(@_);
+    for (@$set) {
         print join('', map chr(0x61 + ($_ // -0x33)), @$_), "\n";
     }
     print "\n";
