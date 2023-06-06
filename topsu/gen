@@ -1,0 +1,318 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+
+use Algorithm::Loops qw{ NestedLoops };
+use lib 'lib';
+use Topsu;
+
+my($weight) = @ARGV;
+my $count = 0;
+my $repeats = 0;
+for my $size (2 .. $weight) {
+    next if $size * $size < $size + $weight;
+    my $band_iter = split_iter([ $size ]);
+    my %seen;
+    # for each way of splitting the rows into bands ...
+    while (my $band = $band_iter->()) {
+        # start the iterator at $band to avoid duplication
+        my $stack_iter = split_iter($band);
+        # for each way of splitting the columns into stacks ...
+        while (my $stack = $stack_iter->()) {
+            # find the regions at intersections of columns and bands
+            # (ignoring regions of size 1 x 1)
+            my $r = region($band, $stack);
+            # skip unless there are enough regions
+            next unless @$r >= $size;
+# count (2..9) 1 2 8 20 56 123 291 612
+#++$count; next;
+            my $r_iter = region_iter($size, $band, $stack, $r);
+            # for each way of selecting <$size> of the regions
+            # (that is valid after some checks)
+            while (my $reg = $r_iter->()) {
+# count (2..9) 1 2 7 20 76 270 1313 6172
+# 100t         0 0 0 0  2  11  165  1957
+++$count; next;
+                my $spare_iter = spare_iter(
+                        $size, $weight, $band, $stack, $reg);
+                while (my $spare = $spare_iter->()) {
+# count (2..9) 1 2 9 32 136 613 3124 17067
+#++$count; next;
+                    my $a_iter = assign_iter(
+                            $size, $band, $stack, $reg, $spare);
+                    while (my $pos = $a_iter->()) {
+# count (2..6) 1 12 562 7590 476148 ...
+# 100t         0  0   2   58   9655
+#++$count; next;
+                        next unless $pos->is_valid;
+# count (2..6) 1 3 38 298 3803 ...
+# 100t         0 0  2  62 9678
+#++$count; next;
+                        my $s = $pos->canon_str;
+                        next if $seen{$s}++;
+# count (2..5) 1 2 6  16   77 ...
+# 100t         0 1 17 1848 493261 ...
+                        print $s, "\n\n";
+                    }
+                }
+            }
+        }
+    }
+    $count += keys %seen;
+    $repeats += $_ for values %seen;
+}
+print "a($weight) = $count (total $repeats seen) @{[ sprintf '%.2fs', 0+times ]}\n";
+exit 0;
+
+# Returns an iterator that returns partitions of sum(@$part) starting
+# from the provided partition $part. Start with [$size] to get all
+# partitions of $size, ending with [(1) x $size].
+sub split_iter {
+    my @s = @{ $_[0] };
+    my $done = 0;
+    return sub {
+        return undef if $done;
+        my @t = @s;
+        my $spare = 0;
+        ++$spare, pop @s while @s && $s[-1] == 1;
+        if (!@s) {
+            $done = 1;
+        } else {
+            my $min = --$s[-1];
+            ++$spare;
+            while ($spare > $min) {
+                push @s, $min;
+                $spare -= $min;
+            }
+            push @s, $spare;
+        }
+        return \@t;
+    };
+}
+
+# Returns an array of regions formed from intersections of @$band and @$stack.
+# Each region is of the form:
+#   [ [ band_index, band_height, xmin, xmax ],
+#       [ stack_index, stack_height, ymin, ymax ] ]
+sub region {
+    my($band, $stack) = @_;
+    # cheap connectivity check: can connect only by band/stack of width > 1,
+    return [] if @$band > 1 && $stack->[0] == 1;
+
+    my $c = 0;
+    $band = [ map {
+        my $height = $band->[$_];
+        my $b = [ $_, $height, $c, $c + $height - 1 ];
+        $c += $height;
+        $b;
+    } 0 .. $#$band ];
+    $c = 0;
+    $stack = [ map {
+        my $width = $stack->[$_];
+        my $s = [ $_, $width, $c, $c + $width - 1 ];
+        $c += $width;
+        $s;
+    } 0 .. $#$stack ];
+    return [ grep $_->[0][1] * $_->[1][1] > 1, map {
+        my $b = $_;
+        map [ $b, $_ ], @$stack
+    } @$band ];
+}
+
+# Returns an iterator that returns as arrayrefs each subset of $size of
+# the regions in @$regions, such that in any subset each of band @$band
+# and each stack @$stack is represented by as many regions as its width.
+#
+# FIXME: look for a way to deduplicate permutations of same-width b/s,
+# such as for:
+#
+# aab.  aa.b
+# aab.  aa.b
+# cc.d  ccd.
+# cc.d  ccd.
+#
+sub region_iter {
+    my($size, $band, $stack, $regions) = @_;
+
+    my(@bc, @sc);
+    # find the last occurrence of each band and stack
+    for my $ri (0 .. $#$regions) {
+        $bc[ $regions->[$ri][0][0] ] = $ri;
+        $sc[ $regions->[$ri][1][0] ] = $ri;
+    }
+    my(@rb, @rs);
+    push @{ $rb[ $bc[$_] ] }, $_ for 0 .. $#bc;
+    push @{ $rs[ $sc[$_] ] }, $_ for 0 .. $#sc;
+
+    my $iter = NestedLoops([
+        [ 0 .. $#$regions ],
+        map sub {
+            my $rmin = (@_ > 1) ? $_[-2] + 1 : 0;
+            my @r = @$regions[@_];
+            for my $ri ($rmin .. $_[-1]) {
+                for my $bi (@{ $rb[$ri] // [] }) {
+                    next if $band->[$bi] == grep $_->[0][0] == $bi, @r;
+                    return [];
+                }
+                for my $si (@{ $rs[$ri] // [] }) {
+                    next if $stack->[$si] == grep $_->[1][0] == $si, @r;
+                    return [];
+                }
+            }
+            [ $_[-1] + 1 .. $#$regions ];
+        }, 1 .. $size - 1
+    ]);
+    return sub {
+        RILOOP: while (1) {
+            my @x = $iter->() or return undef;
+            my @r = @$regions[@x];
+            my $rmin = (@x > 1) ? $x[-2] + 1 : 0;
+            for my $ri ($rmin .. $#$regions) {
+                for my $bi (@{ $rb[$ri] // [] }) {
+                    next if $band->[$bi] == grep $_->[0][0] == $bi, @r;
+                    next RILOOP;
+                }
+                for my $si (@{ $rs[$ri] // [] }) {
+                    next if $stack->[$si] == grep $_->[1][0] == $si, @r;
+                    next RILOOP;
+                }
+            }
+            next RILOOP unless is_region_connected(\@r);
+            return \@r;
+        }
+        # not reached
+    };
+}
+
+sub is_region_connected {
+    my($reg) = @_;
+    my @left = @$reg;
+    my @pend = pop @left;
+    while (@pend) {
+        my $rp = pop @pend;
+        for my $ri (reverse 0 .. $#left) {
+            my $r = $left[$ri];
+            if ($r->[0][0] == $rp->[0][0]
+                || $r->[1][0] == $rp->[1][0]
+            ) {
+                push @pend, $r;
+                splice @left, $ri, 1;
+            }
+        }
+    }
+    return @left ? 0 : 1;
+}
+
+# Returns an iterator that returns an arrayref of allocations,
+# the number of additional points to assign to each region above
+# the required 2.
+sub spare_iter {
+    my($size, $weight, $band, $stack, $regions) = @_;
+    my $spare = $weight - $size;
+    if ($spare == 0) {
+        my $done = 0;
+        return sub {
+            return undef if $done;
+            $done = 1;
+            return [ (0) x $size ];
+        };
+    }
+    my @avail = map $_->[0][1] * $_->[1][1] - 2, @$regions;
+    my $iter = NestedLoops([(
+        sub {
+            my $remain = $spare;
+            $remain -= $_ for @_;
+            my $max = $avail[scalar @_];
+            $max = $remain if $max > $remain;
+            my $min = (@_ == $size - 1) ? $remain : 0;
+            return [ $min .. $max ];
+        }
+    ) x $size]);
+    return sub {
+        my @x = $iter->() or return undef;
+        return \@x;
+    };
+}
+
+# Returns an iterator that returns a Topsu object for each way to
+# distribute $size spare points across the selected @$regions.
+# We deduplicate by ensuring the first appearance of points in rows
+# of any band, or in columns of any stack, are in ascending order.
+sub assign_iter {
+    my($size, $band, $stack, $reg, $spare) = @_;
+    $reg = [ sort {
+        $a->[0][0] <=> $b->[0][0]
+        || $a->[1][0] <=> $b->[1][0]
+    } @$reg ];
+    my(@box, @boy);
+    my $off = 0;
+    for my $bsize (@$band) {
+        $box[$off + $_] = $_ for 0 .. $bsize - 1;
+        $off += $bsize;
+    }
+    $off = 0;
+    for my $ssize (@$stack) {
+        $boy[$off + $_] = $_ for 0 .. $ssize - 1;
+        $off += $ssize;
+    }
+
+    my @pos = map assign_region($reg->[$_], $spare->[$_]), 0 .. $size - 1;
+    my $iter = NestedLoops(\@pos);
+    return sub {
+        AILOOP: while (1) {
+            my @p = $iter->() or return undef;
+            my @in = map [ (undef) x $size ], 1 .. $size;
+            my(@xs, @ys);
+            for my $z (0 .. $#p) {
+                for my $p (@{ $p[$z] }) {
+                    my($x, $y) = @$p;
+                    next AILOOP if !$xs[$x]++
+                            && $box[$x] != 0 && !$xs[$x - 1];
+                    next AILOOP if !$ys[$y]++
+                            && $boy[$y] != 0 && !$ys[$y - 1];
+                    $in[$x][$y] = $z;
+                }
+            }
+            return Topsu->new(\@in);
+        }
+        # not reached
+    };
+}
+
+# Returns a list of arrayrefs of points, representing each way to assign
+# 2 + $spare points in the given region.
+sub assign_region {
+    my($r, $spare) = @_;
+    my $assign = $spare + 2;
+    my @p = map {
+        my $x = $_;
+        map [ $x, $_ ], $r->[1][2] .. $r->[1][3];
+    } $r->[0][2] .. $r->[0][3];
+    my @pos;
+    NestedLoops([
+        [ 0 .. @p - 1 ],
+        (sub {
+            [ $_[-1] + 1 .. @p - 1 ]
+        }) x ($assign - 1)
+    ], sub {
+        push @pos, [ @p[@_] ];
+    });
+    return \@pos;
+}
+
+sub dispr {
+    my($reg) = @_;
+    my @s;
+    for my $ri (0 .. $#$reg) {
+        my $r = $reg->[$ri];
+        for my $x ($r->[0][2] .. $r->[0][3]) {
+            for my $y ($r->[1][2] .. $r->[1][3]) {
+                $s[$x][$y] = $ri;
+            }
+        }
+    }
+    for (@s) {
+        print join('', map chr(0x61 + ($_ // -0x33)), @$_), "\n";
+    }
+    print "\n";
+}

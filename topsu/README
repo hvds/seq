@@ -17,8 +17,8 @@ Consider a partially-completed sudoku puzzle, showing just the "1"s:
 The "o"s mark the positions that might still have a "1" placed in them.
 This is the simplest case: there are 4 possible positions, and we must
 choose 2 of them in which to place a "1", so there are 2 positions still
-to be ruled out to complete the puzzle. I will call the number of
-positions still to rule out the "weight" w.
+to be ruled out to complete the "1"s in the puzzle. I will call the number
+of positions still to rule out the "weight" w.
 
 The classic sudoku puzzle consists of a 9 x 9 grid consisting of 3 x 3
 square regions (forming 3 "bands" of 3 rows each and 3 "stacks" of
@@ -44,8 +44,8 @@ aa
 bb
 
 The question is: given a weight w, what is a(w), the number of sets of
-positions with that weight that are a) topologically distinct, b) valid
-and c) connected?
+positions with that weight that are a) topologically distinct, b) valid,
+c) minimal and d) connected?
 
 Topologically distinct: I think it is sufficient to define two sets as
 distinct if one cannot be mapped on to the other by translation,
@@ -61,9 +61,13 @@ ab..  ab..
 .ccd  .ccd
 .c.d  ..cd
 
-Valid: a valid set as one in which each position can be part of a
-solution: any position that cannot be part of any solution must have
-been removed, so a position like the below is invalid since the
+Valid: a valid set has at least two non-zero values in every row, every
+column, and every region, and is solvable such that it is possible to
+select a subset of the non-zero values such that we have chosen one
+point in every row, every column and every region.
+
+Minimal: a minimal set is one in which each non-zero value can be part
+of a solution. So a position like the below is invalid since the
 bottom-right 'd' cannot be part of any solution.
 
 .a.b
@@ -76,40 +80,131 @@ non-empty subsets such that the rows and columns with non-zero values
 in each subset are disjoint. (We can easily combine results for connected
 sets to get equivalent counts without that restriction when desired.)
 
-Here are the first few values of a(w), calculated manually:
+Here are the first few values of a(w), as calculated:
 
 a(1) = 0
 a(2) = 1
 a(3) = 2:
 
-aa.  aa.
-b.b  b.c
-.cc  .bc
+  aa.  aa.
+  b.b  b.c
+  .cc  .bc
 
 a(4) = 6:
 
-aab  aaa
-a.b  bb.
-cc.  c.c
+  aab  aaa
+  a.b  bb.
+  cc.  c.c
 
-aa..  aa..  aa..  a.b.
-b.b.  b.c.  b.b.  .a.b
-.c.c  .b.c  .c.d  c.d.
-..dd  ..dd  ..cd  .c.d
+  aa..  aa..  aa..  a.b.
+  b.b.  b.c.  b.b.  .a.b
+  .c.c  .b.c  .c.d  c.d.
+  ..dd  ..dd  ..cd  .c.d
 
-a(5) = 13:
+a(5) = 16:
 
-aab  aaa
-aab  bbb
-cc.  cc.
+  aaa  aab
+  bbb  aab
+  cc.  cc.
 
-aab.  aab.  aa.b  aaa.  aaa.
-a.b.  a..c  ..ab  bb..  bb..
-c..d  ..bc  c.c.  c..d  c..c
-.c.d  dd..  .dd.  ..cd  ..dd
+  aaa.  aaa.  aaa.  aab.  aa.b  aa.b  aab.
+  b..b  bb..  bb..  a..c  ..ab  ..ab  a.b.
+  .c.c  c..c  c..d  ..bc  cc..  c.c.  c..d
+  ..dd  ..dd  ..cd  dd..  d.d.  .dd.  .c.d
 
-aa...  aa...  aa...  aa...  aa...  aa...
-b.c..  b.b..  b.c..  b..c.  b.b..  b.b..
-.b.c.  .c.d.  .b.d.  ..b.c  .c.c.  .c.c.
-..d.e  ..c.d  ..c.d  .d.e.  ..d.e  ..d.d
-...de  ...ee  ...ee  ..d.e  ...de  ...ee
+  aa...  aa...  aa...  aa...  aa...  aa...  aa...
+  b.b..  b.b..  b.c..  b.b..  b.c..  b..c.  b.b..
+  .c.c.  .c.c.  .b.c.  .c.d.  .b.d.  ..b.c  .c.d.
+  ..d.d  ..d.e  ..d.e  ..c.d  ..c.d  .d.e.  ..c.e
+  ...ee  ...de  ...de  ...ee  ...ee  ..d.e  ...de
+
+a(6) = 77:
+
+  aaa
+  bbb
+  ccc
+
+  aaaa  aaaa  aaa.  aaa.  aaa.  aaa.  aaa.  aaa.  aaa.  aaa.
+  bb..  bb..  bb.b  bb.b  bbb.  bb.b  bb.b  bbb.  bb.c  bb.c
+  c.c.  c.c.  c.c.  c.c.  c..c  cc..  c.c.  c..d  b..c  b..c
+  d..d  .d.d  d..d  ..dd  .d.d  ..dd  .d.d  .c.d  d.d.  .dd.
+
+  aaa.  aaa.  aab.  aaab  aaab  aabc  aab.  aab.  aabb  aab.
+  bb.c  bb.c  aa.c  a..b  a..b  a.b.  a.bc  aab.  a.b.  a.bb
+  ..bc  ..bc  ..bc  cc..  cc..  .a.c  .a.c  c..d  cc..  cc..
+  dd..  d.d.  dd..  d.d.  .dd.  dd..  dd..  .c.d  ..dd  ..dd
+
+  aab.  aab.
+  a.bb  a..b
+  c..d  c.dd
+  .cd.  .cd.
+
+  aaa..  aaa..  aaa..  aaa..  aaa..  aaa..  aaa..  aab..  aa..b  aa..b
+  b..b.  b..b.  bb...  b..b.  bb...  b..b.  bb...  a..c.  ..a.b  ..a.b
+  .c.c.  c...c  c..c.  .c.c.  c...d  c...d  c..c.  ..b.d  cc...  c.c..
+  ..d.d  .d.d.  ..d.d  ..d.e  ...cd  .c..d  ..d.e  ...cd  d..d.  d..d.
+  ...ee  ..e.e  ...ee  ...de  ..ee.  ..ee.  ...de  ee...  ..ee.  .e.e.
+
+  aa..b  aa..b  aab..  aab..  aab..  aaa..  aaa..  aab..  aa.b.  aa.b.
+  ..a.b  ..a.b  a..b.  a.b..  a.b..  bb...  b..c.  a..c.  ..a.b  ..a.b
+  c.c..  c..c.  c...d  c..d.  c..d.  c..d.  .b.c.  ..bc.  cc...  c.c..
+  .d.d.  .d.d.  .c..d  .c..e  .c..d  ..c.d  d...e  d...e  d.d..  .dd..
+  ..ee.  ..ee.  ..ee.  ...de  ...ee  ...ee  ..d.e  .d..e  ...ee  ...ee
+
+  aab..  aa.b.  aa.b.  aa.b.  aa.b.  aab..  aaa..  aa.b.  aa.b.  aa.b.
+  a...c  ..ab.  ..ab.  ..a.b  ..ab.  a..c.  bb...  a...c  ..a.c  ..a.c
+  ...bc  c.c..  cc...  cc...  c.c..  ..b.c  c..d.  ...bc  ...bc  ...bc
+  dd...  d...e  d...e  d..e.  .d..e  dd...  ..c.e  d.d..  dd...  d.d..
+  ..ee.  .d..e  ..d.e  ..d.e  ..d.e  ...ee  ...de  .ee..  e.e..  .ee..
+
+  aa...  aa...
+  b.b..  b.b..
+  c..de  c..d.
+  .c.d.  .c.de
+  ..c.e  ..c.e
+
+  aa....  aa....  aa....  aa....  aa....
+  b.b...  b.b...  b.b...  b.b...  b.b...
+  .c.c..  .c.c..  .c.d..  .c.c..  .c..d.
+  ..d.d.  ..d.d.  ..c.d.  ..d.e.  ...cd.
+  ...e.e  ...e.f  ...e.f  ...d.e  ..e..f
+  ....ff  ....ef  ....ef  ....ff  ...e.f
+
+  aa....  aa....  aa....  aa....  aa....
+  b.b...  b.c...  b.c...  b...c.  b.b...
+  .c..d.  .b.c..  .b.d..  ..b..c  .c.c..
+  ...c.d  ..d.e.  ..c.e.  .d..e.  ..d.e.
+  ..e.f.  ...d.e  ...d.e  ...d.e  ...d.f
+  ...e.f  ....ff  ....ff  ..ff..  ....ef
+
+  aa....  aa....  aa....  aa....  aa....
+  b.c...  b.c...  b.c...  b.b...  b..c..
+  .b..d.  .b.c..  .b..d.  .c.d..  ..b.c.
+  ...c.d  ..d.d.  ...c.d  ..c.d.  .d...e
+  ..ee..  ...e.f  ..e.f.  ...e.e  ..d.e.
+  ....ff  ....ef  ...e.f  ....ff  ...f.f
+
+  aa....  a.b...  a.b...  aa....  aa....
+  b..c..  .a..c.  .a..c.  b.b...  b..c..
+  ..b.c.  ...b.c  ...b.c  .c.d..  ..b.c.
+  .d.e..  d.e...  d....e  ..c.e.  .d...e
+  ..d..e  .d..f.  .d.f..  ...d.e  ..d.f.
+  ....ff  ...e.f  ..f.e.  ....ff  ...f.e
+
+  aa....  a.b...
+  b..c..  .a.b..
+  ..b.c.  c...d.
+  .d.e..  .c...d
+  ..d..f  ..e.f.
+  ....ef  ...e.f
+
+Let b(w) be the classification when we remove the requirement that
+regions are connected. Then we have:
+
+b(1) = 0 = a(1)
+b(2) = 1 = a(2)
+b(3) = 2 = a(3)
+b(4) = 7 = a(4) + a(2)^2
+b(5) = 18 = a(5) + a(3) * a(2)
+b(6) = 89 = a(6) + a(4) * a(2) + a(3)^2 + a(2)^3
+b(7) = a(7) + 34
