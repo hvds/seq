@@ -5,6 +5,7 @@ use warnings;
 use Algorithm::Loops qw{ NestedLoops };
 use lib 'lib';
 use Topsu;
+use TopsuR;
 
 my($weight) = @ARGV;
 my $count = 0;
@@ -35,30 +36,30 @@ for my $size (2 .. $weight) {
 # 100t         0 0 0 0  2  11  165  1957
 #++$count; next;
                 # skip if we've seen the same shape
-                next if $rseen{rcanon($reg)}++;
-# count (2..9) 1 2 6 13 30 
-# 100t         0 0 3 71 3185
+                next if $rseen{rcanon($band, $stack, $reg)}++;
+# count (2..9) 1 2 6 13 30 64 158 395
+# 100t         0 0 1 1  3  15 195 2160
 #++$count; next;
                 my $spare_iter = spare_iter(
                         $size, $weight, $band, $stack, $reg);
                 while (my $spare = $spare_iter->()) {
-# count (2..9) 1 2 8 24 74   613 3124 17067
-# 100t         0 0 3 71 3191
+# count (2..9) 1 2 8 24 74 231 740 2446
+# 100t         0 0 0 1  3  15  195 2138
 #++$count; next;
                     my $a_iter = assign_iter(
                             $size, $band, $stack, $reg, $spare);
                     while (my $pos = $a_iter->()) {
 # count (2..6) 1 12 547 7078 395146 ...
-# 100t         0  0   2   58  12117
+# 100t         0  0 2   58   8989
 #++$count; next;
                         next unless $pos->is_valid;
-# count (2..6) 1 3 38 298 3803 ...
-# 100t         0 0  2  62 9678
+# count (2..6) 1 3 36 272 3150 ...
+# 100t         0 0 3  60  9036
 #++$count; next;
                         my $s = $pos->canon_str;
                         next if $seen{$s}++;
 # count (2..5) 1 2 6  16   77 ...
-# 100t         0 1 17 1848 493261 ...
+# 100t         0 0 18 1836 474292 ...
                         print $s, "\n\n";
                     }
                 }
@@ -321,11 +322,11 @@ sub _rset {
     return \@s;
 }
 
-# FIXME: full regions is worst case for Topsu->canon, but can be much
-# faster with a dedicated algorithm.
 sub rcanon {
-    my $t = Topsu->new(_rset(@_));
-    return $t->canon_str;
+    my($band, $stack, $region) = @_;
+    my $thinr = [ map [ $_->[0][0], $_->[1][0] ], @$region ];
+    my $tr = TopsuR->new($band, $stack, $thinr);
+    return $tr->canon_str;
 }
 
 sub dispr {
