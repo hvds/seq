@@ -50,16 +50,16 @@ for my $size (2 .. $weight) {
                             $size, $band, $stack, $reg, $spare);
                     while (my $pos = $a_iter->()) {
 # count (2..6) 1 3 45 471 5759 ?11381595 ...
-# 100t         0 0 2  47  8773 ?1003676
+# 100t         0 0 1  38  7310 ?1003676
 #++$count; next;
                         next unless $pos->is_valid;
 # count (2..6) 1 3 36 272 3150 43367 ...
-# 100t         0 0 1  48  8796 ?1068375
+# 100t         0 0 1  40  7354 ?1068375
 #++$count; next;
                         my $s = $pos->canon_str;
                         next if $seen{$s}++;
 # count (2..5) 1 2 6 16  77 ...
-# 100t         0 0 5 167 29226 ...
+# 100t         0 0 4 158 27924 ...
                         print $s, "\n\n";
                     }
                 }
@@ -265,10 +265,18 @@ sub assign_iter {
     }
 
     my @pos = map assign_region($reg->[$_], $spare->[$_]), 0 .. $size - 1;
-    my $iter = NestedLoops(\@pos);
+    my(@p, @idx);
+    my $i = -1;
     return sub {
         AILOOP: while (1) {
-            my @p = $iter->() or return undef;
+            $idx[++$i] = -1 if $i < $#pos;
+            while (@{ $pos[$i] } <= ++$idx[$i]) {
+                pop @p;
+                return undef if --$i < 0;
+            }
+            $p[$i] = $pos[$i][ $idx[$i] ];
+            next if $i < $#pos;
+
             my @in = map [ (undef) x $size ], 1 .. $size;
             my @xs = (0) x $size;
             my @ys = (0) x $size;
@@ -291,6 +299,8 @@ sub assign_iter {
 
 # Returns a list of arrayrefs of points, representing each way to assign
 # 2 + $spare points in the given region.
+# Worst case with w=9 occurs with 2 spares in a 4x4 region, for
+# C(16,4) = 1820 selections of 4 points.
 sub assign_region {
     my($r, $spare) = @_;
     my $assign = $spare + 2;
