@@ -293,6 +293,7 @@ sub _init_canon {
         max => \@max,
         size => $size,
         self => $self,
+        count => [ 0 ],
     };
 }
 
@@ -371,11 +372,25 @@ sub _final_canon {
     };
 }
 
+# we'd like to more generally detect cases where some of the bands or
+# stacks are topologically identical, but detecting the worst case
+# already gives us a big chunk of the savings: 16x faster at n=6.
+sub _is_simple_canon {
+    my($ctx) = @_;
+    my($size, $self) = @$ctx{qw{ size self }};
+    return 0 if @{ $self->{band} } > 1 && @{ $self->{stack} } > 1;
+    return 0 if grep $_ > 2, @{ $self->{x} }, @{ $self->{y} };
+    # it is simple: generate the simple string
+    $ctx->{best} = "simple-$size";
+    return 1;
+}
+
 sub canon {
     my($self) = @_;
     return $self->{canon} //= do {
         my $size = $self->{size};
         my $ctx = _init_canon($self);
+        goto FINAL if _is_simple_canon($ctx);
         my(@cx, @cy);
         for my $v (0 .. $size - 1) {
             push @cx, sub { _canon_x($ctx, $v, [ @_ ]) };
@@ -396,6 +411,7 @@ sub canon {
                 }
             }
         }
+      FINAL:
         _final_canon($ctx);
     };
 }
@@ -404,6 +420,7 @@ sub canon_str {
     my($self) = @_;
     my $c = $self->canon;
     my $s = $c->{best};
+    return $s if $s =~ /^simple-\d+/;
     $s =~ s{(.)}{
         my $o = ord($1);
         ($o == 254) ? "\n" : ($o == 255) ? '.' : chr(ord('a') + $o)
