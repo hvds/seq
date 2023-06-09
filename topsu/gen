@@ -49,17 +49,17 @@ for my $size (2 .. $weight) {
                     my $a_iter = assign_iter(
                             $size, $band, $stack, $reg, $spare);
                     while (my $pos = $a_iter->()) {
-# count (2..6) 1 3 45 471 5759 ?11381595 ...
-# 100t         0 0 1  38  7310 ?1003676
+# count (2..6) 1 3 45 471 5759 98161 ...
+# 100t         0 0 1  37  4203 687250
 #++$count; next;
                         next unless $pos->is_valid;
 # count (2..6) 1 3 36 272 3150 43367 ...
-# 100t         0 0 1  40  7354 ?1068375
+# 100t         0 0 1  39  4234 ?1068375
 #++$count; next;
                         my $s = $pos->canon_str;
                         next if $seen{$s}++;
 # count (2..5) 1 2 6 16  77 ...
-# 100t         0 0 4 158 27924 ...
+# 100t         0 1 5 160 24750 ...
                         print $s, "\n\n";
                     }
                 }
@@ -252,16 +252,36 @@ sub assign_iter {
         $a->[0][0] <=> $b->[0][0]
         || $a->[1][0] <=> $b->[1][0]
     } @$reg ];
-    my(@box, @boy);
+    my(@box, @boy, @ox, @oy);
     my $off = 0;
     for my $bsize (@$band) {
+        push @ox, $off;
         $box[$off + $_] = $_ for 0 .. $bsize - 1;
         $off += $bsize;
     }
     $off = 0;
     for my $ssize (@$stack) {
+        push @oy, $off;
         $boy[$off + $_] = $_ for 0 .. $ssize - 1;
         $off += $ssize;
+    }
+    my(@br, @sr);
+    for my $ri (0 .. $#$reg) {
+        my $r = $reg->[$ri];
+        push @{ $br[ $r->[0][0] ] }, $ri;
+        push @{ $sr[ $r->[1][0] ] }, $ri;
+    }
+    my @bt = map [], 0 .. $#$reg;
+    for my $bi (0 .. $#br) {
+        next if $band->[$bi] == 1;
+        my $term = $br[$bi][-1];
+        push @{ $bt[$term] }, $bi;
+    }
+    my @st = map [], 0 .. $#$reg;
+    for my $si (0 .. $#sr) {
+        next if $stack->[$si] == 1;
+        my $term = $sr[$si][-1];
+        push @{ $st[$term] }, $si;
     }
 
     my @pos = map assign_region($reg->[$_], $spare->[$_]), 0 .. $size - 1;
@@ -270,16 +290,30 @@ sub assign_iter {
     return sub {
         AILOOP: while (1) {
             $idx[++$i] = -1 if $i < $#pos;
+          SKIPITER:
             while (@{ $pos[$i] } <= ++$idx[$i]) {
                 pop @p;
                 return undef if --$i < 0;
             }
             $p[$i] = $pos[$i][ $idx[$i] ];
+            for my $term (@{ $bt[$i] }) {
+                my $b = $band->[$term];
+                my $xoff = $ox[$term];
+                my @x = (0) x $b;
+                ++$x[ $_->[0] - $xoff ] for map @$_, @p[ @{ $br[$term] } ];
+                goto SKIPITER if grep $x[$_] < 2, 0 .. $b - 1;
+            }
+            for my $term (@{ $st[$i] }) {
+                my $s = $stack->[$term];
+                my $yoff = $oy[$term];
+                my @y = (0) x $s;
+                ++$y[ $_->[1] - $yoff ] for map @$_, @p[ @{ $sr[$term] } ];
+                goto SKIPITER if grep $y[$_] < 2, 0 .. $s - 1;
+            }
             next if $i < $#pos;
 
             my @in = map [ (undef) x $size ], 1 .. $size;
-            my @xs = (0) x $size;
-            my @ys = (0) x $size;
+            my(@xs, @ys);
             for my $z (0 .. $#p) {
                 for my $p (@{ $p[$z] }) {
                     my($x, $y) = @$p;
@@ -290,7 +324,6 @@ sub assign_iter {
                     $in[$x][$y] = $z;
                 }
             }
-            next AILOOP if grep $_ < 2, @xs, @ys;
             return Topsu->new(\@in);
         }
         # not reached
