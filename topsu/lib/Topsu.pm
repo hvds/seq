@@ -27,6 +27,21 @@ sub new_fh {
     ]);
 }
 
+sub str {
+    my($self) = @_;
+    return $self->{str} //= do {
+        my($size, $p) = @$self{qw{ size p }};
+        my @str = ("." x $size) x $size;
+        my $next = 'a';
+        my %lookup;
+        for my $p (@$p) {
+            my($x, $y, $z) = @$p;
+            substr($str[$x], $y, 1) = $lookup{$z} //= $next++;
+        }
+        join '', map "$_\n", @str;
+    };
+}
+
 sub init {
     my($self) = @_;
     my $in = $self->{in};
