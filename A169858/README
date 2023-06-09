@@ -1,0 +1,16 @@
+This directory includes C source code to calculate the sequences:
+  A169858(n): the least value m such that all integers from 1..n divide
+some prefix of m (written in base 10)
+  A175516(n): the least even value m such that all integers from 1..n divide
+some prefix of m (written in base 10)
+  A177834(n): the least value m such that all integers from 1..n divide
+some substring of m (written in base 10) [not yet available]
+
+It requires the GNU GMP library, v5.0.0 or later: see <http://gmplib.org/>.
+
+It should be fairly portable: if you have problems compiling it, please let
+me know at <hv@crypt.org>. The most likely source of problems is the code
+to show timings: you can define 'NO_TIMING' to avoid compiling this code,
+in which case it will just show all timings as zero.
+
+Hugo van der Sanden
