@@ -49,17 +49,17 @@ for my $size (2 .. $weight) {
                     my $a_iter = assign_iter(
                             $size, $band, $stack, $reg, $spare);
                     while (my $pos = $a_iter->()) {
-# count (2..6) 1 12 547 7078 395146 11381595 ...
-# 100t         0  0 2   58   8989   1003676
+# count (2..6) 1 3 45 471 5759 ?11381595 ...
+# 100t         0 0 2  47  8773 ?1003676
 #++$count; next;
                         next unless $pos->is_valid;
 # count (2..6) 1 3 36 272 3150 43367 ...
-# 100t         0 0 3  60  9036 1068375
+# 100t         0 0 1  48  8796 ?1068375
 #++$count; next;
                         my $s = $pos->canon_str;
                         next if $seen{$s}++;
 # count (2..5) 1 2 6 16  77 ...
-# 100t         0 1 6 178 30178 ...
+# 100t         0 0 5 167 29226 ...
                         print $s, "\n\n";
                     }
                 }
@@ -270,7 +270,8 @@ sub assign_iter {
         AILOOP: while (1) {
             my @p = $iter->() or return undef;
             my @in = map [ (undef) x $size ], 1 .. $size;
-            my(@xs, @ys);
+            my @xs = (0) x $size;
+            my @ys = (0) x $size;
             for my $z (0 .. $#p) {
                 for my $p (@{ $p[$z] }) {
                     my($x, $y) = @$p;
@@ -281,6 +282,7 @@ sub assign_iter {
                     $in[$x][$y] = $z;
                 }
             }
+            next AILOOP if grep $_ < 2, @xs, @ys;
             return Topsu->new(\@in);
         }
         # not reached
