@@ -3,8 +3,10 @@ This directory includes C source code to calculate the sequences:
 some prefix of m (written in base 10)
   A175516(n): the least even value m such that all integers from 1..n divide
 some prefix of m (written in base 10)
+
+See also:
   A177834(n): the least value m such that all integers from 1..n divide
-some substring of m (written in base 10) [not yet available]
+some substring of m (written in base 10) [not implemented]
 
 It requires the GNU GMP library, v5.0.0 or later: see <http://gmplib.org/>.
 
@@ -13,4 +15,4 @@ me know at <hv@crypt.org>. The most likely source of problems is the code
 to show timings: you can define 'NO_TIMING' to avoid compiling this code,
 in which case it will just show all timings as zero.
 
-Hugo van der Sanden
+Makefile targets are "A169858" and "A175516".
