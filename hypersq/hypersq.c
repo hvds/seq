@@ -17,6 +17,10 @@ t_vec vmax = 0; /* set during init() */
         return (v1 + 1) & vmax;
     }
 
+    static inline t_vec vprev(t_vec v1) {
+        return (v1 - 1) & vmax;
+    }
+
     static inline t_vec vxor(t_vec v1, t_vec v2) {
         return v1 ^ v2;
     }
@@ -161,8 +165,13 @@ uint count_squares(void) {
                 if (cij != cik)
                     continue;
                 /* now if the fourth point is present, it makes a square */
-                if (findv(k + 1, vxor(vk, xij)))
+                if (findv(k + 1, vxor(vk, xij))) {
                     ++count;
+#if 0
+                    printf("%2$0*1$x %3$0*1$x %4$0*1$x %5$0*1$x\n",
+                            (d + 3) / 4, vi, vj, vk, vxor(vk, xij));
+#endif
+                }
             }
         }
     }
@@ -205,22 +214,31 @@ void recurse(void) {
         if (veq(cur->v, vmax))
             goto derecurse;
         t_vec next = vnext(cur->v);
-        t_vec newbit = vfirstv(next);
         t_vec group = prev->group;
         t_vec gfirst = prev->gfirst;
-        if (vzero(vand(group, newbit)))
-            goto safe_next_value;
-        while (vzero(vand(gfirst, newbit)))
-            newbit = vor(newbit, vhalf(newbit));
-        group = vand(group, vnot(newbit));
-        gfirst = vor(
-            vand(gfirst, vnot(newbit)),
-            vand(group, vdouble(newbit))
-        );
-      safe_next_value:
+        t_vec grouped = vand(next, group);
+        while (!vzero(grouped)) {
+            t_vec gb = vfirstv(grouped);
+            t_vec gbs = gb;
+            grouped = vand(grouped, vnot(gb));
+            while (vzero(vand(gfirst, gbs)))
+                gbs = vor(gbs, vhalf(gbs));
+            if (veq(gb, gbs)) {
+                group = vand(group, vnot(gb));
+                gfirst = vand(gfirst, vnot(gb));
+            } else {
+                next = vor(next, gbs);
+            }
+            /* FIXME: do this if (gb << 2) is set in group and clear in gfirst,
+             * or if (gb << 2) is out of range; else clear (gb << 1) in group */
+            gfirst = vor(gfirst, vand(group, vdouble(gb)));
+        }
         cur->v = next;
         cur->group = group;
         cur->gfirst = gfirst;
+#if 0
+for (uint i = 0; i <= sp; ++i) { printf("[%u %u %u] ", v[i].v, v[i].gfirst, v[i].group); } printf("\n");
+#endif
         /* loop to select next point */
     }
     return;
@@ -245,12 +263,17 @@ int main(int argc, char **argv) {
             base = atoi(&arg[2]);
             continue;
         }
+        if (strncmp(arg, "-d", 2) == 0) {
+            d = atoi(&arg[2]);
+            continue;
+        }
         fprintf(stderr, "Unknown option '%s'\n", arg);
         return 1;
     }
     if (do_count_squares) {
         n = argc - argi;
-        d = sizeof(t_vec) * 8;
+        if (d == 0)
+            d = sizeof(t_vec) * 8;
         init();
         for (uint i = 0; i < n; ++i)
             v[i].v = strtol(argv[i + argi], NULL, base);
