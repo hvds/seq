@@ -199,8 +199,12 @@ void recurse(void) {
             uint count = count_squares();
             if (count > best) {
                 best = count;
-                for (uint i = 0; i < n; ++i)
+                printf("%u:", best);
+                for (uint i = 0; i < n; ++i) {
                     v[i].best = v[i].v;
+                    printf(" %u", v[i].v);
+                }
+                printf(" (%.2fs)\n", utime());
             }
             goto derecurse;
         }
