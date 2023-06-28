@@ -132,12 +132,16 @@ void init(void) {
 /* Returns true if point vp is in ordered list v[] in the range start..n-1.
  */
 bool findv(uint start, t_vec p) {
-    /* FIXME: binary chop */
-    for (uint i = start; i < n; ++i) {
-        if (veq(v[i].v, p))
+    uint low = start;
+    uint high = n - 1;
+    while (low <= high) {
+        uint m = (low + high) >> 1;
+        if (vgt(v[m].v, p))
+            high = m - 1;
+        else if (!veq(v[m].v, p))
+            low = m + 1;
+        else
             return 1;
-        if (vgt(v[i].v, p))
-            return 0;
     }
     return 0;
 }
