@@ -179,8 +179,9 @@ uint count_squares(void) {
 }
 
 void recurse(void) {
-    uint sp = 0;
+    uint sp = 0, dmin = 0;
     t_v *prev, *cur;
+    t_vec next;
 
     /* first element is always (t_vec)0, leaving a single group of
      * dimensions starting at d_0 = 1, extending through all dimensions */
@@ -209,11 +210,19 @@ void recurse(void) {
             break;
         prev = &v[sp - 1];
         cur = &v[sp];
+        goto next_value;
+      retry:
+        cur->v = next;
       next_value:
         ++recurse_iter;
         if (veq(cur->v, vmax))
             goto derecurse;
-        t_vec next = vnext(cur->v);
+        next = vnext(cur->v);
+        if (vbits(next) < dmin)
+            goto retry;
+        for (uint i = 1; i < sp; ++i)
+            if (vbits(vxor(next, v[i].v)) < dmin)
+                goto retry;
         t_vec group = prev->group;
         t_vec gfirst = prev->gfirst;
         t_vec grouped = vand(next, group);
@@ -239,6 +248,8 @@ void recurse(void) {
 #if 0
 for (uint i = 0; i <= sp; ++i) { printf("[%u %u %u] ", v[i].v, v[i].gfirst, v[i].group); } printf("\n");
 #endif
+        if (sp == 1)
+            dmin = vbits(next);
         /* loop to select next point */
     }
     return;
