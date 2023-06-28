@@ -84,9 +84,9 @@ void init(void) {
 
 /* Returns true if point vp is in ordered list v[] in the range start..n-1.
  */
-bool findv(uint start, t_vec p) {
+bool findv(t_vec p, uint start, uint end) {
     uint low = start;
-    uint high = n - 1;
+    uint high = end - 1;
     while (low <= high) {
         uint m = (low + high) >> 1;
         if (v[m].v > p)
@@ -122,7 +122,7 @@ uint count_squares(void) {
                 if (cij != cik)
                     continue;
                 /* now if the fourth point is present, it makes a square */
-                if (findv(k + 1, vk ^ xij)) {
+                if (findv(vk ^ xij, k + 1, n)) {
                     ++count;
 #if 0
                     printf("%2$0*1$x %3$0*1$x %4$0*1$x %5$0*1$x\n",
@@ -152,12 +152,17 @@ void recurse(void) {
             uint count = count_squares();
             if (count > best) {
                 best = count;
+#if 0
                 printf("%u:", best);
                 for (uint i = 0; i < n; ++i) {
                     v[i].best = v[i].v;
                     printf(" %u", v[i].v);
                 }
                 printf(" (%.2fs)\n", utime());
+#else
+                for (uint i = 0; i < n; ++i)
+                    v[i].best = v[i].v;
+#endif
             }
             goto derecurse;
         }
@@ -179,7 +184,11 @@ void recurse(void) {
         if (cur->v == vmax)
             goto derecurse;
         next = cur->v + 1;
-        if (vbits(next) < dmin)
+        uint bits = vbits(next);
+        if (bits < dmin)
+            goto retry;
+        /* eg {0,1,3} can be reflected to {0,1,2} */
+        if (dmin == 1 && bits == 2 && (next & 1) && !findv(next ^ 1, 2, sp))
             goto retry;
         for (uint i = 1; i < sp; ++i)
             if (vbits(next ^ v[i].v) < dmin)
