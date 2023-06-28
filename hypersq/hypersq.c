@@ -7,95 +7,48 @@
 
 typedef unsigned char bool;
 
-typedef uint t_vec;
-t_vec zero = (t_vec)0;
-t_vec vone = (t_vec)1;
-t_vec vmax = 0; /* set during init() */
-#if 1
-    /* Dependencies on the vector size. */
-    static inline t_vec vnext(t_vec v1) {
-        return (v1 + 1) & vmax;
-    }
+typedef uint t_vec;     /* any unsigned integer type should work */
+t_vec vmax = 0;         /* set during init() */
 
-    static inline t_vec vprev(t_vec v1) {
-        return (v1 - 1) & vmax;
-    }
+/* Count the bits set in v1 */
+static inline uint vbits(t_vec v1) {
+    return __builtin_popcount(v1);
+}
 
-    static inline t_vec vxor(t_vec v1, t_vec v2) {
-        return v1 ^ v2;
-    }
+/* Return index of first one-bit in v1.
+ * Note: this is undefined for v1 == 0. */
+static inline uint vfirst(t_vec v1) {
+    return __builtin_ctz(v1);
+}
 
-    static inline t_vec vand(t_vec v1, t_vec v2) {
-        return v1 & v2;
-    }
-
-    static inline t_vec vor(t_vec v1, t_vec v2) {
-        return v1 | v2;
-    }
-
-    static inline t_vec vnot(t_vec v1) {
-        return (~v1) & vmax;
-    }
-
-    /* Count the bits set in v1 */
-    static inline uint vbits(t_vec v1) {
-        return __builtin_popcount(v1);
-    }
-
-    /* Return index of first one-bit in v1.
-     * Note: this is undefined for v1 == 0. */
-    static inline uint vfirst(t_vec v1) {
-        return __builtin_ctz(v1);
-    }
-
-    /* Return t_vec with only bit vfirst(v1) set.
-     * Note: this is undefined for v1 == 0. */
-    static inline t_vec vfirstv(t_vec v1) {
-        /* CHECKME: which is faster? */
+/* Return t_vec with only bit vfirst(v1) set.
+ * Note: this is undefined for v1 == 0. */
+static inline t_vec vfirstv(t_vec v1) {
+    /* CHECKME: which is faster? */
 #if 0
-        return v1 & (v1 ^ (v1 - 1));
+    return v1 & (v1 ^ (v1 - 1));
 #else
-        return 1 << vfirst(v1);
+    return 1 << vfirst(v1);
 #endif
-    }
+}
 
-    static inline t_vec vhalf(t_vec v1) {
-        return v1 >> 1;
-    }
-    static inline t_vec vdouble(t_vec v1) {
-        return (v1 << 1) & vmax;
-    }
+static inline int vcmp(const void *vp1, const void *vp2) {
+    const t_vec v1 = *(const t_vec *)vp1;
+    const t_vec v2 = *(const t_vec *)vp2;
+    return (v1 > v2) ? 1 : (v1 < v2) ? -1 : 0;
+}
 
-    static inline bool vzero(t_vec v1) {
-        return !v1;
+void set_vmax(uint d) {
+    if (d > sizeof(t_vec) * 8) {
+        fprintf(stderr, "Error: too many dimensions for this build\n");
+        exit(1);
     }
-
-    static inline bool veq(t_vec v1, t_vec v2) {
-        return v1 == v2;
+    if (d == sizeof(t_vec) * 8) {
+        vmax = ~(t_vec)0;
+    } else {
+        vmax = ((t_vec)1 << d) - 1;
     }
-
-    static inline bool vgt(t_vec v1, t_vec v2) {
-        return v1 > v2;
-    }
-
-    static inline int vcmp(const void *vp1, const void *vp2) {
-        const t_vec v1 = *(const t_vec *)vp1;
-        const t_vec v2 = *(const t_vec *)vp2;
-        return (v1 > v2) ? 1 : (v1 < v2) ? -1 : 0;
-    }
-
-    void set_vmax(uint d) {
-        if (d > sizeof(t_vec) * 8) {
-            fprintf(stderr, "Error: too many dimensions for this build\n");
-            exit(1);
-        }
-        if (d == sizeof(t_vec) * 8) {
-            vmax = ~(t_vec)0;
-        } else {
-            vmax = ((t_vec)1 << d) - 1;
-        }
-    }
-#endif
+}
 
 /* set to utime at start of run */
 double t0 = 0;
@@ -136,9 +89,9 @@ bool findv(uint start, t_vec p) {
     uint high = n - 1;
     while (low <= high) {
         uint m = (low + high) >> 1;
-        if (vgt(v[m].v, p))
+        if (v[m].v > p)
             high = m - 1;
-        else if (!veq(v[m].v, p))
+        else if (v[m].v < p)
             low = m + 1;
         else
             return 1;
@@ -155,25 +108,25 @@ uint count_squares(void) {
         t_vec vi = v[i].v;
         for (uint j = i + 1; j < n - 2; ++j) {
             t_vec vj = v[j].v;
-            t_vec xij = vxor(vi, vj);
+            t_vec xij = vi ^ vj;
             uint cij = vbits(xij);
             for (uint k = j + 1; k < n - 1; ++k) {
                 t_vec vk = v[k].v;
-                t_vec xik = vxor(vi, vk);
+                t_vec xik = vi ^ vk;
                 /* if xij and xik have bits in common, then JIK is not a right
                  * angle */
-                if (!vzero(vand(xij, xik)))
+                if (xij & xik)
                     continue;
                 uint cik = vbits(xik);
                 /* if cij and cik differ then IJ and IK have different length */
                 if (cij != cik)
                     continue;
                 /* now if the fourth point is present, it makes a square */
-                if (findv(k + 1, vxor(vk, xij))) {
+                if (findv(k + 1, vk ^ xij)) {
                     ++count;
 #if 0
                     printf("%2$0*1$x %3$0*1$x %4$0*1$x %5$0*1$x\n",
-                            (d + 3) / 4, vi, vj, vk, vxor(vk, xij));
+                            (d + 3) / 4, vi, vj, vk, vk ^ xij);
 #endif
                 }
             }
@@ -223,32 +176,32 @@ void recurse(void) {
         cur->v = next;
       next_value:
         ++recurse_iter;
-        if (veq(cur->v, vmax))
+        if (cur->v == vmax)
             goto derecurse;
-        next = vnext(cur->v);
+        next = cur->v + 1;
         if (vbits(next) < dmin)
             goto retry;
         for (uint i = 1; i < sp; ++i)
-            if (vbits(vxor(next, v[i].v)) < dmin)
+            if (vbits(next ^ v[i].v) < dmin)
                 goto retry;
         t_vec group = prev->group;
         t_vec gfirst = prev->gfirst;
-        t_vec grouped = vand(next, group);
-        while (!vzero(grouped)) {
+        t_vec grouped = next & group;
+        while (grouped) {
             t_vec gb = vfirstv(grouped);
             t_vec gbs = gb;
-            grouped = vand(grouped, vnot(gb));
-            while (vzero(vand(gfirst, gbs)))
-                gbs = vor(gbs, vhalf(gbs));
-            if (veq(gb, gbs)) {
-                group = vand(group, vnot(gb));
-                gfirst = vand(gfirst, vnot(gb));
+            grouped = grouped & ~gb;
+            while ((gfirst & gbs) == 0)
+                gbs = gbs | (gbs >> 1);
+            if (gb == gbs) {
+                group = group & ~gb;
+                gfirst = gfirst & ~gb;
             } else {
-                next = vor(next, gbs);
+                next = next | gbs;
             }
             /* FIXME: do this if (gb << 2) is set in group and clear in gfirst,
              * or if (gb << 2) is out of range; else clear (gb << 1) in group */
-            gfirst = vor(gfirst, vand(group, vdouble(gb)));
+            gfirst = gfirst | (group & (gb << 1));
         }
         cur->v = next;
         cur->group = group;
