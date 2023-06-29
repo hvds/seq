@@ -141,7 +141,7 @@ uint count_squares(void) {
 void recurse(void) {
     uint sp = 0, dmin = 0;
     t_v *prev, *cur;
-    t_vec next;
+    t_vec curv;
 
     /* first element is always (t_vec)0, leaving a single group of
      * dimensions starting at d_0 = 1, extending through all dimensions */
@@ -171,7 +171,7 @@ void recurse(void) {
         }
         prev = &v[sp - 1];
         cur = &v[sp];
-        cur->v = prev->v;
+        curv = cur->v = prev->v;
         goto next_value;
       derecurse:
         --sp;
@@ -179,33 +179,31 @@ void recurse(void) {
             break;
         prev = &v[sp - 1];
         cur = &v[sp];
-        goto next_value;
-      retry:
-        cur->v = next;
+        curv = cur->v;
       next_value:
         ++recurse_iter;
-        if (cur->v == vmax)
+        if (curv == vmax)
             goto derecurse;
-        next = cur->v + 1;
+        curv = curv + 1;
       retry_value: ;
-        uint bits = vbits(next);
+        uint bits = vbits(curv);
         if (bits < dmin)
-            goto retry;
+            goto next_value;
 #ifdef MULDIM
         if (bits % muldim)
-            goto retry;
+            goto next_value;
 #else
         /* eg {0,1,3} can be reflected to {0,1,2} */
-        if (dmin == 1 && bits == 2 && (next & 1) && sp > 1
-                && !findv(next ^ 1, 2, sp))
-            goto retry;
+        if (dmin == 1 && bits == 2 && (curv & 1) && sp > 1
+                && !findv(curv ^ 1, 2, sp))
+            goto next_value;
 #endif
         for (uint i = 1; i < sp; ++i)
-            if (vbits(next ^ v[i].v) < dmin)
-                goto retry;
+            if (vbits(curv ^ v[i].v) < dmin)
+                goto next_value;
         t_vec group = prev->group;
         t_vec gfirst = prev->gfirst;
-        t_vec grouped = next & group;
+        t_vec grouped = curv & group;
         while (grouped) {
             t_vec gbu = vfirstv(grouped);
             t_vec gbl = gbu;
@@ -219,21 +217,21 @@ void recurse(void) {
                 group = group & ~gbu;
                 gfirst = gfirst & ~gbu;
             } else {
-                next = (next | gb) & ~(gbl - 1);
+                curv = (curv | gb) & ~(gbl - 1);
                 goto retry_value;
             }
             /* FIXME: do this if (gb << 2) is set in group and clear in gfirst,
              * or if (gb << 2) is out of range; else clear (gb << 1) in group */
             gfirst = gfirst | (group & (gbu << 1));
         }
-        cur->v = next;
+        cur->v = curv;
         cur->group = group;
         cur->gfirst = gfirst;
 #if 0
 for (uint i = 0; i <= sp; ++i) { printf("[%u %u %u] ", v[i].v, v[i].gfirst, v[i].group); } printf("\n");
 #endif
         if (sp == 1)
-            dmin = vbits(next);
+            dmin = vbits(curv);
         /* loop to select next point */
     }
     return;
