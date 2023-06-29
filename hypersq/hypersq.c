@@ -9,6 +9,9 @@ typedef unsigned char bool;
 
 typedef uint t_vec;     /* any unsigned integer type should work */
 t_vec vmax = 0;         /* set during init() */
+#ifdef MULDIM
+uint muldim = 1;        /* bits set in every point must be a multiple of this */
+#endif
 
 /* Count the bits set in v1 */
 static inline uint vbits(t_vec v1) {
@@ -188,10 +191,15 @@ void recurse(void) {
         uint bits = vbits(next);
         if (bits < dmin)
             goto retry;
+#ifdef MULDIM
+        if (bits % muldim)
+            goto retry;
+#else
         /* eg {0,1,3} can be reflected to {0,1,2} */
         if (dmin == 1 && bits == 2 && (next & 1) && sp > 1
                 && !findv(next ^ 1, 2, sp))
             goto retry;
+#endif
         for (uint i = 1; i < sp; ++i)
             if (vbits(next ^ v[i].v) < dmin)
                 goto retry;
@@ -254,6 +262,12 @@ int main(int argc, char **argv) {
             d = atoi(&arg[2]);
             continue;
         }
+#ifdef MULDIM
+        if (strncmp(arg, "-md", 3) == 0) {
+            muldim = atoi(&arg[3]);
+            continue;
+        }
+#endif
         fprintf(stderr, "Unknown option '%s'\n", arg);
         return 1;
     }

@@ -13,8 +13,13 @@ CC_OPT = -O6 -fgcse-sm -fgcse-las -fgcse-after-reload -fivopts -ftracer -funroll
 
 dhypersq: CC_OPT = -O0
 
+DEFINES :=
+ifdef MULDIM
+    DEFINES += -DMULDIM
+endif
+
 default: hypersq
 all: dhypersq hypersq
 
 dhypersq hypersq: Makefile ${C_FILES} ${H_FILES}
-	gcc -o $@ -g ${CC_ARCH} ${CC_OPT} ${C_FILES}
+	gcc -o $@ -g ${CC_ARCH} ${DEFINES} ${CC_OPT} ${C_FILES}
