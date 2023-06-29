@@ -184,11 +184,13 @@ void recurse(void) {
         if (cur->v == vmax)
             goto derecurse;
         next = cur->v + 1;
+      retry_value: ;
         uint bits = vbits(next);
         if (bits < dmin)
             goto retry;
         /* eg {0,1,3} can be reflected to {0,1,2} */
-        if (dmin == 1 && bits == 2 && (next & 1) && !findv(next ^ 1, 2, sp))
+        if (dmin == 1 && bits == 2 && (next & 1) && sp > 1
+                && !findv(next ^ 1, 2, sp))
             goto retry;
         for (uint i = 1; i < sp; ++i)
             if (vbits(next ^ v[i].v) < dmin)
@@ -197,20 +199,24 @@ void recurse(void) {
         t_vec gfirst = prev->gfirst;
         t_vec grouped = next & group;
         while (grouped) {
-            t_vec gb = vfirstv(grouped);
-            t_vec gbs = gb;
-            grouped = grouped & ~gb;
-            while ((gfirst & gbs) == 0)
-                gbs = gbs | (gbs >> 1);
-            if (gb == gbs) {
-                group = group & ~gb;
-                gfirst = gfirst & ~gb;
+            t_vec gbu = vfirstv(grouped);
+            t_vec gbl = gbu;
+            t_vec gb = gbu;
+            grouped = grouped & ~gbu;
+            while ((gfirst & gb) == 0) {
+                gbl >>= 1;
+                gb |= gbl;
+            }
+            if (gb == gbu) {
+                group = group & ~gbu;
+                gfirst = gfirst & ~gbu;
             } else {
-                next = next | gbs;
+                next = (next | gb) & ~(gbl - 1);
+                goto retry_value;
             }
             /* FIXME: do this if (gb << 2) is set in group and clear in gfirst,
              * or if (gb << 2) is out of range; else clear (gb << 1) in group */
-            gfirst = gfirst | (group & (gb << 1));
+            gfirst = gfirst | (group & (gbu << 1));
         }
         cur->v = next;
         cur->group = group;
