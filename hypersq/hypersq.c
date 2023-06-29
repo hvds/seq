@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
     d = atoi(argv[argi++]);
     init();
     recurse();
-    printf("%u:", best);
+    printf("f(%u, %u) = %u:", n, d, best);
     for (uint i = 0; i < n; ++i)
         printf(" %u", v[i].best);
     printf(" (%lu iter %.2fs)", recurse_iter, utime());
