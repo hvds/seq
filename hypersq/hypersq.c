@@ -112,13 +112,13 @@ uint count_squares(void) {
 printf("["); for (uint i = 0; i < n; ++i) { if (i) printf(" "); printf("%u", v[i].v); } printf("]\n");
 #endif
     uint count = 0;
-    for (uint i = 0; i < n - 3; ++i) {
+    for (uint i = 0; i + 3 < n; ++i) {
         t_vec vi = v[i].v;
-        for (uint j = i + 1; j < n - 2; ++j) {
+        for (uint j = i + 1; j + 2 < n; ++j) {
             t_vec vj = v[j].v;
             t_vec xij = vi ^ vj;
             uint cij = vbits(xij);
-            for (uint k = j + 1; k < n - 1; ++k) {
+            for (uint k = j + 1; k + 1 < n; ++k) {
                 t_vec vk = v[k].v;
                 t_vec xik = vi ^ vk;
                 /* if xij and xik have bits in common, then JIK is not a right
