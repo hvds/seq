@@ -65,7 +65,8 @@ static inline double utime(void) {
 uint n;             /* number of points */
 uint d;             /* number of dimensions */
 uint best = 0;      /* highest number of squares seen for any set */
-ulong recurse_iter = 0;  /* number of iterations */
+ulong recurse_iter = 0; /* number of iterations */
+ulong count_iter = 0;   /* number of times we count squares */
 typedef struct s_v {
     t_vec v;        /* the value */
     t_vec group;    /* bits set for all grouped dimensions */
@@ -106,6 +107,10 @@ bool findv(t_vec p, uint start, uint end) {
  * in v[].
  */
 uint count_squares(void) {
+    ++count_iter;
+#if 0
+printf("["); for (uint i = 0; i < n; ++i) { if (i) printf(" "); printf("%u", v[i].v); } printf("]\n");
+#endif
     uint count = 0;
     for (uint i = 0; i < n - 3; ++i) {
         t_vec vi = v[i].v;
@@ -295,7 +300,7 @@ int main(int argc, char **argv) {
     printf("f(%u, %u) = %u:", n, d, best);
     for (uint i = 0; i < n; ++i)
         printf(" %u", v[i].best);
-    printf(" (%lu iter %.2fs)", recurse_iter, utime());
+    printf(" (%lu, %lu, %.2fs)", recurse_iter, count_iter, utime());
     printf("\n");
     return 0;
 }
