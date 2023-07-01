@@ -338,6 +338,7 @@ for (uint i = 0; i <= sp; ++i) { printf("[%u %u %u] ", v[i].v, v[i].gfirst, v[i]
 int main(int argc, char **argv) {
     int argi = 1;
     bool do_count_squares = 0;
+    bool do_all = 0;
     char *test_canon = NULL;
     uint base = 10;
     while (argi < argc) {
@@ -357,6 +358,10 @@ int main(int argc, char **argv) {
         }
         if (strncmp(arg, "-d", 2) == 0) {
             d = atoi(&arg[2]);
+            continue;
+        }
+        if (strcmp(arg, "-a") == 0) {
+            do_all = 1;
             continue;
         }
         if (strncmp(arg, "-md", 3) == 0) {
@@ -389,7 +394,25 @@ int main(int argc, char **argv) {
         printf("%u\n", count_squares());
         return 0;
     }
-
+    if (do_all) {
+        if (argc - argi != 1) {
+            fprintf(stderr, "Wrong number of arguments\n");
+            return 1;
+        }
+        d = atoi(argv[argi++]);
+        n = ((1 << d) / muldim) + 1;
+        init("0");
+        uint i = 0;
+        for (uint j = 0; j <= vmax; ++j) {
+            if (vbits(j) % muldim)
+                continue;
+            v[i++].v = j;
+        }
+        n = i;
+        best = count_squares();
+        printf("f(%u, %u/%u) = %u (%.2fs)\n", n, d, muldim, best, utime());
+        return 0;
+    }
     if (argc - argi != 2) {
         fprintf(stderr, "Wrong number of arguments\n");
         return 1;
