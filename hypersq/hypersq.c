@@ -9,9 +9,7 @@ typedef unsigned char bool;
 
 typedef uint t_vec;     /* any unsigned integer type should work */
 t_vec vmax = 0;         /* set during init() */
-#ifdef MULDIM
 uint muldim = 1;        /* bits set in every point must be a multiple of this */
-#endif
 
 /* Count the bits set in v1 */
 static inline uint vbits(t_vec v1) {
@@ -361,12 +359,15 @@ int main(int argc, char **argv) {
             d = atoi(&arg[2]);
             continue;
         }
-#ifdef MULDIM
         if (strncmp(arg, "-md", 3) == 0) {
+#ifdef MULDIM
             muldim = atoi(&arg[3]);
             continue;
-        }
+#else
+            fprintf(stderr, "use mhypersq to specify -md\n");
+            return 1;
 #endif
+        }
         if (strncmp(arg, "-tc", 3) == 0) {
             test_canon = &arg[3];
             continue;
@@ -397,7 +398,10 @@ int main(int argc, char **argv) {
     d = atoi(argv[argi++]);
     init(test_canon);
     recurse();
-    printf("f(%u, %u) = %u:", n, d, best);
+    if (muldim > 1)
+        printf("f(%u, %u/%u) = %u:", n, d, muldim, best);
+    else
+        printf("f(%u, %u) = %u:", n, d, best);
     for (uint i = 0; i < n; ++i)
         printf(" %u", v[i].best);
     printf(" (%lu, %lu, %.2fs)", recurse_iter, count_iter, utime());
