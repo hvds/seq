@@ -280,7 +280,7 @@ void recurse(void) {
         curv = cur->v;
       next_value:
         ++recurse_iter;
-        if (curv == vmax)
+        if (curv >= vmax - (n - 1) + sp)
             goto derecurse;
         curv = curv + 1;
       retry_value: ;
