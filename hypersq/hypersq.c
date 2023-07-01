@@ -79,13 +79,33 @@ static inline int vcmpv(const void *vp1, const void *vp2) {
     return vcmp(&((t_v *)vp1)->v, &((t_v *)vp2)->v);
 }
 
-char *eperm;
-uint esize;
-void init_Ehrlich(void) {
-    if (d > 9) {
-        fprintf(stderr, "do you really want a %u! length list?", d);
-        exit(1);
+/* if test_canon[i] is true, we will apply full canonicalization at the
+ * i'th element */
+uint *test_canon = NULL;
+/* the i'th permutation swaps dimension 0 with dimension eperm[i] */
+char *eperm = NULL;
+uint esize = 0;
+void init_Ehrlich(char *tc) {
+    test_canon = calloc(n, sizeof(uint));
+    if (d > 9 || (tc && strcmp(tc, "0") == 0))
+        /* disable Ehrlich: test list already initialized to all-false */
+        return;
+    if (tc) {
+        char *next;
+        while (next = strchr(tc, ',')) {
+            *next++ = 0;
+            uint i = atoi(tc);
+            test_canon[i] = 1;
+            tc = next;
+        }
+        uint i = atoi(tc);
+        test_canon[i] = 1;
+    } else {
+        for (uint i = 2; i + i <= n; ++i)
+            test_canon[i] = 1;
     }
+
+    /* initialize d! permutations using Ehrlich's swap method */
     esize = 1;
     for (uint i = 1; i <= d; ++i)
         esize *= i;
@@ -115,27 +135,11 @@ void init_Ehrlich(void) {
 }
 
 /* after n and d are known */
-uint *test_canon = NULL;
 void init(char *tc) {
     t0 = utime();
     set_vmax(d);
     v = calloc(n, sizeof(t_v));
-    init_Ehrlich();
-    test_canon = calloc(n, sizeof(uint));
-    if (tc) {
-        char *next;
-        while (next = strchr(tc, ',')) {
-            *next++ = 0;
-            uint i = atoi(tc);
-            test_canon[i] = 1;
-            tc = next;
-        }
-        uint i = atoi(tc);
-        test_canon[i] = 1;
-    } else {
-        for (uint i = 2; i + i <= n; ++i)
-            test_canon[i] = 1;
-    }
+    init_Ehrlich(tc);
 }
 
 /* Returns true if point vp is in ordered list v[] in the range start..n-1.
@@ -374,7 +378,7 @@ int main(int argc, char **argv) {
         n = argc - argi;
         if (d == 0)
             d = sizeof(t_vec) * 8;
-        init(NULL);
+        init("0");
         for (uint i = 0; i < n; ++i)
             v[i].v = strtol(argv[i + argi], NULL, base);
         qsort(&v[0], n, sizeof(t_v), &vcmpv);
