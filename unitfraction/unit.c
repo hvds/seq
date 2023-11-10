@@ -54,7 +54,7 @@ rat_t *rat;
 #define MAXI(ri) rat[ri].max
 
 mpz_t factor_n, factor_q, factor_r;
-mpz_t f2_mod, f2_min;
+mpz_t f2_mod, f2_min, ztemp;
 
 void resize_primes(uint size) {
     primes = (prime_t *)realloc(primes, size * sizeof(prime_t));
@@ -113,6 +113,7 @@ void init_unit(uint max) {
     ZINIT(factor_r);
     ZINIT(f2_mod);
     ZINIT(f2_min);
+    ZINIT(ztemp);
     primes = NULL;
     resize_primes(1024);
     primes[0].p = 2;
@@ -139,6 +140,7 @@ void done_unit(void) {
     ZCLEAR(factor_r);
     ZCLEAR(f2_mod);
     ZCLEAR(f2_min);
+    ZCLEAR(ztemp);
     for (uint i = 0; i < primesize; ++i)
         ZCLEAR(primes[i].zp_squared);
     free(primes);
@@ -439,19 +441,32 @@ uint find_set(mpq_t q) {
     /* not reached */
 }
 
+uint mpq_int(mpq_t q) {
+    if (mpz_cmp(mpq_numref(q), mpq_denref(q)) < 0)
+        return 0;
+    mpz_fdiv_q(ztemp, mpq_numref(q), mpq_denref(q));
+    return mpz_get_ui(ztemp);
+}
+
 uint find_multi(mpq_t q) {
     if (mpq_sgn(q) == 0)
         return 0;
+    uint unit = mpq_int(q);
+    if (unit) {
+        mpz_fdiv_r(mpq_numref(q), mpq_numref(q), mpq_denref(q));
+        if (mpq_sgn(q) == 0)
+            return unit;
+    }
     if (mpz_cmp_ui(mpq_numref(q), 1) == 0)
-        return 1;
+        return unit + 1;
     mpq_get_num(PI(0), q);
     mpq_get_den(QI(0), q);
     factorize(0);
     if (find_m2(0))
-        return 2;
+        return unit + 2;
     for (uint c = 3; 1; ++c) {
         if (find_mn(0, c))
-            return c;
+            return unit + c;
     }
     /* not reached */
 }
