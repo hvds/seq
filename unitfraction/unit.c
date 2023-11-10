@@ -1,4 +1,8 @@
 #include "unit.h"
+/* Math-Prime-Util-GMP/factor.h */
+#include "factor.h"
+/* Math-Prime-Util-GMP/gmp_main.h */
+#include "gmp_main.h"
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -9,17 +13,6 @@
    unit fractions. */
 
 uint maxdepth;
-
-/* a prime p, used for factorizing */
-typedef struct prime_s {
-    uint p;             /* the prime itself */
-    uint p_squared;     /* p^2, or 0 if p^2 > MAXUINT */
-    mpz_t zp_squared;   /* p^2 */
-} prime_t;
-
-prime_t* primes;    /* ordered list of known primes */
-uint primecount;    /* number of entries in <primes> */
-uint primesize;     /* malloced size of <primes> */
 
 /* a prime power p^k, used for representing a factorization */
 typedef struct fac_s {
@@ -54,15 +47,7 @@ rat_t *rat;
 #define MINI(ri) mpq_denref(rat[ri].qmin)
 #define MAXI(ri) rat[ri].max
 
-mpz_t factor_n, factor_q, factor_r;
 mpz_t f2_mod, f2_min, ztemp;
-
-void resize_primes(uint size) {
-    primes = (prime_t *)realloc(primes, size * sizeof(prime_t));
-    for (uint i = primesize; i < size; ++i)
-        ZINIT(primes[i].zp_squared);
-    primesize = size;
-}
 
 void resize_fac(uint ri, uint size) {
     rat[ri].f = (fac_t *)realloc(rat[ri].f, size * sizeof(fac_t));
@@ -91,6 +76,7 @@ void diagnose(uint ri) {
 }
 
 void init_unit(uint max) {
+    _GMP_init(); /* Math-Prime-Util-GMP/gmp_main.c */
     maxdepth = max;
     rat = malloc(maxdepth * sizeof(rat_t));
     for (uint i = 0; i < maxdepth; ++i) {
@@ -105,21 +91,9 @@ void init_unit(uint max) {
     mpz_set_ui(mpq_denref(rat[0].qmin), 0);     /* base, never changes */
     dsize = 0;
     resize_div(1024);
-    ZINIT(factor_n);
-    ZINIT(factor_q);
-    ZINIT(factor_r);
     ZINIT(f2_mod);
     ZINIT(f2_min);
     ZINIT(ztemp);
-    primes = NULL;
-    resize_primes(1024);
-    primes[0].p = 2;
-    primes[0].p_squared = 4;
-    mpz_set_ui(primes[0].zp_squared, 4);
-    primes[1].p = 3;
-    primes[1].p_squared = 9;
-    mpz_set_ui(primes[1].zp_squared, 9);
-    primecount = 2;
 }
 
 void done_unit(void) {
@@ -133,121 +107,29 @@ void done_unit(void) {
     for (uint i = 0; i < dsize; ++i)
         ZCLEAR(divs[i]);
     free(divs);
-    ZCLEAR(factor_n);
-    ZCLEAR(factor_q);
-    ZCLEAR(factor_r);
     ZCLEAR(f2_mod);
     ZCLEAR(f2_min);
     ZCLEAR(ztemp);
-    for (uint i = 0; i < primesize; ++i)
-        ZCLEAR(primes[i].zp_squared);
-    free(primes);
-}
-
-/* boolean gcd test; assumes 0 <= p < q */
-bool have_common_divisor(uint p, uint q) {
-    while (p > 0) {
-        uint t = q % p;
-        q = p;
-        p = t;
-    }
-    return (q == 1) ? 0 : 1;
-}
-
-/* find the next prime not in primes[], extend the list, and return the
- * index of the new prime */
-uint nextprime(void) {
-    uint p = primes[primecount - 1].p;
-    bool isprime;
-    if (primecount == primesize)
-        resize_primes(primesize * 3 / 2);
-    while (p > 1) {
-        p += 2;
-        isprime = 1;
-        for (uint i = 1; primes[i].p_squared <= p; ++i) {
-            if ((p % primes[i].p) == 0) {
-                isprime = 0;
-                break;
-            }
-        }
-        if (isprime) {
-            primes[primecount].p = p;
-            if (p > 65535) {
-                primes[primecount].p_squared = 0;
-                mpz_set_ui(primes[primecount].zp_squared, p);
-                mpz_mul_ui(primes[primecount].zp_squared,
-                        primes[primecount].zp_squared, p);
-            } else {
-                primes[primecount].p_squared = p * p;
-                mpz_set_ui(primes[primecount].zp_squared,
-                        primes[primecount].p_squared);
-            }
-            return primecount++;
-        }
-    }
-    fprintf(stderr, "Overflow: prime > MAXUINT required\n");
-    exit(-1);
-}
-
-/* given factor_n = QI(ri), if p^k divides factor_n:
- *   factor_n := factor_n / p^k
- *   append p^k to rat[ri].f[]
- * return TRUE if factor_n == 1
- */
-bool try_div(uint ri, uint p) {
-    uint power;
-
-    mpz_fdiv_qr_ui(factor_q, factor_r, factor_n, p);
-    if (mpz_cmp_ui(factor_r, 0) != 0)
-        return 0;    /* p is not a factor */
-
-    power = 1;
-    while (1) {
-        mpz_set(factor_n, factor_q);
-        mpz_fdiv_qr_ui(factor_q, factor_r, factor_n, p);
-        if (mpz_cmp_ui(factor_r, 0) != 0)
-            break;
-        ++power;
-    }
-    if (rat[ri].fcount >= rat[ri].fsize)
-        resize_fac(ri, rat[ri].fsize + 8);
-    rat[ri].f[rat[ri].fcount].p = p;
-    rat[ri].f[rat[ri].fcount].k = power;
-    ++rat[ri].fcount;
-    return (mpz_cmp_ui(factor_n, 1) > 0) ? 0 : 1;
 }
 
 /* set rat[ri].f to the factors of QI(ri) */
 void factorize(uint ri) {
-    uint p;
-    mpz_set(factor_n, QI(ri));
-    rat[ri].fcount = 0;
-    if (mpz_cmp_ui(factor_n, 1) == 0)
-        return;
-    if (ri > 0) {
-        /* given r[ri] = r[ri-1] - 1/something, try first dividing by the prime
-         * factors of QI(ri-1) */
-        rat_t* prev = &rat[ri - 1];
-        for (uint i = 0; i < prev->fcount; ++i)
-            if (try_div(ri, prev->f[i].p))
-                return;
+    mpz_t *pfactors = NULL;
+    int *pexponents = NULL;
+    /* Math-Prime-Util-GMP/factor.c */
+    uint nfactors = factor(QI(ri), &pfactors, &pexponents);
+    if (nfactors >= rat[ri].fsize)
+        resize_fac(ri, nfactors + 8);
+    for (uint i = 0; i < nfactors; ++i) {
+        fac_t *fp = &rat[ri].f[i];
+        fp->p = mpz_get_ui(pfactors[i]);
+        fp->k = pexponents[i];
+        ZCLEAR(pfactors[i]);
     }
-    for (uint i = 0; 1; ++i) {
-        if (i >= primecount)
-            i = nextprime();
-        if (try_div(ri, primes[i].p))
-            return;
-        if (mpz_cmp(primes[i].zp_squared, factor_n) > 0) {
-            p = mpz_get_ui(factor_n);
-            if (p == 0) {
-                gmp_fprintf(stderr, "Overflow: prime %Zu > MAXUINT\n",
-                        factor_n);
-                exit(-1);
-            }
-            try_div(ri, p);
-            return;
-        }
-    }
+    rat[ri].fcount = nfactors;
+    free(pfactors);
+    free(pexponents);
+    return;
 }
 
 /* Set divs to the divisors of QI(ri)^2.
