@@ -1,0 +1,157 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use Math::BigRat;
+use Math::Prime::Util qw{ divisors };
+
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    die "Unknown option '$arg'";
+}
+@ARGV == 1 or die "Usage: $0 <lim>\n";
+my($lim) = @ARGV;
+
+=head1 exploring minimal decompositions of q > 2 into unit fractions
+
+Distinct primitive q with limit n, n in 4..20:
+1 2 3 7 13 24 44 80 80 139 247 300 539 993 1420 2633 2633
+
+Finding all primitives q = sum_{s in S}{1/s} with max(S) = n:
+
+Primitives checked, and time (load average 7):
+15:  18,    9.99s
+16:  30,   14.75s
+17:  65,   39.53s
+18:  49,   69.04s
+19: 117,  257.68s
+20:  37,  330.08s
+21:  66,  592.77s
+22: 101,  723.83s
+23: 211, 1419.63s
+
+These do not exactly match the counts from C code, since the latter
+does not check if a given q has already been seen.
+
+=cut
+
+sub MBR { Math::BigRat->new(@_) }
+sub recip { MBR(1, @_) }
+my $qzero = MBR(0);
+my $qone = MBR(1);
+my @d;
+
+my @minq = (0) x ($lim + 1);
+{
+    my $minq = MBR(2);
+    for (reverse 1 .. $lim) {
+        $minq[$_] = $minq;
+        $minq -= recip($_);
+        last if $minq < 0;
+    }
+}
+
+#my $lim = 48;
+my $best = MBR(2);
+my($countprim, $countqual, %seen) = (0, 0);
+try_prim($qzero, 0, 0);
+use DDP; p { best => $best, prim => $countprim, qual => $countqual, time => (times())[0] };
+exit(0);
+
+sub try_prim {
+    my($q, $min, $c) = @_;
+    ++$c;
+    for my $n ($min + 1 .. $lim) {
+        my $q2 = $q + recip($n);
+        last if $q2 < $minq[$n];
+local $d[$c - 1] = $n;
+        if ($q2 > 2) {
+            # must check minimality before marking seen
+            next if min_set($q2, $c);
+            next if $seen{"$q2"}++;
+            next unless $n == $lim;
+            ++$countprim;
+warn sprintf "%s %s %s [%s] (%.2f)\n", $countprim, $countqual, $q2, "@d", (times())[0] if ($countprim % 100) == 0;
+            next if min_multi($q2, $c);
+            ++$countqual;
+            $best = $q2, warn "best $best [@d]\n" if $best < $q2;
+        } else {
+            next if min_set($q2, $c);
+            try_prim($q2, $n, $c);
+        }
+    }
+}
+
+# return TRUE if minimal set is fewer than suggested count
+sub min_set {
+    my($q, $count) = @_;
+    return 0 if $count <= 1;
+    return 1 if $q->numerator == 1;
+    return 0 if $count == 2;
+    return 1 if try_pair($q, 0);
+    return 0 if $count == 3;
+    return 1 if try_sn($count - 1, $q, 0);
+    return 0;
+}
+
+# return TRUE if minimal multiset is fewer than suggested count
+sub min_multi {
+    my($q, $count) = @_;
+    return 0 if $count <= 1;
+    return 1 if $q->numerator == 1;
+    return 0 if $count == 2;
+    return 1 if try_pair($q, 0);
+    return 0 if $count == 3;
+    return 1 if try_mn($count - 1, $q, 0);
+    return 0;
+}
+
+sub try_sn {
+    my($n, $q, $min) = @_;
+    my $min2 = int(1 / $q) + 1;
+    $min = $min2 if $min < $min2;
+    my $max = int($n / $q);
+    my $c = 0;
+    if ($n == 3) {
+        for ($min .. $max) {
+            return 1 if try_pair($q - recip($_), $_ + 1);
+        }
+    } else {
+        for ($min .. $max) {
+            return 1 if try_sn($n - 1, $q - recip($_), $_ + 1);
+        }
+    }
+    return 0;
+}
+
+sub try_mn {
+    my($n, $q, $min) = @_;
+    my $min2 = int(1 / $q) + 1;
+    $min = $min2 if $min < $min2;
+    my $max = int($n / $q);
+    my $c = 0;
+    if ($n == 3) {
+        for ($min .. $max) {
+            return 1 if try_pair($q - recip($_), $_);
+        }
+    } else {
+        for ($min .. $max) {
+            return 1 if try_mn($n - 1, $q - recip($_), $_);
+        }
+    }
+    return 0;
+}
+
+# p/q = 1/a + 1/b => for some k, a = (q + k) / p, b = (q + q^2/k) / p,
+# ie we need to find a factor pair (k, q^2 / k) such that k == -q (mod p).
+sub try_pair {
+    my($q, $min) = @_;
+    my($qp, $qq) = $q->parts;
+    my $mod = $qq % $qp;
+    for (divisors($qq * $qq)) {
+        last if $_ > $qq;
+        next if $_ < $min;
+        return 1 if (($_ + $mod) % $qp) == 0;
+    }
+    return 0;
+}

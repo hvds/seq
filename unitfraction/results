@@ -1,0 +1,78 @@
+Exploring minimal decompositions of q > 2 into unit fractions
+
+Terminology:
+
+Throughout, S are sets and M are multisets of positive integers.
+q \in Q is a rational.
+
+The least number of _distinct_ unit fractions needed to sum to q:
+s(q) := min(| S |): q = sum_{s in S}{1/s}.
+
+The least number of unit fractions needed to sum to q:
+m(q) := min(| M |): q = sum_{m in M}{1/m}.
+
+We say S, M are _optimal_ if S = s(q), M = m(q) respectively;
+we say q is _flat_ if s(q) = m(q).
+
+We say q, S are _primitive_ if 2 < q < 2 + 1/max(S).
+
+For which q > 0, q in Q is q flat?
+
+1) We know q is flat for 0 < q < 2.
+
+2) q = 1/1 + 1/2 + 1/3 + 1/7 + 1/43 + 1/47 = 2 1759/84882, 2 + 1/49
+< q < 2 + 1/48 is primitive and flat.
+
+3) This leads to an infinite family of q: p(q), since clearly there
+must be some n_0 such that q + 1/n is flat for all n >= n_0.
+
+4) Q: what is the greatest primitive flat q? From the example in (2),
+we know it would have max(S) < 49, so there are a finite number of
+possibilities to check.
+
+5) Given q flat, what can we say about { n in Z: q + 1/n is flat }?
+
+6) What if anything can we say about max(q): q is flat?
+
+7) What if anything can we say about { q in Q: q is flat }?
+
+Counts of distinct primitive q with limit n, n in 4..20:
+1 2 3 7 13 24 44 80 80 139 247 300 539 993 1420 2633 2633
+
+'find_primitive' finds all primitive optimal sets with max(S) equal
+to a specified limit, and checks whether each is flat.
+
+find_primitive limit: primitives checked, time taken.
+15:   21,    0.01s
+16:   32,    0.01s
+17:   72,    0.06s
+18:   51,    0.07s
+19:  127,    0.25s
+20:   41,    0.31s
+21:   72,    0.40s
+22:  114,    0.51s
+23:  242,    1.64s
+24:   63,    1.51s
+25:  198,    2.44s
+26:  235,    3.93s
+27:  318,    6.61s
+28:  197,    6.90s
+29:  599,   26.65s
+30:  157,   19.76s
+31:  788,   47.54s
+32:  534,   61.59s
+33:  549,   84.23s
+34:  830,  211.82s
+35:  461,  218.53s
+36:  274,  236.93s
+37: 1656,  731.55s
+38: 1229,  956.83s
+39:  913, 1189.29s
+40:  436, 1295.63s
+41: 2449, 3272.09s
+42:  527, 3897.74s
+43: 2643, 10809.32s
+44: 1051, 10324.37s
+45:  749, 11972.98s
+46: 2287, 20320.55s
+47: 4511, 52946.51s result: 171523/84882 = [1 2 3 7 43 47]
