@@ -27,6 +27,10 @@ typedef struct fac_s {
     uint k;
 } fac_t;
 
+mpz_t* divs = NULL;     /* divisors of some q^2 */
+uint dcount = 0;        /* number of divisors */
+uint dsize = 0;         /* malloced size of divs */
+
 /* Structure recording information about a rational p/q at a given depth in
  * the recursion.
  * Note that we always set rat[ri].r = rat[ri-1].r - rat[ri].qmin: both
@@ -41,9 +45,6 @@ typedef struct rat_s {
     fac_t* f;       /* factors of q */
     uint fcount;    /* number of factors in f */
     uint fsize;     /* malloced size of f */
-    mpz_t* d;       /* divisors of q^2 */
-    uint dcount;    /* number of divisors in d */
-    uint dsize;     /* malloced size of d */
 } rat_t;
 rat_t *rat;
 
@@ -68,11 +69,11 @@ void resize_fac(uint ri, uint size) {
     rat[ri].fsize = size;
 }
 
-void resize_div(uint ri, uint size) {
-    rat[ri].d = (mpz_t *)realloc(rat[ri].d, size * sizeof(mpz_t));
-    for (uint i = rat[ri].dsize; i < size; ++i)
-        ZINIT(rat[ri].d[i]);
-    rat[ri].dsize = size;
+void resize_div(uint size) {
+    divs = (mpz_t *)realloc(divs, size * sizeof(mpz_t));
+    for (uint i = dsize; i < size; ++i)
+        ZINIT(divs[i]);
+    dsize = size;
 }
 
 /* print details of the structure rat[ri] to stderr */
@@ -86,9 +87,6 @@ void diagnose(uint ri) {
             fprintf(stderr, " .");
         gmp_fprintf(stderr, " %d^%d", r->f[i].p, r->f[i].k);
     }
-    gmp_fprintf(stderr, "\n  d[size=%u]:", r->dsize);
-    for (uint i =0; i < r->dcount; ++i)
-        gmp_fprintf(stderr, " %Zu", r->d[i]);
     gmp_fprintf(stderr, "\n");
 }
 
@@ -103,11 +101,10 @@ void init_unit(uint max) {
         rat[i].fsize = 0;
         rat[i].f = NULL;
         resize_fac(i, 10);
-        rat[i].dsize = 0;
-        rat[i].d = NULL;
-        resize_div(i, 1024);
     }
     mpz_set_ui(mpq_denref(rat[0].qmin), 0);     /* base, never changes */
+    dsize = 0;
+    resize_div(1024);
     ZINIT(factor_n);
     ZINIT(factor_q);
     ZINIT(factor_r);
@@ -130,11 +127,12 @@ void done_unit(void) {
         QCLEAR(rat[i].r);
         QCLEAR(rat[i].qmin);
         ZCLEAR(rat[i].max);
-        for (uint j = 0; j < rat[i].dsize; ++j)
-            ZCLEAR(rat[i].d[j]);
         free(rat[i].f);
     }
     free(rat);
+    for (uint i = 0; i < dsize; ++i)
+        ZCLEAR(divs[i]);
+    free(divs);
     ZCLEAR(factor_n);
     ZCLEAR(factor_q);
     ZCLEAR(factor_r);
@@ -252,7 +250,7 @@ void factorize(uint ri) {
     }
 }
 
-/* Set rat[ri].d to the  divisors of QI(ri)^2.
+/* Set divs to the divisors of QI(ri)^2.
  * This assumes factorize(ri) has previously been called.
  */
 void divisors(uint ri) {
@@ -260,30 +258,31 @@ void divisors(uint ri) {
     uint p;
     for (uint i = 0; i < rat[ri].fcount; ++i)
         count *= 2 * rat[ri].f[i].k + 1;
-    if (count > rat[ri].dsize)
-        resize_div(ri, count * 2);
+    if (count > dsize)
+        resize_div(count * 2);
 
-    mpz_set_ui(rat[ri].d[0], 1);
+    mpz_set_ui(divs[0], 1);
     prev = 1;
     for (uint i = 0; i < rat[ri].fcount; ++i) {
         p = rat[ri].f[i].p;
         k = rat[ri].f[i].k * 2;
         next = prev * k;
         for (uint j = 0; j < next; ++j)
-            mpz_mul_ui(rat[ri].d[j + prev], rat[ri].d[j], p);
+            mpz_mul_ui(divs[j + prev], divs[j], p);
         prev += next;
     }
-    rat[ri].dcount = count;
+    dcount = count;
 }
 
 /* Return TRUE if r = RI(ri) can be expressed as the sum of two distinct
  * unit fractions with denominators > m = MINI(ri).
  * Given r = p/q, this is true precisely if there exists a divisor d of q^2
  * with d == -q (mod p) and mp-q < d < q.
- * This assumes divisors(ri) has previously been called.
+ * This assumes factorize(ri) has previously been called.
  */
 bool find_s2(uint ri) {
-    uint end_div = rat[ri].dcount;
+    divisors(ri);
+    uint end_div = dcount;
 
     mpz_ui_sub(f2_mod, 0, QI(ri));
     mpz_mul(f2_min, PI(ri), MINI(ri));
@@ -292,12 +291,12 @@ bool find_s2(uint ri) {
     /* if the divisors were sorted, we could use a binary chop to find the
      * start point, and know that floor(dcount / 2) is the end point */
     for (uint i = 0; i < end_div; ++i) {
-        if (mpz_cmp(f2_min, rat[ri].d[i]) >= 0)
+        if (mpz_cmp(f2_min, divs[i]) >= 0)
             continue;
-        if (mpz_cmp(QI(ri), rat[ri].d[i]) <= 0)
+        if (mpz_cmp(QI(ri), divs[i]) <= 0)
             continue;
         /* it might be faster to normalize both mod p, and check equality */
-        if (mpz_congruent_p(f2_mod, rat[ri].d[i], PI(ri)))
+        if (mpz_congruent_p(f2_mod, divs[i], PI(ri)))
             return 1;
     }
     return 0;
@@ -307,10 +306,11 @@ bool find_s2(uint ri) {
  * unit fractions with denominators >= m = MINI(ri).
  * Given r = p/q, this is true precisely if there exists a divisor d of q^2
  * with d == -q (mod p) and mp-q <= d < q.
- * This assumes divisors(ri) has previously been called.
+ * This assumes factorize(ri) has previously been called.
  */
 bool find_m2(uint ri) {
-    uint end_div = rat[ri].dcount;
+    divisors(ri);
+    uint end_div = dcount;
 
     mpz_ui_sub(f2_mod, 0, QI(ri));
     mpz_mul(f2_min, PI(ri), MINI(ri));
@@ -319,12 +319,12 @@ bool find_m2(uint ri) {
     /* if the divisors were sorted, we could use a binary chop to find the
      * start point, and know that floor(dcount / 2) is the end point */
     for (uint i = 0; i < end_div; ++i) {
-        if (mpz_cmp(f2_min, rat[ri].d[i]) > 0)
+        if (mpz_cmp(f2_min, divs[i]) > 0)
             continue;
-        if (mpz_cmp(QI(ri), rat[ri].d[i]) <= 0)
+        if (mpz_cmp(QI(ri), divs[i]) <= 0)
             continue;
         /* it might be faster to normalize both mod p, and check equality */
-        if (mpz_congruent_p(f2_mod, rat[ri].d[i], PI(ri)))
+        if (mpz_congruent_p(f2_mod, divs[i], PI(ri)))
             return 1;
     }
     return 0;
@@ -346,7 +346,6 @@ bool find_sn(uint ri, uint depth) {
     while (mpz_cmp(MINI(rj), MAXI(rj)) <= 0) {
         mpq_sub(RI(rj), RI(ri), rat[rj].qmin);
         factorize(rj);
-        divisors(rj);
         if ((depth == 3) ? find_s2(rj) : find_sn(rj, depth - 1))
             return 1;
         mpz_add_ui(MINI(rj), MINI(rj), 1);
@@ -372,7 +371,6 @@ bool find_mn(uint ri, uint depth) {
     while (mpz_cmp(MINI(rj), MAXI(rj)) <= 0) {
         mpq_sub(RI(rj), RI(ri), rat[rj].qmin);
         factorize(rj);
-        divisors(rj);
         if ((depth == 3) ? find_m2(rj) : find_mn(rj, depth - 1))
             return 1;
         mpz_add_ui(MINI(rj), MINI(rj), 1);
