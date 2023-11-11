@@ -263,15 +263,15 @@ bool find_mn(uint ri, uint depth) {
 /* Return TRUE if p/q can be represented as fewer than c distinct unit
  * fractions.
  */
-bool better_set(mpq_t q, uint c) {
+bool better_set(mpq_t r, uint c) {
     if (c <= 1)
         return 0;
-    if (mpz_cmp_ui(mpq_numref(q), 1) == 0)
+    if (mpz_cmp_ui(mpq_numref(r), 1) == 0)
         return 1;
     if (c == 2)
         return 0;
-    mpq_get_num(PI(0), q);
-    mpq_get_den(QI(0), q);
+    mpq_get_num(PI(0), r);
+    mpq_get_den(QI(0), r);
     factorize(0);
     if (find_s2(0))
         return 1;
@@ -285,15 +285,15 @@ bool better_set(mpq_t q, uint c) {
 /* Return TRUE if p/q can be represented as fewer than c unit fractions
  * (not necessarily distinct).
  */
-bool better_multi(mpq_t q, uint c) {
+bool better_multi(mpq_t r, uint c) {
     if (c <= 1)
         return 0;
-    if (mpz_cmp_ui(mpq_numref(q), 1) == 0)
+    if (mpz_cmp_ui(mpq_numref(r), 1) == 0)
         return 1;
     if (c == 2)
         return 0;
-    mpq_get_num(PI(0), q);
-    mpq_get_den(QI(0), q);
+    mpq_get_num(PI(0), r);
+    mpq_get_den(QI(0), r);
     factorize(0);
     if (find_m2(0))
         return 1;
@@ -304,13 +304,13 @@ bool better_multi(mpq_t q, uint c) {
     return 0;
 }
 
-uint find_set(mpq_t q) {
-    if (mpq_sgn(q) == 0)
+uint find_set(mpq_t r) {
+    if (mpq_sgn(r) == 0)
         return 0;
-    if (mpz_cmp_ui(mpq_numref(q), 1) == 0)
+    if (mpz_cmp_ui(mpq_numref(r), 1) == 0)
         return 1;
-    mpq_get_num(PI(0), q);
-    mpq_get_den(QI(0), q);
+    mpq_get_num(PI(0), r);
+    mpq_get_den(QI(0), r);
     factorize(0);
     if (find_s2(0))
         return 2;
@@ -321,26 +321,26 @@ uint find_set(mpq_t q) {
     /* not reached */
 }
 
-uint mpq_int(mpq_t q) {
-    if (mpz_cmp(mpq_numref(q), mpq_denref(q)) < 0)
+uint mpq_int(mpq_t r) {
+    if (mpz_cmp(mpq_numref(r), mpq_denref(r)) < 0)
         return 0;
-    mpz_fdiv_q(ztemp, mpq_numref(q), mpq_denref(q));
+    mpz_fdiv_q(ztemp, mpq_numref(r), mpq_denref(r));
     return mpz_get_ui(ztemp);
 }
 
-uint find_multi(mpq_t q) {
-    if (mpq_sgn(q) == 0)
+uint find_multi(mpq_t r) {
+    if (mpq_sgn(r) == 0)
         return 0;
-    uint unit = mpq_int(q);
+    uint unit = mpq_int(r);
     if (unit) {
-        mpz_fdiv_r(mpq_numref(q), mpq_numref(q), mpq_denref(q));
-        if (mpq_sgn(q) == 0)
+        mpz_fdiv_r(mpq_numref(r), mpq_numref(r), mpq_denref(r));
+        if (mpq_sgn(r) == 0)
             return unit;
     }
-    if (mpz_cmp_ui(mpq_numref(q), 1) == 0)
+    if (mpz_cmp_ui(mpq_numref(r), 1) == 0)
         return unit + 1;
-    mpq_get_num(PI(0), q);
-    mpq_get_den(QI(0), q);
+    mpq_get_num(PI(0), r);
+    mpq_get_den(QI(0), r);
     factorize(0);
     if (find_m2(0))
         return unit + 2;
