@@ -251,7 +251,7 @@ void recurse(void) {
             uint count = count_squares();
             if (count > best) {
                 best = count;
-#if 0
+#if 1
                 printf("%u:", best);
                 for (uint i = 0; i < n; ++i) {
                     v[i].best = v[i].v;
@@ -289,10 +289,18 @@ void recurse(void) {
         if (bits % muldim)
             goto next_value;
 #else
-        /* eg {0,1,3} can be reflected to {0,1,2} */
-        if (dmin == 1 && bits == 2 && (curv & 1) && sp > 1
-                && !findv(curv ^ 1, 2, sp))
-            goto next_value;
+        if (bits == 2) {
+            /* eg {0,1,3} can be reflected to {0,1,2} */
+            if (dmin == 1 && (curv & 1) && sp > 1 && !findv(curv ^ 1, 2, sp))
+                goto next_value;
+        } else if (bits == 1) {
+            /* eg {0,1,3,4} can be reflected to {0,1,2,5} */
+            if (sp > 2 && v[2].v != 2)
+                goto next_value;
+            /* eg {0,1,4} can be reflected to {0,1,2} */
+            if (sp == 2 && curv > 2)
+                goto next_value;
+        }
 #endif
         for (uint i = 1; i < sp; ++i)
             if (vbits(curv ^ v[i].v) < dmin)
