@@ -442,21 +442,27 @@ bool find_square_sn(uint ri, uint depth) {
     return 0;
 }
 
-uint find_square_set(mpq_t r, uint max_depth) {
-    if (mpq_sgn(r) == 0)
-        return 0;
-    gmp_printf("%Qu: not 0 (%.2fs)\n", r, seconds());
-    if (mpz_cmp_ui(mpq_numref(r), 1) == 0
-        && mpz_perfect_square_p(mpq_denref(r))
-    )
-        return 1;
-    gmp_printf("%Qu: not 1 (%.2fs)\n", r, seconds());
+uint find_square_set(mpq_t r, uint min_depth, uint max_depth) {
+    if (min_depth <= 0) {
+        if (mpq_sgn(r) == 0)
+            return 0;
+        gmp_printf("%Qu: not 0 (%.2fs)\n", r, seconds());
+    }
+    if (min_depth <= 1) {
+        if (mpz_cmp_ui(mpq_numref(r), 1) == 0
+            && mpz_perfect_square_p(mpq_denref(r))
+        )
+            return 1;
+        gmp_printf("%Qu: not 1 (%.2fs)\n", r, seconds());
+    }
     mpq_get_num(PI(0), r);
     mpq_get_den(QI(0), r);
-    if (find_square_s2(0))
-        return 2;
-    gmp_printf("%Qu: not 2 (%.2fs)\n", r, seconds());
-    for (uint c = 3; c <= max_depth; ++c) {
+    if (min_depth <= 2) {
+        if (find_square_s2(0))
+            return 2;
+        gmp_printf("%Qu: not 2 (%.2fs)\n", r, seconds());
+    }
+    for (uint c = (min_depth > 3) ? min_depth : 3; c <= max_depth; ++c) {
         if (find_square_sn(0, c)) {
             for (uint i = 0; i <= c - 2; ++i)
                 gmp_printf("%Zu (%Qd); ", MINI(i), RI(i));
