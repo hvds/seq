@@ -1,0 +1,168 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use Math::BigInt qw{ lib GMP };
+use Math::BigRat qw{ lib GMP };
+use Math::Prime::Util qw{ factor_exp divisors };
+use lib '../lib';
+use H::Diag qw{ diag keep_diag };
+sub usq { return Math::BigRat->new(1, $_[0] * $_[0]) }
+
+my($p, $q) = @ARGV;
+my %exclude = map +($_ => 1), @ARGV[2..$#ARGV];
+my $r = Math::BigRat->new($p, $q);
+print "trying $r\n";
+my $max_factors = 1 << 20;
+
+# find min for continuous run
+my @sq;
+for ($sq[0] = 1; 1; ++$sq[0]) {
+    ++$sq[0] while $exclude{$sq[0]};
+    my $rmin = usq($sq[0]);
+    next if $rmin > $r;
+    $r -= $rmin;
+    last;
+}
+print "min $sq[0] leaving $r\n";
+
+# find max for continuous run
+while (1) {
+    my $i = @sq;
+    my $n = $sq[$i - 1] + 1;
+    ++$n while $exclude{$n};
+    my $rmax = usq($n);
+    last if $rmax > $r;
+    push @sq, $n;
+    $r -= $rmax;
+}
+print "max $sq[-1] leaving $r\n";
+
+# find divisors of denominator
+my $data = {
+    r => $r,
+    p => $r->numerator,
+    q => $r->denominator,
+    fq => [ factor_exp($r->denominator) ],
+};
+get_root($data);
+while (1) {
+    if ($data->{factors} <= $max_factors) {
+        printf "try %s with root %s (%s factors)\n",
+                @$data{qw{ r root factors}};
+        last if try_factors($data);
+        expand_factors($data);
+    } else {
+        try_cast($data);
+    }
+}
+exit 0;
+
+our(@d, %d);
+my @cur;
+my $counter; BEGIN { $counter = 0 }
+sub try_srg {
+    my($targ, $cur, $min, $best) = @_;
+diag("t=$targ c=$cur m=$min b=@{[ $best // 'u' ]} [@cur]")
+        if (++$counter % 100000) == 0;
+    return unless $d[$min];
+    my $exact = $d{$targ};
+(keep_diag(), print "[@sq] [@cur] +[$exact]\n"),
+    return [$exact] if $exact && $exact >= $d[$min][0];
+
+    # if not exact, will need at least $cur + 2
+    return if defined($best) && $cur + 2 >= $best;
+
+    my $tried;
+    for my $this ($min .. $#d) {
+        my($d, $v) = @{ $d[$this] };
+        next if $v > $targ;
+        last if defined($best) && (
+            $targ > $v * ($best - $cur - 1)
+        );
+        local $cur[$cur] = $d;
+        my $got = try_srg($targ - $v, $cur + 1, $this + 1, $best)
+                // next;
+        $tried = [ $d, @$got ];
+        $best = @$tried + $cur;
+    }
+    return $tried;
+}
+
+# reset p/q to kp/kq with kq square, find sqrt(kq) and count its factors
+sub get_root {
+    my($data) = @_;
+    my $root = Math::BigInt->new(1);
+    my $count = Math::BigInt->new(1);
+    my($p, $q) = @$data{qw{ p q }};
+    for (@{ $data->{fq} }) {
+        my($prime, $exp) = @$_;
+        if ($exp & 1) {
+            $p *= $prime;
+            $q *= $prime;
+            ++$exp;
+        }
+        $_->[1] = $exp >>= 1;
+        $root *= $prime ** $exp;
+        $count *= $exp + 1;
+    }
+    @$data{qw{ p q root factors }} = ($p, $q, $root, $count);
+    return;
+}
+
+# try simple recursive greedy over divisors of root
+sub try_factors {
+    my($data) = @_;
+    my($p, $q, $root) = @$data{qw{ p q root }};
+    my $r2 = $root * $root;
+    local @d = map [ $_, $r2 / $_ / $_ ], divisors($root);
+    local %d = map +($_->[1] => $_->[0]), @d;
+
+    # try simple recursive greedy
+    my $best = try_srg($p, 0, 0, undef);
+    keep_diag();
+    return 0 unless $best;
+    my $count = @sq + @$best;
+    print "best srg $count [@sq @$best]\n";
+    return 1;
+}
+
+# reset p/q to k^2p/k^2q so that sqrt(k^2q) is divisible by the least factor
+# that doesn't already divide sqrt(q); recalc root and factors
+sub expand_factors {
+    my($data) = @_;
+    my($root) = $data->{root};
+    my $n = 2;
+    ++$n while ($root % $n) == 0;
+    my $p = $n / $root->bgcd($n);
+    my $fq = $data->{fq};
+    use List::Util qw{ first };
+    my $fqi = first { $fq->[$_][0] == $p } 0 .. $#$fq;
+    if (defined $fqi) {
+        my $exp = ++$fq->[$fqi][1];
+        $data->{factors} /= $exp;
+        $data->{factors} *= $exp + 1;
+    } else {
+        push @$fq, [$p, 1];
+        $data->{factors} *= 2;
+    }
+    $data->{root} *= $p;
+    my $p2 = $p * $p;
+    $data->{p} *= $p2;
+    $data->{q} *= $p2;
+    return;
+}
+
+# reduce factors in root by casting out the highest prime power dividing it
+sub try_cast {
+    my($data) = @_;
+    my($max, $pmax, $xe) = (0);
+    for (@{ $data->{fq} }) {
+        my $v = $_->[0] ** $_->[1];
+        next unless $v > $max;
+        ($max, $pmax, $xe) = ($v, @$_);
+    }
+    my $pm2 = $pmax * $pmax;
+    my($p, $q) = @$data{qw{ p q }};
+    my $pmod = $p % $pm2;
+    die "todo: try_cast $pmax^$xe with modval $pmod\n";
+}

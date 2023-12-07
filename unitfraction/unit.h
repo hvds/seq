@@ -19,6 +19,8 @@ extern bool better_multi(mpq_t q, uint c);
 extern uint find_set(mpq_t q);
 /* Returns min(| M |): sum{1/m_i} = q. */
 extern uint find_multi(mpq_t q);
+/* Returns min(| S |): sum{1/s_i^2} = q. */
+extern uint find_square_set(mpq_t q, uint max_depth);
 
 /* handy macros in case we need to debug our GMP memory use */
 #define ZINIT(z) mpz_init(z)

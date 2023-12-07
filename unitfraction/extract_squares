@@ -1,0 +1,12 @@
+#!/usr/bin/perl -w
+use strict;
+use warnings;
+use Math::BigInt;
+# parse line emitted by ./minset -q ...
+my $line = @ARGV ? join(' ', @ARGV) : <>;
+my($d, $p, $q);
+($d) = ($line =~ /d=(\d+)/) or die;
+($p, $q) = ($line =~ /q=(\d+)\/(\d+)/) or die;
+
+$_ = Math::BigInt->new($_) for ($d, $p, $q);
+print sqrt(($q + $d) / $p), " ", sqrt(($q + $q * $q / $d) / $p), "\n";

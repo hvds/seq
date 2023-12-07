@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
     uint arg = 1;
     uint depth = 20;
     bool multi = 0;
+    bool square = 0;
 
     while (arg < argc && argv[arg][0] == '-') {
         char* s = argv[arg++];
@@ -39,6 +40,10 @@ int main(int argc, char** argv) {
             multi = 1;
             continue;
         }
+        if (s[1] == 'q') {
+            square = 1;
+            continue;
+        }
         fprintf(stderr, "Unknown option '%s'\n", s);
         argc = -1;  /* force usage message */
         break;
@@ -50,8 +55,12 @@ int main(int argc, char** argv) {
         mpq_add(qs, qs, qr);
     }
 
-    uint best = (multi) ? find_multi(qs) : find_set(qs);
-    printf("best %u\n", best);
+    uint best = (square) ? find_square_set(qs, depth)
+            : (multi) ? find_multi(qs) : find_set(qs);
+    if (best)
+        printf("best %u\n", best);
+    else
+        printf("no solution found up to depth %d\n", depth);
 
     done();
     return 0;
