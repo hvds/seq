@@ -147,7 +147,6 @@ void init_divs(uint ri) {
         mpz_set_ui(f[0].pk, 1);
         f[0].i = 0;
     }
-    f[fcount - 1].i <<= 1;
     return;
 }
 
@@ -156,7 +155,7 @@ void init_divs(uint ri) {
  * in order.
  * Returns false when all divisors have been walked.
  */
-bool next_div(void) {
+bool next_div(mpz_t max) {
     uint fi = 0;
     mpz_set(nextdiv, f[0].pk);
     while (1) {
@@ -170,7 +169,9 @@ bool next_div(void) {
             ++fi;
         } else {
             mpz_mul_ui(f[fi].pk, f[fi].pk, f[fi].p);
-            break;
+            if (mpz_cmp(f[fi].pk, max) <= 0)
+                break;
+            ++fi;
         }
     }
     while (fi > 0) {
@@ -194,7 +195,7 @@ bool find_s2(uint ri) {
 
     /* if the divisors were sorted, we could use a binary chop to find the
      * start point, and know that floor(dcount / 2) is the end point */
-    while (next_div()) {
+    while (next_div(QI(ri))) {
         if (mpz_cmp(f2_min, nextdiv) >= 0)
             continue;
         if (mpz_cmp(QI(ri), nextdiv) <= 0)
@@ -219,7 +220,7 @@ bool find_m2(uint ri) {
 
     /* if the divisors were sorted, we could use a binary chop to find the
      * start point, and know that floor(dcount / 2) is the end point */
-    while (next_div()) {
+    while (next_div(QI(ri))) {
         if (mpz_cmp(f2_min, nextdiv) > 0)
             continue;
         if (mpz_cmp(QI(ri), nextdiv) <= 0)
@@ -380,7 +381,7 @@ bool find_square_s2(uint ri) {
 
     /* if the divisors were sorted, we could use a binary chop to find the
      * start point, and know that floor(dcount / 2) is the end point */
-    while (next_div()) {
+    while (next_div(QI(ri))) {
         if (mpz_cmp(f2_min, nextdiv) >= 0)
             continue;
         if (mpz_cmp(QI(ri), nextdiv) <= 0)
