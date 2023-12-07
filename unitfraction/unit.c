@@ -12,19 +12,18 @@
 
 uint maxdepth;
 
-/* a prime power p^k, used for representing a factorization */
+/* a prime power p^k, used for representing a factorization of some q
+ * and iterating divisors of q^2 */
 typedef struct fac_s {
-    uint p;
-    uint k;
+    uint p;     /* prime */
+    uint k;     /* power */
+    uint i;     /* position of divisors iterator */
+    mpz_t pk;   /* power of divisors iterator */
 } fac_t;
 
 fac_t* f;       /* factors of q */
 uint fcount;    /* number of factors in f */
 uint fsize;     /* malloced size of f */
-
-mpz_t* divs = NULL;     /* divisors of some q^2 */
-uint dcount = 0;        /* number of divisors */
-uint dsize = 0;         /* malloced size of divs */
 
 /* Structure recording information about a rational p/q at a given depth in
  * the recursion.
@@ -46,7 +45,7 @@ rat_t *rat;
 #define MINI(ri) mpq_denref(rat[ri].qmin)
 #define MAXI(ri) rat[ri].max
 
-mpz_t f2_mod, f2_min, ztemp;
+mpz_t f2_mod, f2_min, nextdiv, ztemp;
 mpq_t qtemp;
 
 double t0 = 0;
@@ -60,14 +59,9 @@ static inline double seconds(void) {
 
 void resize_fac(uint size) {
     f = (fac_t *)realloc(f, size * sizeof(fac_t));
+    for (uint i = fsize; i < size; ++i)
+        ZINIT(f[i].pk);
     fsize = size;
-}
-
-void resize_div(uint size) {
-    divs = (mpz_t *)realloc(divs, size * sizeof(mpz_t));
-    for (uint i = dsize; i < size; ++i)
-        ZINIT(divs[i]);
-    dsize = size;
 }
 
 /* print details of the structure rat[ri] to stderr */
@@ -92,10 +86,9 @@ void init_unit(uint max) {
     fsize = 0;
     f = NULL;
     resize_fac(10);
-    dsize = 0;
-    resize_div(1024);
     ZINIT(f2_mod);
     ZINIT(f2_min);
+    ZINIT(nextdiv);
     ZINIT(ztemp);
     QINIT(qtemp);
 }
@@ -107,25 +100,27 @@ void done_unit(void) {
         ZCLEAR(rat[i].max);
     }
     free(rat);
+    for (uint i = 0; i < fsize; ++i)
+        ZCLEAR(f[i].pk);
     free(f);
-    for (uint i = 0; i < dsize; ++i)
-        ZCLEAR(divs[i]);
-    free(divs);
     ZCLEAR(f2_mod);
     ZCLEAR(f2_min);
+    ZCLEAR(nextdiv);
     ZCLEAR(ztemp);
     QCLEAR(qtemp);
 }
 
-/* set rat[ri].f to the factors of QI(ri) */
-void factorize(uint ri) {
+/* set rat[ri].f to the factors of QI(ri), and initialize to walk divisors */
+void init_divs(uint ri) {
     uint ni = 0;
     mpz_set(ztemp, QI(ri));
     if (mpz_even_p(ztemp)) {
         f[ni].p = 2;
         f[ni].k = 0;
+        f[ni].i = 0;
+        mpz_set_ui(f[ni].pk, 1);
         while (mpz_even_p(ztemp)) {
-            ++f[ni].k;
+            f[ni].k += 2;
             mpz_divexact_ui(ztemp, ztemp, 2);
         }
         ++ni;
@@ -137,8 +132,10 @@ void factorize(uint ri) {
                 resize_fac(fsize + 8);
             f[ni].p = p;
             f[ni].k = 0;
+            f[ni].i = 0;
+            mpz_set_ui(f[ni].pk, 1);
             while (mpz_divisible_ui_p(ztemp, p)) {
-                ++f[ni].k;
+                f[ni].k += 2;
                 mpz_divexact_ui(ztemp, ztemp, p);
             }
             ++ni;
@@ -146,31 +143,42 @@ void factorize(uint ri) {
         p += 2;
     }
     fcount = ni;
+    if (fcount == 0) {
+        mpz_set_ui(f[0].pk, 1);
+        f[0].i = 0;
+    }
+    f[fcount - 1].i <<= 1;
     return;
 }
 
-/* Set divs to the divisors of QI(ri)^2.
+/* Set 'nextdiv' to the next divisor of QI(ri)^2.
+ * init_divs() must have been called before this; divisors are not returned
+ * in order.
+ * Returns false when all divisors have been walked.
  */
-void divisors(uint ri) {
-    factorize(ri);
-    uint count = 1, prev, k, next;
-    uint p;
-    for (uint i = 0; i < fcount; ++i)
-        count *= 2 * f[i].k + 1;
-    if (count > dsize)
-        resize_div(count * 2);
-
-    mpz_set_ui(divs[0], 1);
-    prev = 1;
-    for (uint i = 0; i < fcount; ++i) {
-        p = f[i].p;
-        k = f[i].k * 2;
-        next = prev * k;
-        for (uint j = 0; j < next; ++j)
-            mpz_mul_ui(divs[j + prev], divs[j], p);
-        prev += next;
+bool next_div(void) {
+    uint fi = 0;
+    mpz_set(nextdiv, f[0].pk);
+    while (1) {
+        if (fi == fcount) {
+            if (fi == 0)
+                return f[0].i++ == 0 ? 1 : 0;
+            return 0;
+        }
+        ++f[fi].i;
+        if (f[fi].i > f[fi].k) {
+            ++fi;
+        } else {
+            mpz_mul_ui(f[fi].pk, f[fi].pk, f[fi].p);
+            break;
+        }
     }
-    dcount = count;
+    while (fi > 0) {
+        --fi;
+        mpz_set(f[fi].pk, f[fi + 1].pk);
+        f[fi].i = 0;
+    }
+    return 1;
 }
 
 /* Return TRUE if r = RI(ri) can be expressed as the sum of two distinct
@@ -179,22 +187,20 @@ void divisors(uint ri) {
  * with d == -q (mod p) and mp-q < d < q.
  */
 bool find_s2(uint ri) {
-    divisors(ri);
-    uint end_div = dcount;
-
+    init_divs(ri);
     mpz_ui_sub(f2_mod, 0, QI(ri));
     mpz_mul(f2_min, PI(ri), MINI(ri));
     mpz_sub(f2_min, f2_min, QI(ri));
 
     /* if the divisors were sorted, we could use a binary chop to find the
      * start point, and know that floor(dcount / 2) is the end point */
-    for (uint i = 0; i < end_div; ++i) {
-        if (mpz_cmp(f2_min, divs[i]) >= 0)
+    while (next_div()) {
+        if (mpz_cmp(f2_min, nextdiv) >= 0)
             continue;
-        if (mpz_cmp(QI(ri), divs[i]) <= 0)
+        if (mpz_cmp(QI(ri), nextdiv) <= 0)
             continue;
         /* it might be faster to normalize both mod p, and check equality */
-        if (mpz_congruent_p(f2_mod, divs[i], PI(ri)))
+        if (mpz_congruent_p(f2_mod, nextdiv, PI(ri)))
             return 1;
     }
     return 0;
@@ -206,22 +212,20 @@ bool find_s2(uint ri) {
  * with d == -q (mod p) and mp-q <= d < q.
  */
 bool find_m2(uint ri) {
-    divisors(ri);
-    uint end_div = dcount;
-
+    init_divs(ri);
     mpz_ui_sub(f2_mod, 0, QI(ri));
     mpz_mul(f2_min, PI(ri), MINI(ri));
     mpz_sub(f2_min, f2_min, QI(ri));
 
     /* if the divisors were sorted, we could use a binary chop to find the
      * start point, and know that floor(dcount / 2) is the end point */
-    for (uint i = 0; i < end_div; ++i) {
-        if (mpz_cmp(f2_min, divs[i]) > 0)
+    while (next_div()) {
+        if (mpz_cmp(f2_min, nextdiv) > 0)
             continue;
-        if (mpz_cmp(QI(ri), divs[i]) <= 0)
+        if (mpz_cmp(QI(ri), nextdiv) <= 0)
             continue;
         /* it might be faster to normalize both mod p, and check equality */
-        if (mpz_congruent_p(f2_mod, divs[i], PI(ri)))
+        if (mpz_congruent_p(f2_mod, nextdiv, PI(ri)))
             return 1;
     }
     return 0;
@@ -368,9 +372,7 @@ uint find_multi(mpq_t r) {
  * are both perfect squares.
  */
 bool find_square_s2(uint ri) {
-    divisors(ri);
-    uint end_div = dcount;
-
+    init_divs(ri);
     mpz_ui_sub(f2_mod, 0, QI(ri));
     mpz_mul(f2_min, PI(ri), MINI(ri));
     mpz_mul(f2_min, f2_min, MINI(ri));
@@ -378,25 +380,25 @@ bool find_square_s2(uint ri) {
 
     /* if the divisors were sorted, we could use a binary chop to find the
      * start point, and know that floor(dcount / 2) is the end point */
-    for (uint i = 0; i < end_div; ++i) {
-        if (mpz_cmp(f2_min, divs[i]) >= 0)
+    while (next_div()) {
+        if (mpz_cmp(f2_min, nextdiv) >= 0)
             continue;
-        if (mpz_cmp(QI(ri), divs[i]) <= 0)
+        if (mpz_cmp(QI(ri), nextdiv) <= 0)
             continue;
         /* it might be faster to normalize both mod p, and check equality */
-        if (!mpz_congruent_p(f2_mod, divs[i], PI(ri)))
+        if (!mpz_congruent_p(f2_mod, nextdiv, PI(ri)))
             continue;
-        mpz_add(ztemp, QI(ri), divs[i]);
+        mpz_add(ztemp, QI(ri), nextdiv);
         mpz_divexact(ztemp, ztemp, PI(ri));
         if (!mpz_perfect_square_p(ztemp))
             continue;
         mpz_mul(ztemp, QI(ri), QI(ri));
-        mpz_divexact(ztemp, ztemp, divs[i]);
+        mpz_divexact(ztemp, ztemp, nextdiv);
         mpz_add(ztemp, ztemp, QI(ri));
         mpz_divexact(ztemp, ztemp, PI(ri));
         if (!mpz_perfect_square_p(ztemp))
             continue;
-gmp_printf("success with d=%Zi for q=%Qi\n", divs[i], RI(ri));
+gmp_printf("success with d=%Zi for q=%Qi\n", nextdiv, RI(ri));
         return 1;
     }
     return 0;
