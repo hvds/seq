@@ -1,8 +1,4 @@
 #include "unit.h"
-/* Math-Prime-Util-GMP/factor.h */
-#include "factor.h"
-/* Math-Prime-Util-GMP/gmp_main.h */
-#include "gmp_main.h"
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -89,7 +85,6 @@ void diagnose(uint ri) {
 
 void init_unit(uint max) {
     t0 = seconds();
-    _GMP_init(); /* Math-Prime-Util-GMP/gmp_main.c */
     maxdepth = max;
     rat = malloc(maxdepth * sizeof(rat_t));
     for (uint i = 0; i < maxdepth; ++i) {
@@ -129,21 +124,32 @@ void done_unit(void) {
 
 /* set rat[ri].f to the factors of QI(ri) */
 void factorize(uint ri) {
-    mpz_t *pfactors = NULL;
-    int *pexponents = NULL;
-    /* Math-Prime-Util-GMP/factor.c */
-    uint nfactors = factor(QI(ri), &pfactors, &pexponents);
-    if (nfactors >= rat[ri].fsize)
-        resize_fac(ri, nfactors + 8);
-    for (uint i = 0; i < nfactors; ++i) {
-        fac_t *fp = &rat[ri].f[i];
-        fp->p = mpz_get_ui(pfactors[i]);
-        fp->k = pexponents[i];
-        ZCLEAR(pfactors[i]);
+    uint ni = 0;
+    mpz_set(ztemp, QI(ri));
+    if (mpz_even_p(ztemp)) {
+        rat[ri].f[ni].p = 2;
+        rat[ri].f[ni].k = 0;
+        while (mpz_even_p(ztemp)) {
+            ++rat[ri].f[ni].k;
+            mpz_divexact_ui(ztemp, ztemp, 2);
+        }
+        ++ni;
     }
-    rat[ri].fcount = nfactors;
-    free(pfactors);
-    free(pexponents);
+    uint p = 3;
+    while (mpz_cmp_ui(ztemp, 1) > 0) {
+        if (mpz_divisible_ui_p(ztemp, p)) {
+            if (ni + 1 >= rat[ri].fsize)
+                resize_fac(ri, rat[ri].fsize + 8);
+            rat[ri].f[ni].p = p;
+            rat[ri].f[ni].k = 0;
+            while (mpz_divisible_ui_p(ztemp, p)) {
+                ++rat[ri].f[ni].k;
+                mpz_divexact_ui(ztemp, ztemp, p);
+            }
+        }
+        p += 2;
+    }
+    rat[ri].fcount = ni;
     return;
 }
 
