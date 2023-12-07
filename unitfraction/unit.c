@@ -18,6 +18,10 @@ typedef struct fac_s {
     uint k;
 } fac_t;
 
+fac_t* f;       /* factors of q */
+uint fcount;    /* number of factors in f */
+uint fsize;     /* malloced size of f */
+
 mpz_t* divs = NULL;     /* divisors of some q^2 */
 uint dcount = 0;        /* number of divisors */
 uint dsize = 0;         /* malloced size of divs */
@@ -33,9 +37,6 @@ typedef struct rat_s {
     mpq_t r;        /* the rational itself, p/q */
     mpq_t qmin;     /* 1/min, the last unit fraction to be trial-subtracted */
     mpz_t max;      /* final den. for trial subtraction */
-    fac_t* f;       /* factors of q */
-    uint fcount;    /* number of factors in f */
-    uint fsize;     /* malloced size of f */
 } rat_t;
 rat_t *rat;
 
@@ -57,9 +58,9 @@ static inline double seconds(void) {
             - t0;
 }
 
-void resize_fac(uint ri, uint size) {
-    rat[ri].f = (fac_t *)realloc(rat[ri].f, size * sizeof(fac_t));
-    rat[ri].fsize = size;
+void resize_fac(uint size) {
+    f = (fac_t *)realloc(f, size * sizeof(fac_t));
+    fsize = size;
 }
 
 void resize_div(uint size) {
@@ -74,12 +75,6 @@ void diagnose(uint ri) {
     rat_t* r = &rat[ri];
     gmp_fprintf(stderr, "rat[%d]: r = %Qd; qmin = %Qd; max = %Zd\n",
             ri, r->r, r->qmin, r->max);
-    gmp_fprintf(stderr, "  f[size=%u]:", r->fsize);
-    for (uint i = 0; i < r->fcount; ++i) {
-        if (i)
-            fprintf(stderr, " .");
-        gmp_fprintf(stderr, " %d^%d", r->f[i].p, r->f[i].k);
-    }
     gmp_fprintf(stderr, "\n");
 }
 
@@ -92,11 +87,11 @@ void init_unit(uint max) {
         QINIT(rat[i].qmin);
         mpz_set_ui(mpq_numref(rat[i].qmin), 1);    /* never changes */
         ZINIT(rat[i].max);
-        rat[i].fsize = 0;
-        rat[i].f = NULL;
-        resize_fac(i, 10);
     }
     mpz_set_ui(mpq_denref(rat[0].qmin), 0);     /* base, never changes */
+    fsize = 0;
+    f = NULL;
+    resize_fac(10);
     dsize = 0;
     resize_div(1024);
     ZINIT(f2_mod);
@@ -110,9 +105,9 @@ void done_unit(void) {
         QCLEAR(rat[i].r);
         QCLEAR(rat[i].qmin);
         ZCLEAR(rat[i].max);
-        free(rat[i].f);
     }
     free(rat);
+    free(f);
     for (uint i = 0; i < dsize; ++i)
         ZCLEAR(divs[i]);
     free(divs);
@@ -127,10 +122,10 @@ void factorize(uint ri) {
     uint ni = 0;
     mpz_set(ztemp, QI(ri));
     if (mpz_even_p(ztemp)) {
-        rat[ri].f[ni].p = 2;
-        rat[ri].f[ni].k = 0;
+        f[ni].p = 2;
+        f[ni].k = 0;
         while (mpz_even_p(ztemp)) {
-            ++rat[ri].f[ni].k;
+            ++f[ni].k;
             mpz_divexact_ui(ztemp, ztemp, 2);
         }
         ++ni;
@@ -138,37 +133,38 @@ void factorize(uint ri) {
     uint p = 3;
     while (mpz_cmp_ui(ztemp, 1) > 0) {
         if (mpz_divisible_ui_p(ztemp, p)) {
-            if (ni + 1 >= rat[ri].fsize)
-                resize_fac(ri, rat[ri].fsize + 8);
-            rat[ri].f[ni].p = p;
-            rat[ri].f[ni].k = 0;
+            if (ni + 1 >= fsize)
+                resize_fac(fsize + 8);
+            f[ni].p = p;
+            f[ni].k = 0;
             while (mpz_divisible_ui_p(ztemp, p)) {
-                ++rat[ri].f[ni].k;
+                ++f[ni].k;
                 mpz_divexact_ui(ztemp, ztemp, p);
             }
+            ++ni;
         }
         p += 2;
     }
-    rat[ri].fcount = ni;
+    fcount = ni;
     return;
 }
 
 /* Set divs to the divisors of QI(ri)^2.
- * This assumes factorize(ri) has previously been called.
  */
 void divisors(uint ri) {
+    factorize(ri);
     uint count = 1, prev, k, next;
     uint p;
-    for (uint i = 0; i < rat[ri].fcount; ++i)
-        count *= 2 * rat[ri].f[i].k + 1;
+    for (uint i = 0; i < fcount; ++i)
+        count *= 2 * f[i].k + 1;
     if (count > dsize)
         resize_div(count * 2);
 
     mpz_set_ui(divs[0], 1);
     prev = 1;
-    for (uint i = 0; i < rat[ri].fcount; ++i) {
-        p = rat[ri].f[i].p;
-        k = rat[ri].f[i].k * 2;
+    for (uint i = 0; i < fcount; ++i) {
+        p = f[i].p;
+        k = f[i].k * 2;
         next = prev * k;
         for (uint j = 0; j < next; ++j)
             mpz_mul_ui(divs[j + prev], divs[j], p);
@@ -181,7 +177,6 @@ void divisors(uint ri) {
  * unit fractions with denominators > m = MINI(ri).
  * Given r = p/q, this is true precisely if there exists a divisor d of q^2
  * with d == -q (mod p) and mp-q < d < q.
- * This assumes factorize(ri) has previously been called.
  */
 bool find_s2(uint ri) {
     divisors(ri);
@@ -209,7 +204,6 @@ bool find_s2(uint ri) {
  * unit fractions with denominators >= m = MINI(ri).
  * Given r = p/q, this is true precisely if there exists a divisor d of q^2
  * with d == -q (mod p) and mp-q <= d < q.
- * This assumes factorize(ri) has previously been called.
  */
 bool find_m2(uint ri) {
     divisors(ri);
@@ -248,7 +242,6 @@ bool find_sn(uint ri, uint depth) {
         mpz_add_ui(MINI(rj), MINI(ri), 1);
     while (mpz_cmp(MINI(rj), MAXI(rj)) <= 0) {
         mpq_sub(RI(rj), RI(ri), rat[rj].qmin);
-        factorize(rj);
         if ((depth == 3) ? find_s2(rj) : find_sn(rj, depth - 1))
             return 1;
         mpz_add_ui(MINI(rj), MINI(rj), 1);
@@ -273,7 +266,6 @@ bool find_mn(uint ri, uint depth) {
         mpz_set_ui(MINI(rj), 1);
     while (mpz_cmp(MINI(rj), MAXI(rj)) <= 0) {
         mpq_sub(RI(rj), RI(ri), rat[rj].qmin);
-        factorize(rj);
         if ((depth == 3) ? find_m2(rj) : find_mn(rj, depth - 1))
             return 1;
         mpz_add_ui(MINI(rj), MINI(rj), 1);
@@ -293,7 +285,6 @@ bool better_set(mpq_t r, uint c) {
         return 0;
     mpq_get_num(PI(0), r);
     mpq_get_den(QI(0), r);
-    factorize(0);
     if (find_s2(0))
         return 1;
     if (c == 3)
@@ -315,7 +306,6 @@ bool better_multi(mpq_t r, uint c) {
         return 0;
     mpq_get_num(PI(0), r);
     mpq_get_den(QI(0), r);
-    factorize(0);
     if (find_m2(0))
         return 1;
     if (c == 3)
@@ -332,7 +322,6 @@ uint find_set(mpq_t r) {
         return 1;
     mpq_get_num(PI(0), r);
     mpq_get_den(QI(0), r);
-    factorize(0);
     if (find_s2(0))
         return 2;
     for (uint c = 3; 1; ++c) {
@@ -363,7 +352,6 @@ uint find_multi(mpq_t r) {
         return unit + 1;
     mpq_get_num(PI(0), r);
     mpq_get_den(QI(0), r);
-    factorize(0);
     if (find_m2(0))
         return unit + 2;
     for (uint c = 3; 1; ++c) {
@@ -378,7 +366,6 @@ uint find_multi(mpq_t r) {
  * Given r = p/q, this is true precisely if there exists a divisor d of q^2
  * with d == -q (mod p) and mp-q < d < q such that (q + d)/p and (q + q^2/d)/p
  * are both perfect squares.
- * This assumes factorize(ri) has previously been called.
  */
 bool find_square_s2(uint ri) {
     divisors(ri);
@@ -445,7 +432,6 @@ bool find_square_sn(uint ri, uint depth) {
     while (mpz_cmp(MINI(rj), MAXI(rj)) <= 0) {
         mpq_mul(qtemp, rat[rj].qmin, rat[rj].qmin);
         mpq_sub(RI(rj), RI(ri), qtemp);
-        factorize(rj);
         if ((depth == 3) ? find_square_s2(rj) : find_square_sn(rj, depth - 1))
             return 1;
         mpz_add_ui(MINI(rj), MINI(rj), 1);
@@ -464,7 +450,6 @@ uint find_square_set(mpq_t r, uint max_depth) {
     gmp_printf("%Qu: not 1 (%.2fs)\n", r, seconds());
     mpq_get_num(PI(0), r);
     mpq_get_den(QI(0), r);
-    factorize(0);
     if (find_square_s2(0))
         return 2;
     gmp_printf("%Qu: not 2 (%.2fs)\n", r, seconds());
