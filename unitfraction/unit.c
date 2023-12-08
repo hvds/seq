@@ -162,6 +162,10 @@ bool next_div(mpz_t max) {
         if (fi == fcount) {
             if (fi == 0)
                 return f[0].i++ == 0 ? 1 : 0;
+            if (f[0].i < f[0].k + 2) {
+                f[0].i = f[0].k + 2;
+                return 1;
+            }
             return 0;
         }
         ++f[fi].i;
