@@ -150,6 +150,47 @@ void init_divs(uint ri) {
     return;
 }
 
+/* For squares, we want divisors d of q^2 such that q/d is a square.
+ * For each odd prime power in q, reduce the exponent by 1 and multiply
+ * the prime into an accumulator; finally, set the accumulator to be the
+ * base of all divisors.
+ * Then replace (p, 2k) with (p^2, k) for the iteration.
+ */
+void init_sq_divs(uint ri) {
+    init_divs(ri);
+    uint fi, fj = 0;
+    mpz_set_ui(ztemp, 1);
+    for (fi = 0; fi < fcount; ++fi) {
+        /* exponent is of q^2, we want to know whether exponent in q is odd */
+        if (f[fi].k & 2) {
+            f[fi].k -= 2;
+            mpz_mul_ui(ztemp, ztemp, f[fi].p);
+        }
+        if (f[fi].k > 0) {
+            f[fi].p *= f[fi].p;
+            f[fi].k >>= 1;
+            if (fi > fj) {
+                f[fj].p = f[fi].p;
+                f[fj].k = f[fi].k;
+            }
+            ++fj;
+        }
+    }
+    fcount = fj;
+    if (mpz_cmp_ui(ztemp, 1) > 0) {
+        ++fcount;
+        if (fcount > fsize)
+            resize_fac(fsize + 8);
+        f[fj].p = 1;
+        f[fj].k = 0;
+        f[fj].i = 0;
+        mpz_set(f[fj].pk, ztemp);
+        for (fi = 0; fi < fj; ++fi)
+            mpz_set(f[fi].pk, ztemp);
+    }
+    return;
+}
+
 /* Set 'nextdiv' to the next divisor of QI(ri)^2.
  * init_divs() must have been called before this; divisors are not returned
  * in order.
@@ -373,11 +414,12 @@ uint find_multi(mpq_t r) {
 /* Return TRUE if r = RI(ri) can be expressed as the sum of two distinct
  * square unit fractions with denominators > (m = MINI(ri))^2.
  * Given r = p/q, this is true precisely if there exists a divisor d of q^2
- * with d == -q (mod p) and mp-q < d < q such that (q + d)/p and (q + q^2/d)/p
- * are both perfect squares.
+ * with d == -q (mod p) and mp-q < d < q such that a = (q + d)/p and
+ * b = (q + q^2/d)/p are both perfect squares. Since this implies b = q/d a,
+ * we require q/d itself to be a square.
  */
 bool find_square_s2(uint ri) {
-    init_divs(ri);
+    init_sq_divs(ri);
     mpz_ui_sub(f2_mod, 0, QI(ri));
     mpz_mul(f2_min, PI(ri), MINI(ri));
     mpz_mul(f2_min, f2_min, MINI(ri));
@@ -394,12 +436,6 @@ bool find_square_s2(uint ri) {
         if (!mpz_congruent_p(f2_mod, nextdiv, PI(ri)))
             continue;
         mpz_add(ztemp, QI(ri), nextdiv);
-        mpz_divexact(ztemp, ztemp, PI(ri));
-        if (!mpz_perfect_square_p(ztemp))
-            continue;
-        mpz_mul(ztemp, QI(ri), QI(ri));
-        mpz_divexact(ztemp, ztemp, nextdiv);
-        mpz_add(ztemp, ztemp, QI(ri));
         mpz_divexact(ztemp, ztemp, PI(ri));
         if (!mpz_perfect_square_p(ztemp))
             continue;
