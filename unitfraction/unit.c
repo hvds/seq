@@ -1,9 +1,15 @@
 #include "unit.h"
+#include "diag.h"
 
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
+#include <signal.h>
+#include <time.h>
+#include <errno.h>
+
 #include <sys/time.h>
 #include <sys/resource.h>
 
@@ -48,6 +54,14 @@ rat_t *rat;
 mpz_t f2_mod, f2_min, nextdiv, ztemp;
 mpq_t qtemp;
 
+#define DIAG 1
+#define LOG 600
+double diag_delay = DIAG, log_delay = LOG, diagt, logt;
+ulong count_s2 = 0, count_a3 = 0;
+char *diag_buf = NULL;
+uint diag_buf_size = 0;
+uint diag_bufp = 0;
+
 double t0 = 0;
 struct rusage rusage_buf;
 static inline double seconds(void) {
@@ -55,6 +69,43 @@ static inline double seconds(void) {
     return (double)rusage_buf.ru_utime.tv_sec
             + (double)rusage_buf.ru_utime.tv_usec / 1000000
             - t0;
+}
+timer_t diag_timerid, log_timerid;
+volatile bool need_work, need_diag, need_log;
+
+void reset_buf(void) {
+    diag_bufp = 0;
+}
+
+void append_buf(char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    uint size = diag_bufp + gmp_vsnprintf(
+            diag_buf + diag_bufp, diag_buf_size - diag_bufp, fmt, ap);
+    va_end(ap);
+    if (size > diag_buf_size) {
+        diag_buf = realloc(diag_buf, size + 32);
+        diag_buf_size = size + 32;
+        va_start(ap, fmt);
+        gmp_vsprintf(diag_buf + diag_bufp, fmt, ap);
+        va_end(ap);
+    }
+    diag_bufp = size;
+    return;
+}
+
+void diag_plain(uint ri) {
+    double t1 = seconds();
+    reset_buf();
+    append_buf("%Qu %lu/%lu [", RI(0), count_s2, count_a3);
+    for (uint i = 1; i <= ri; ++i) {
+        if (i > 1) append_buf(" ");
+        append_buf("%Zu", MINI(i));
+    }
+    append_buf("] (%.2fs)", t1);
+    diag("%s", diag_buf);
+    need_work = 0;
+    return;
 }
 
 void resize_fac(uint size) {
@@ -72,8 +123,75 @@ void diagnose(uint ri) {
     gmp_fprintf(stderr, "\n");
 }
 
+void fail(char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    vfprintf(stderr, format, ap);
+    fprintf(stderr, "\n");
+    va_end(ap);
+    exit(1);
+}
+
+void handle_sig(int sig) {
+    need_work = 1;
+    if (sig == SIGUSR1)
+        need_diag = 1;
+    else
+        need_log = 1;
+}
+
+void init_time(void) {
+    struct sigaction sa;
+    struct sigevent sev;
+    struct itimerspec diag_timer, log_timer;
+
+    sa.sa_handler = &handle_sig;
+    sa.sa_flags = SA_RESTART;
+    sigemptyset(&sa.sa_mask);
+
+    if (diag_delay) {
+        if (sigaction(SIGUSR1, &sa, NULL))
+            fail("Could not set USR1 handler: %s\n", strerror(errno));
+        sev.sigev_notify = SIGEV_SIGNAL;
+        sev.sigev_signo = SIGUSR1;
+        sev.sigev_value.sival_ptr = &diag_timerid;
+        if (timer_create(CLOCK_PROCESS_CPUTIME_ID, &sev, &diag_timerid)) {
+            /* guess that the CPUTIME clock is not supported */
+            if (timer_create(CLOCK_REALTIME, &sev, &diag_timerid))
+                fail("Could not create diag timer: %s\n", strerror(errno));
+        }
+        diag_timer.it_value.tv_sec = diag_delay;
+        diag_timer.it_value.tv_nsec = 0;
+        diag_timer.it_interval.tv_sec = diag_delay;
+        diag_timer.it_interval.tv_nsec = 0;
+        if (timer_settime(diag_timerid, 0, &diag_timer, NULL))
+            fail("Could not set diag timer: %s\n", strerror(errno));
+    }
+
+    if (log_delay) {
+        if (sigaction(SIGUSR2, &sa, NULL))
+            fail("Could not set USR2 handler: %s\n", strerror(errno));
+        sev.sigev_notify = SIGEV_SIGNAL;
+        sev.sigev_signo = SIGUSR2;
+        sev.sigev_value.sival_ptr = &log_timerid;
+        if (timer_create(CLOCK_PROCESS_CPUTIME_ID, &sev, &log_timerid)) {
+            /* guess that the CPUTIME clock is not supported */
+            if (timer_create(CLOCK_REALTIME, &sev, &log_timerid))
+                fail("Could not create log timer: %s\n", strerror(errno));
+        }
+        log_timer.it_value.tv_sec = log_delay;
+        log_timer.it_value.tv_nsec = 0;
+        log_timer.it_interval.tv_sec = log_delay;
+        log_timer.it_interval.tv_nsec = 0;
+        if (timer_settime(log_timerid, 0, &log_timer, NULL))
+            fail("Could not set log timer: %s\n", strerror(errno));
+    }
+}
+
 void init_unit(uint max) {
     t0 = seconds();
+    init_diag();    /* ignore result: worst case we lose ^Z handling */
+    init_time();
     maxdepth = max;
     rat = malloc(maxdepth * sizeof(rat_t));
     for (uint i = 0; i < maxdepth; ++i) {
@@ -94,6 +212,8 @@ void init_unit(uint max) {
 }
 
 void done_unit(void) {
+    keep_diag();
+    free(diag_buf);
     for (uint i = 0; i < maxdepth; ++i) {
         QCLEAR(rat[i].r);
         QCLEAR(rat[i].qmin);
@@ -434,8 +554,13 @@ bool test_and3(mpz_t z) {
  * partial check for this.
  */
 bool find_square_s2(uint ri) {
-    if (test_and3(PI(ri)))
+    if (need_work)
+        diag_plain(ri);
+    if (test_and3(PI(ri))) {
+        ++count_a3;
         return 0;
+    }
+    ++count_s2;
 
     init_sq_divs(ri);
     mpz_ui_sub(f2_mod, 0, QI(ri));
@@ -515,26 +640,38 @@ uint find_square_set(mpq_t r, uint min_depth, uint max_depth) {
     if (min_depth <= 0) {
         if (mpq_sgn(r) == 0)
             return 0;
+        keep_diag();
         gmp_printf("%Qu: not 0 (%.2fs)\n", r, seconds());
+        t0 += seconds();
     }
     if (min_depth <= 1) {
         if (mpz_cmp_ui(mpq_numref(r), 1) == 0
             && mpz_perfect_square_p(mpq_denref(r))
         )
             return 1;
+        keep_diag();
         gmp_printf("%Qu: not 1 (%.2fs)\n", r, seconds());
+        t0 += seconds();
     }
     mpq_get_num(PI(0), r);
     mpq_get_den(QI(0), r);
     if (min_depth <= 2) {
         if (find_square_s2(0))
             return 2;
-        gmp_printf("%Qu: not 2 (%.2fs)\n", r, seconds());
+        keep_diag();
+        gmp_printf("%Qu: not 2 (%.2fs) c=%lu/%lu\n", r, seconds(), count_s2, count_a3);
+        count_s2 = 0;
+        count_a3 = 0;
+        t0 += seconds();
     }
     for (uint c = (min_depth > 3) ? min_depth : 3; c <= max_depth; ++c) {
         if (find_square_sn(0, c))
             return c;
-        gmp_printf("%Qu: not %u (%.2fs)\n", r, c, seconds());
+        keep_diag();
+        gmp_printf("%Qu: not %u (%.2fs) c=%lu/%lu\n", r, c, seconds(), count_s2, count_a3);
+        count_s2 = 0;
+        count_a3 = 0;
+        t0 += seconds();
     }
     return 0;
     /* not reached */
