@@ -411,14 +411,32 @@ uint find_multi(mpq_t r) {
     /* not reached */
 }
 
+/* quick div-3 test: return true if the bit-pattern of z matches ...110*,
+ * a quick-and-dirty way to spot most cases in which the square-free
+ * residue of z is divisible by a prime of the form 4n+3.
+ * In tests, this missed about 4.5% of cases.
+ */
+bool test_and3(mpz_t z) {
+    mp_limb_t z0 = mpz_getlimbn(z, 0);
+    return (z0 & ((z0 ^ (z0 & (z0 - 1))) << 1)) ? 1 : 0;
+}
+
 /* Return TRUE if r = RI(ri) can be expressed as the sum of two distinct
  * square unit fractions with denominators > (m = MINI(ri))^2.
  * Given r = p/q, this is true precisely if there exists a divisor d of q^2
  * with d == -q (mod p) and mp-q < d < q such that a = (q + d)/p and
  * b = (q + q^2/d)/p are both perfect squares. Since this implies b = q/d a,
  * we require q/d itself to be a square.
+ *
+ * Note that no solution is possible if the square-free residue of p is
+ * divisible by any prime of the form 4k+3; however, unlike q, we have no
+ * constraint on how hard p may be to factorize, so we do only a quick
+ * partial check for this.
  */
 bool find_square_s2(uint ri) {
+    if (test_and3(PI(ri)))
+        return 0;
+
     init_sq_divs(ri);
     mpz_ui_sub(f2_mod, 0, QI(ri));
     mpz_mul(f2_min, PI(ri), MINI(ri));
