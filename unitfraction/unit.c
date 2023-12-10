@@ -457,7 +457,18 @@ bool find_square_s2(uint ri) {
         mpz_divexact(ztemp, ztemp, PI(ri));
         if (!mpz_perfect_square_p(ztemp))
             continue;
-gmp_printf("success with d=%Zi for q=%Qi\n", nextdiv, RI(ri));
+        /* we have a solution, so store the relevant values for reporting */
+        mpz_sqrt(MINI(ri + 1), ztemp);
+        mpz_mul(ztemp, ztemp, QI(ri));
+        mpz_divexact(ztemp, ztemp, nextdiv);
+        mpz_sqrt(MINI(ri + 2), ztemp);
+        keep_diag();
+        gmp_printf("%Qu: %u [", RI(0), ri + 2);
+        for (uint i = 1; i <= ri + 2; ++i) {
+            if (i > 1) gmp_printf(" ");
+            gmp_printf("%Zu", MINI(i));
+        }
+        printf("] (%.2fs)\n", seconds());
         return 1;
     }
     return 0;
@@ -521,12 +532,8 @@ uint find_square_set(mpq_t r, uint min_depth, uint max_depth) {
         gmp_printf("%Qu: not 2 (%.2fs)\n", r, seconds());
     }
     for (uint c = (min_depth > 3) ? min_depth : 3; c <= max_depth; ++c) {
-        if (find_square_sn(0, c)) {
-            for (uint i = 0; i <= c - 2; ++i)
-                gmp_printf("%Zu (%Qd); ", MINI(i), RI(i));
-            printf(" (%.2fs)\n", seconds());
+        if (find_square_sn(0, c))
             return c;
-        }
         gmp_printf("%Qu: not %u (%.2fs)\n", r, c, seconds());
     }
     return 0;
