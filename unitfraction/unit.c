@@ -57,7 +57,7 @@ mpq_t qtemp;
 #define DIAG 1
 #define LOG 600
 double diag_delay = DIAG, log_delay = LOG, diagt, logt;
-ulong count_s2 = 0, count_a3 = 0;
+ulong count_s2 = 0, count_p3 = 0, count_q3 = 0;
 char *diag_buf = NULL;
 uint diag_buf_size = 0;
 uint diag_bufp = 0;
@@ -97,7 +97,7 @@ void append_buf(char *fmt, ...) {
 void diag_plain(uint ri) {
     double t1 = seconds();
     reset_buf();
-    append_buf("%Qu %lu/%lu [", RI(0), count_s2, count_a3);
+    append_buf("%Qu %lu/%lu/%lu [", RI(0), count_s2, count_p3, count_q3);
     for (uint i = 1; i <= ri; ++i) {
         if (i > 1) append_buf(" ");
         append_buf("%Zu", MINI(i));
@@ -275,40 +275,75 @@ void init_divs(uint ri) {
  * the prime into an accumulator; finally, set the accumulator to be the
  * base of all divisors.
  * Then replace (p, 2k) with (p^2, k) for the iteration.
+ * If any prime p=4n+3 divides q to an odd power, abort and return false.
  */
-void init_sq_divs(uint ri) {
-    init_divs(ri);
-    uint fi, fj = 0;
-    mpz_set_ui(ztemp, 1);
-    for (fi = 0; fi < fcount; ++fi) {
-        /* exponent is of q^2, we want to know whether exponent in q is odd */
-        if (f[fi].k & 2) {
-            f[fi].k -= 2;
-            mpz_mul_ui(ztemp, ztemp, f[fi].p);
+bool init_sq_divs(uint ri) {
+    uint ni = 0;
+    mpz_set(ztemp, QI(ri));
+    mpz_set_ui(nextdiv, 1); /* accumulate odd powers here */
+    if (mpz_even_p(ztemp)) {
+        uint k = 0;
+        while (mpz_even_p(ztemp)) {
+            ++k;
+            mpz_divexact_ui(ztemp, ztemp, 2);
         }
-        if (f[fi].k > 0) {
-            f[fi].p *= f[fi].p;
-            f[fi].k >>= 1;
-            if (fi > fj) {
-                f[fj].p = f[fi].p;
-                f[fj].k = f[fi].k;
-            }
-            ++fj;
+        if (k & 1) {
+            --k;
+            mpz_mul_ui(nextdiv, nextdiv, 2);
+        }
+        if (k) {
+            f[ni].p = 4;
+            f[ni].k = k;
+            f[ni].i = 0;
+            mpz_set_ui(f[ni].pk, 1);
+            ++ni;
         }
     }
-    fcount = fj;
-    if (mpz_cmp_ui(ztemp, 1) > 0) {
+    uint p = 3;
+    while (mpz_cmp_ui(ztemp, 1) > 0) {
+        if (mpz_divisible_ui_p(ztemp, p)) {
+            if (ni + 1 >= fsize)
+                resize_fac(fsize + 8);
+            uint k = 0;
+            while (mpz_divisible_ui_p(ztemp, p)) {
+                ++k;
+                mpz_divexact_ui(ztemp, ztemp, p);
+            }
+            if (k & 1) {
+                if ((p & 3) == 3)
+                    return 0;
+                --k;
+                mpz_mul_ui(nextdiv, nextdiv, p);
+            }
+            if (k) {
+                f[ni].p = p * p;
+                f[ni].k = k;
+                f[ni].i = 0;
+                mpz_set_ui(f[ni].pk, 1);
+                ++ni;
+            }
+        }
+        p += 2;
+    }
+    fcount = ni;
+    if (fcount == 0) {
+        mpz_set_ui(f[0].pk, 1);
+        f[0].i = 0;
+        return 1;
+    }
+
+    if (mpz_cmp_ui(nextdiv, 1) > 0) {
         ++fcount;
         if (fcount > fsize)
             resize_fac(fsize + 8);
-        f[fj].p = 1;
-        f[fj].k = 0;
-        f[fj].i = 0;
-        mpz_set(f[fj].pk, ztemp);
-        for (fi = 0; fi < fj; ++fi)
-            mpz_set(f[fi].pk, ztemp);
+        f[ni].p = 1;
+        f[ni].k = 0;
+        f[ni].i = 0;
+        mpz_set(f[ni].pk, nextdiv);
+        for (uint fi = 0; fi < ni; ++fi)
+            mpz_set(f[fi].pk, nextdiv);
     }
-    return;
+    return 1;
 }
 
 /* Set 'nextdiv' to the next divisor of QI(ri)^2.
@@ -536,7 +571,7 @@ uint find_multi(mpq_t r) {
  * residue of z is divisible by a prime of the form 4n+3.
  * In tests, this missed about 4.5% of cases.
  */
-bool test_and3(mpz_t z) {
+static inline bool test_and3(mpz_t z) {
     mp_limb_t z0 = mpz_getlimbn(z, 0);
     return (z0 & ((z0 ^ (z0 & (z0 - 1))) << 1)) ? 1 : 0;
 }
@@ -557,12 +592,15 @@ bool find_square_s2(uint ri) {
     if (need_work)
         diag_plain(ri);
     if (test_and3(PI(ri))) {
-        ++count_a3;
+        ++count_p3;
+        return 0;
+    }
+    if (test_and3(QI(ri)) || !init_sq_divs(ri)) {
+        ++count_q3;
         return 0;
     }
     ++count_s2;
 
-    init_sq_divs(ri);
     mpz_ui_sub(f2_mod, 0, QI(ri));
     mpz_mul(f2_min, PI(ri), MINI(ri));
     mpz_mul(f2_min, f2_min, MINI(ri));
@@ -659,18 +697,20 @@ uint find_square_set(mpq_t r, uint min_depth, uint max_depth) {
         if (find_square_s2(0))
             return 2;
         keep_diag();
-        gmp_printf("%Qu: not 2 (%.2fs) c=%lu/%lu\n", r, seconds(), count_s2, count_a3);
+        gmp_printf("%Qu: not 2 (%.2fs) c=%lu/%lu/%lu\n", r, seconds(), count_s2, count_p3, count_q3);
         count_s2 = 0;
-        count_a3 = 0;
+        count_p3 = 0;
+        count_q3 = 0;
         t0 += seconds();
     }
     for (uint c = (min_depth > 3) ? min_depth : 3; c <= max_depth; ++c) {
         if (find_square_sn(0, c))
             return c;
         keep_diag();
-        gmp_printf("%Qu: not %u (%.2fs) c=%lu/%lu\n", r, c, seconds(), count_s2, count_a3);
+        gmp_printf("%Qu: not %u (%.2fs) c=%lu/%lu/%lu\n", r, c, seconds(), count_s2, count_p3, count_q3);
         count_s2 = 0;
-        count_a3 = 0;
+        count_p3 = 0;
+        count_q3 = 0;
         t0 += seconds();
     }
     return 0;
