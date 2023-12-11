@@ -55,9 +55,15 @@ int main(int argc, char** argv) {
     }
 
     init(max_depth);
-    for (uint i = arg; i < argc; ++i) {
-        mpq_set_ui(qr, 1, atoi(argv[i]));
-        mpq_add(qs, qs, qr);
+    if (square && arg + 2 == argc) {
+        uint p = atoi(argv[arg]);
+        uint q = atoi(argv[arg + 1]);
+        mpq_set_ui(qs, p, q);
+    } else {
+        for (uint i = arg; i < argc; ++i) {
+            mpq_set_ui(qr, 1, atoi(argv[i]));
+            mpq_add(qs, qs, qr);
+        }
     }
 
     uint best = (square) ? find_square_set(qs, min_depth, max_depth)
