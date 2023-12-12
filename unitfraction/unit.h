@@ -7,7 +7,7 @@ typedef unsigned char bool;
 typedef unsigned int uint;
 
 /* maxdepth is the greatest cardinality we expect to need. */
-extern void init_unit(uint maxdepth);
+extern void init_unit(uint maxdepth, char *report_path);
 extern void done_unit(void);
 
 /* Returns TRUE if there exists S: |S| < c, sum{1/s_i} = q. */

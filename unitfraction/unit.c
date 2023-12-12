@@ -54,9 +54,12 @@ rat_t *rat;
 mpz_t f2_mod, f2_min, nextdiv, ztemp;
 mpq_t qtemp;
 
+char *rpath = NULL; /* path to log file */
+FILE *rfp = NULL;   /* file handle to log file */
+
 #define DIAG 1
 #define LOG 600
-double diag_delay = DIAG, log_delay = LOG, diagt, logt;
+double diag_delay = DIAG, log_delay = LOG;
 ulong count_s2 = 0, count_p3 = 0, count_q3 = 0;
 char *diag_buf = NULL;
 uint diag_buf_size = 0;
@@ -103,7 +106,14 @@ void diag_plain(uint ri) {
         append_buf("%Zu", MINI(i));
     }
     append_buf("] (%.2fs)", t1);
-    diag("%s", diag_buf);
+    if (need_diag) {
+        diag("%s", diag_buf);
+        need_diag = 0;
+    }
+    if (rfp && need_log) {
+        fprintf(rfp, "305 %s\n", diag_buf);
+        need_log = 0;
+    }
     need_work = 0;
     return;
 }
@@ -129,6 +139,8 @@ void fail(char *format, ...) {
     vfprintf(stderr, format, ap);
     fprintf(stderr, "\n");
     va_end(ap);
+    if (rfp)
+        fclose(rfp);
     exit(1);
 }
 
@@ -188,7 +200,14 @@ void init_time(void) {
     }
 }
 
-void init_unit(uint max) {
+void init_unit(uint max, char* report_path) {
+    rpath = report_path;
+    if (rpath) {
+        rfp = fopen(rpath, "a");
+        if (rfp == NULL)
+            fail("%s: %s", rpath, strerror(errno));
+        setlinebuf(rfp);
+    }
     t0 = seconds();
     init_diag();    /* ignore result: worst case we lose ^Z handling */
     init_time();

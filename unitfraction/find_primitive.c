@@ -15,7 +15,7 @@ long clock_tick;    /* ticks per second */
 mpq_t *minq, *primq, best;
 
 void init(void) {
-    init_unit(limit + 1);
+    init_unit(limit + 1, (char *)NULL);
     minq = malloc((limit + 1) * sizeof(mpq_t));
     primq = malloc((limit + 1) * sizeof(mpq_t));
     for (uint i = 0; i <= limit; ++i) {

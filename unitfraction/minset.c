@@ -7,8 +7,8 @@
 
 mpq_t qr, qs;
 
-void init(uint depth) {
-    init_unit(depth + 1);
+void init(uint depth, char *rpath) {
+    init_unit(depth + 1, rpath);
     QINIT(qr);
     QINIT(qs);
 }
@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
     uint max_depth = 20;
     bool multi = 0;
     bool square = 0;
+    char *rpath = NULL;
 
     while (arg < argc && argv[arg][0] == '-') {
         char* s = argv[arg++];
@@ -49,12 +50,16 @@ int main(int argc, char** argv) {
             square = 1;
             continue;
         }
+        if (s[1] == 'r') {
+            rpath = &s[2];
+            continue;
+        }
         fprintf(stderr, "Unknown option '%s'\n", s);
         argc = -1;  /* force usage message */
         break;
     }
 
-    init(max_depth);
+    init(max_depth, rpath);
     if (square && arg + 2 == argc) {
         uint p = atoi(argv[arg]);
         uint q = atoi(argv[arg + 1]);
