@@ -66,8 +66,12 @@ diag("t=$targ c=$cur m=$min b=@{[ $best // 'u' ]} [@cur]")
         if (++$counter % 100000) == 0;
     return unless $d[$min];
     my $exact = $d{$targ};
-(keep_diag(), print "[@sq] [@cur] +[$exact]\n"),
-    return [$exact] if $exact && $exact >= $d[$min][0];
+    if ($exact && $exact >= $d[$min][0]) {
+        my @all = sort { $a <=> $b } (@sq, @cur, $exact);
+        keep_diag();
+        print 0+@all, " [@all]\n";
+        return [$exact];
+    }
 
     # if not exact, will need at least $cur + 2
     return if defined($best) && $cur + 2 >= $best;
