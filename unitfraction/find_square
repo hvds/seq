@@ -3,7 +3,8 @@ use strict;
 use warnings;
 use Math::BigInt qw{ lib GMP };
 use Math::BigRat qw{ lib GMP };
-use Math::Prime::Util qw{ factor_exp divisors };
+use Math::Prime::Util qw{ factor_exp divisors sqrtmod divmod };
+use List::Util qw{ first };
 use lib '../lib';
 use H::Diag qw{ diag keep_diag };
 sub usq { return Math::BigRat->new(1, $_[0] * $_[0]) }
@@ -43,6 +44,9 @@ my $data = {
     p => $r->numerator,
     q => $r->denominator,
     fq => [ factor_exp($r->denominator) ],
+    sq => \@sq,
+    max_cont => $sq[-1],
+    seen => {},
 };
 get_root($data);
 while (1) {
@@ -52,6 +56,7 @@ while (1) {
         last if try_factors($data);
         expand_factors($data);
     } else {
+        print "try cast from $data->{factors} factors\n";
         try_cast($data);
     }
 }
@@ -113,6 +118,23 @@ sub get_root {
     return;
 }
 
+sub try_add {
+    my($data, $k) = @_;
+    return 0 if $k <= $data->{max_cont};
+    return 0 if $data->{seen}{$k};
+    my $r = usq($k);
+    return 0 if $data->{r} < $r;
+    $data->{r} -= $r;
+    print "push $k giving $data->{r}\n";
+    $data->{p} = $data->{r}->numerator;
+    $data->{q} = $data->{r}->denominator;
+    $data->{fq} = [ factor_exp($data->{q}) ];
+    push @{ $data->{sq} }, $k;
+    $data->{seen}{$k} = 1;
+    get_root($data);
+    return 1;
+}
+
 # try simple recursive greedy over divisors of root
 sub try_factors {
     my($data) = @_;
@@ -159,14 +181,56 @@ sub expand_factors {
 # reduce factors in root by casting out the highest prime power dividing it
 sub try_cast {
     my($data) = @_;
-    my($max, $pmax, $xe) = (0);
+    my($p, $fq, $root) = @$data{qw{ p fq root }};
+    my(@sq1, @sq2);
     for (@{ $data->{fq} }) {
-        my $v = $_->[0] ** $_->[1];
-        next unless $v > $max;
-        ($max, $pmax, $xe) = ($v, @$_);
+        my($prime, $exp) = @$_;
+        my $v = $prime ** $exp;
+        my $p2 = $prime * $prime;
+        my $sq = sqrtmod($p % $p2 , $p2);
+        if ($sq) {
+            # only if there's a root _and_ it's non-zero
+            push @sq1, [ $prime, $exp, $v, $sq ];
+        } else {
+            push @sq2, [ $prime, $exp, $v ];
+        }
     }
-    my $pm2 = $pmax * $pmax;
-    my($p, $q) = @$data{qw{ p q }};
-    my $pmod = $p % $pm2;
-    die "todo: try_cast $pmax^$xe with modval $pmod\n";
+    @sq1 = sort { $a->[2] <=> $b->[2] } @sq1;
+    @sq2 = sort { $a->[2] <=> $b->[2] } @sq2;
+    my($i1, $i2) = ($#sq1, $#sq2);
+  retry_cast:
+    if ($i1 >= 0) {
+        # try to find a value we can inject that satisfies the biggest element
+        # of @sq1: given target a/b^2 with b = xyp^e, we want
+        # a/b^2 - 1/(xp^e)^2 = a'/c^2: p^e \| c. So we need a = y^2.
+        my($p1, $e1, $v1, $ym) = @{ $sq1[$i1] };
+        my $p2 = $p1 * $p1;
+        my $xy = $root / $v1;
+        my $xm = divmod($xy, $ym, $p2);
+        my $xm2 = $p2 - $xm;
+        ($xm, $xm2) = ($xm2, $xm) if $xm > $xm2;
+        for (1 .. 1000) {
+            for my $x ($xm, grep $p1 != 2, ($xm2)) {
+                if (($xy % $x) == 0) {
+                    if (try_add($data, $x * $v1)) {
+                        my $fq2 = first { $_->[0] == $p1 } @{ $data->{fq} };
+                        die "cast failed ($p1:$x)" if $fq2 && $fq2->[1] >= $e1;
+                        print "try_cast: cast $p1 via $x * $v1\n";
+                        return;
+                    } else {
+                        print "try_add failed for $x * $v1\n";
+                    }
+                }
+            }
+            $_ += $p2 for ($xm, $xm2);
+        }
+        # failed; try something else
+print ".. no match for $p1\n";
+        --$i1;
+        goto retry_cast;
+    } elsif ($i2 >= 0) {
+        my($p2, $e2, $v2) = @{ $sq2[$i2] };
+        die "todo: try_cast single sq2 [$p2^$e2=$v2]\n";
+    }
+    die "try_cast: nothing left to try\n";
 }
