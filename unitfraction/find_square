@@ -9,6 +9,13 @@ use lib '../lib';
 use H::Diag qw{ diag keep_diag };
 sub usq { return Math::BigRat->new(1, $_[0] * $_[0]) }
 
+my $bestn;
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    $bestn = $1 || shift(@ARGV), next if $arg =~ /^-b(\d*)$/;
+    die "unknown option '$arg'";
+}
 my($p, $q) = @ARGV;
 my %exclude = map +($_ => 1), @ARGV[2..$#ARGV];
 my $r = Math::BigRat->new($p, $q);
@@ -97,11 +104,11 @@ sub try_factors {
     local %d = map +($_->[1] => $_->[0]), @d;
 
     # try simple recursive greedy
-    my $best = try_srg($p, 0, 0, undef);
+    my $best = try_srg($p, 0, 0, $bestn ? $bestn - @sq : undef);
     keep_diag();
     return 0 unless $best;
-    my $count = @sq + @$best;
-    print "best srg $count [@sq @$best]\n";
+    $bestn = @sq + @$best;
+    print "best srg $bestn [@sq @$best]\n";
     return 1;
 }
 
