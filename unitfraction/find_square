@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Math::BigInt qw{ lib GMP };
 use Math::BigRat qw{ lib GMP };
-use Math::Prime::Util qw{ factor_exp divisors sqrtmod divmod };
+use Math::Prime::Util qw{ factor_exp divisors sqrtmod divmod invmod };
 use List::Util qw{ first };
 use lib '../lib';
 use H::Diag qw{ diag keep_diag };
@@ -13,7 +13,8 @@ my($p, $q) = @ARGV;
 my %exclude = map +($_ => 1), @ARGV[2..$#ARGV];
 my $r = Math::BigRat->new($p, $q);
 print "trying $r\n";
-my $max_factors = 1 << 20;
+my $max_factors = 1e6;
+my $max_loop = 25;
 
 # find min for continuous run
 my @sq;
@@ -38,34 +39,25 @@ while (1) {
 }
 print "max $sq[-1] leaving $r\n";
 
-# find divisors of denominator
-my $data = {
-    r => $r,
-    p => $r->numerator,
-    q => $r->denominator,
-    fq => [ factor_exp($r->denominator) ],
-    sq => \@sq,
-    max_cont => $sq[-1],
-    seen => {},
-};
-get_root($data);
+my $self = Struc->new($r, \@sq);
 while (1) {
-    if ($data->{factors} <= $max_factors) {
+    if ($self->{factors} <= $max_factors) {
         printf "try %s with root %s (%s factors)\n",
-                @$data{qw{ r root factors}};
-        last if try_factors($data);
-        expand_factors($data);
+                @$self{qw{ r root factors}};
+        last if try_factors($self);
+        expand_factors($self);
     } else {
-        print "try cast from $data->{factors} factors\n";
-        try_cast($data);
+        print "try cast from $self->{factors} factors\n";
+        try_cast($self);
     }
 }
 exit 0;
 
 our(@d, %d);
 my @cur;
-my $counter; BEGIN { $counter = 0 }
 sub try_srg {
+    use feature qw{ state };
+    state $counter = 0;
     my($targ, $cur, $min, $best) = @_;
 diag("t=$targ c=$cur m=$min b=@{[ $best // 'u' ]} [@cur]")
         if (++$counter % 100000) == 0;
@@ -97,50 +89,11 @@ diag("t=$targ c=$cur m=$min b=@{[ $best // 'u' ]} [@cur]")
     return $tried;
 }
 
-# reset p/q to kp/kq with kq square, find sqrt(kq) and count its factors
-sub get_root {
-    my($data) = @_;
-    my $root = Math::BigInt->new(1);
-    my $count = Math::BigInt->new(1);
-    my($p, $q) = @$data{qw{ p q }};
-    for (@{ $data->{fq} }) {
-        my($prime, $exp) = @$_;
-        if ($exp & 1) {
-            $p *= $prime;
-            $q *= $prime;
-            ++$exp;
-        }
-        $_->[1] = $exp >>= 1;
-        $root *= $prime ** $exp;
-        $count *= $exp + 1;
-    }
-    @$data{qw{ p q root factors }} = ($p, $q, $root, $count);
-    return;
-}
-
-sub try_add {
-    my($data, $k) = @_;
-    return 0 if $k <= $data->{max_cont};
-    return 0 if $data->{seen}{$k};
-    my $r = usq($k);
-    return 0 if $data->{r} < $r;
-    $data->{r} -= $r;
-    print "push $k giving $data->{r}\n";
-    $data->{p} = $data->{r}->numerator;
-    $data->{q} = $data->{r}->denominator;
-    $data->{fq} = [ factor_exp($data->{q}) ];
-    push @{ $data->{sq} }, $k;
-    $data->{seen}{$k} = 1;
-    get_root($data);
-    return 1;
-}
-
 # try simple recursive greedy over divisors of root
 sub try_factors {
-    my($data) = @_;
-    my($p, $q, $root) = @$data{qw{ p q root }};
-    my $r2 = $root * $root;
-    local @d = map [ $_, $r2 / $_ / $_ ], divisors($root);
+    my($self) = @_;
+    my($p, $q, $root) = @$self{qw{ p q root }};
+    local @d = map [ $_, $q / $_ / $_ ], divisors($root);
     local %d = map +($_->[1] => $_->[0]), @d;
 
     # try simple recursive greedy
@@ -155,82 +108,238 @@ sub try_factors {
 # reset p/q to k^2p/k^2q so that sqrt(k^2q) is divisible by the least factor
 # that doesn't already divide sqrt(q); recalc root and factors
 sub expand_factors {
-    my($data) = @_;
-    my($root) = $data->{root};
+    my($self) = @_;
+    my $root = $self->{root};
     my $n = 2;
     ++$n while ($root % $n) == 0;
     my $p = $n / $root->bgcd($n);
-    my $fq = $data->{fq};
-    use List::Util qw{ first };
-    my $fqi = first { $fq->[$_][0] == $p } 0 .. $#$fq;
-    if (defined $fqi) {
-        my $exp = ++$fq->[$fqi][1];
-        $data->{factors} /= $exp;
-        $data->{factors} *= $exp + 1;
-    } else {
-        push @$fq, [$p, 1];
-        $data->{factors} *= 2;
-    }
-    $data->{root} *= $p;
-    my $p2 = $p * $p;
-    $data->{p} *= $p2;
-    $data->{q} *= $p2;
+    $self->denorm($p);
     return;
 }
 
-# reduce factors in root by casting out the highest prime power dividing it
+package Struc {
+    use Math::Prime::Util qw{ factor_exp divisors sqrtmod divmod };
+    sub new {
+        my($class, $r, $sq) = @_;
+        my $self = bless {
+            r => $r,
+            sq => \@sq,
+            seen => {},
+        };
+        $self->init;
+        return $self;
+    }
+
+    # denormalize p/q so that q is a square; set up root=sqrt(q), rfq as
+    # its factors, and count the factors
+    sub init {
+        my($self) = @_;
+        my $root = Math::BigInt->new(1);
+        my $factors = Math::BigInt->new(1);
+        my $r = $self->{r};
+        my($p, $q) = ($r->numerator, $r->denominator);
+        my @fq = factor_exp($q);
+        my $maxp = $fq[-1][0];
+        my @rfq = sort { $a->{proot} <=> $b->{proot} } map {
+            my($prime, $base_exp) = @$_;
+            my $root_exp = $base_exp >> 1;
+            if ($base_exp & 1) {
+                $p *= $prime;
+                $q *= $prime;
+                ++$root_exp;
+            }
+            my $proot = $prime ** $root_exp;
+            # raise small primes to at least half the greatest prime
+            while ($proot * $prime * 2 < $maxp) {
+                $p *= $prime * $prime;
+                $q *= $prime * $prime;
+                $proot *= $prime;
+                ++$root_exp;
+            }
+            $root *= $proot;
+            $factors *= $root_exp + 1;
+            {
+                prime => $prime,
+                base_exp => $base_exp,
+                root_exp => $root_exp,
+                proot => $proot,
+            };
+        } @fq;
+        my %reverse = map +($rfq[$_]{prime} => $_), 0 .. $#rfq;
+        @$self{qw{ p q root factors rfq reverse }}
+                = ($p, $q, $root, $factors, \@rfq, \%reverse);
+        return;
+    }
+
+    sub try_add {
+        my($self, $k) = @_;
+print("try_add: $k already seen\n"),
+        return 0 if $self->{seen}{$k};
+        my $usq = Math::BigRat->new(1, $k * $k);
+print("try_add: 1/$k^2 too large\n"),
+        return 0 if $self->{r} < $usq;
+
+        $self->{r} -= $usq;
+        print "push $k giving $self->{r}\n";
+        push @{ $self->{sq} }, $k;
+        $self->{seen}{$k} = 1;
+        $self->init;
+        return 1;
+    }
+
+    sub denorm {
+        my($self, $p) = @_;
+        my $rfq = $self->{rfq};
+        my $i = $self->{reverse}{$p};
+        my $f = defined($i) ? $rfq->[$i] : {
+            prime => $p,
+            base_exp => 0,
+            root_exp => 0,
+            proot => Math::BigInt->new(1),
+        };
+        ++$f->{root_exp};
+        $f->{proot} *= $p;
+        $self->{p} *= $p * $p;
+        $self->{q} *= $p * $p;
+        $self->{root} *= $p;
+        $self->{factors} = $self->{factors}
+                * ($f->{root_exp} + 1) / $f->{root_exp};
+        push @$rfq, $f unless defined $i;
+        @$rfq = sort { $a->{proot} <=> $b->{proot} } @$rfq;
+        $self->{rfq} = $rfq;
+        $self->{reverse} = { map +($rfq->[$_]{prime} => $_), 0 .. $#$rfq };
+        return;
+    }
+};
+
+# Reduce factors in root by casting out the highest prime power dividing it.
+# Generally, subtracting 1/c^2 from target a/(bc)^2 gives (a-b^2)/(bc)^2,
+# so we want to find some b such that a == b^2 (mod p^{2e}) for some p^e
+# dividing c, ideally with b a product of type 2 factors (which cannot
+# be cast out with a single square) and avoiding type 1 factors (which can).
 sub try_cast {
-    my($data) = @_;
-    my($p, $fq, $root) = @$data{qw{ p fq root }};
-    my(@sq1, @sq2);
-    for (@{ $data->{fq} }) {
-        my($prime, $exp) = @$_;
-        my $v = $prime ** $exp;
+    my($self) = @_;
+    my($p, $q, $r, $rfq, $root) = @$self{qw{ p q r rfq root }};
+    my($f1, $sq1);
+    my $targ = Math::BigInt->new(1);
+    for my $f (@$rfq) {
+        my($prime, $exp) = @$f{qw{ prime root_exp }};
         my $p2 = $prime * $prime;
         my $sq = sqrtmod($p % $p2 , $p2);
         if ($sq) {
             # only if there's a root _and_ it's non-zero
-            push @sq1, [ $prime, $exp, $v, $sq ];
+            $sq1 = $sq;
+            $f1 = $f;
+            $f->{sq} = 1;
         } else {
-            push @sq2, [ $prime, $exp, $v ];
+            $targ *= $f->{proot};
+            $f->{sq} = 0;
         }
     }
-    @sq1 = sort { $a->[2] <=> $b->[2] } @sq1;
-    @sq2 = sort { $a->[2] <=> $b->[2] } @sq2;
-    my($i1, $i2) = ($#sq1, $#sq2);
-  retry_cast:
-    if ($i1 >= 0) {
-        # try to find a value we can inject that satisfies the biggest element
-        # of @sq1: given target a/b^2 with b = xyp^e, we want
-        # a/b^2 - 1/(xp^e)^2 = a'/c^2: p^e \| c. So we need a = y^2.
-        my($p1, $e1, $v1, $ym) = @{ $sq1[$i1] };
-        my $p2 = $p1 * $p1;
-        my $xy = $root / $v1;
-        my $xm = divmod($xy, $ym, $p2);
-        my $xm2 = $p2 - $xm;
-        ($xm, $xm2) = ($xm2, $xm) if $xm > $xm2;
-        for (1 .. 1000) {
-            for my $x ($xm, grep $p1 != 2, ($xm2)) {
-                if (($xy % $x) == 0) {
-                    if (try_add($data, $x * $v1)) {
-                        my $fq2 = first { $_->[0] == $p1 } @{ $data->{fq} };
-                        die "cast failed ($p1:$x)" if $fq2 && $fq2->[1] >= $e1;
-                        print "try_cast: cast $p1 via $x * $v1\n";
-                        return;
-                    } else {
-                        print "try_add failed for $x * $v1\n";
+print "targ = $targ\n";
+    if ($f1) {
+        # ideal target is $targ * $sq1->{proot}
+        my($prime, $root_exp, $proot) = @$f1{qw{ prime root_exp proot }};
+        my $v = $prime * $prime;
+        my $want = $p % $v;
+        print "try type 1 p=$prime^$root_exp want $want\n";
+        my $have = $root / $f1->{proot} / $targ;
+        my $havem = ($have * $have) % $v;
+        if ($havem == $want) {
+            print "  stage 0 success with $targ\n";
+            if ($self->try_add($targ * $proot)) {
+                my($rfq2, $rev2) = @$self{qw{ rfq reverse }};
+                if (defined $rev2->{$prime}) {
+                    my $f2 = $rfq2->[$rev2->{$prime}];
+                    die "cast failed" if $f2->{root_exp} >= $root_exp;
+                }
+                print "try_cast ok 1.0 $prime^$root_exp\n";
+                return;
+            } else {
+                print "try_cast failed 1.0 $prime^$root_exp\n";
+            }
+        }
+        my %known = ($havem => $targ);
+# FIXME: if f2->root_exp > 1, we should iterate over the options to
+# generate multiple possible new entries
+        for my $c (0 .. $max_loop) {
+            my $f2 = $rfq->[$c];
+            next if $f1 == $f2;
+            if ($f2->{sq}) {
+                # was excluded, try including it
+                my $m2 = invmod($f2->{proot}, $v);
+                $m2 = ($m2 * $m2) % $v;
+                for my $h (keys %known) {
+                    my $t = $known{$h};
+                    my $h2 = ($h * $m2) % $v;
+                    my $t2 = $t * $f2->{proot};
+                    if ($h2 == $want) {
+                        print "  stage $c success with $t2\n";
+                        if ($self->try_add($t2 * $proot)) {
+                            my($rfq2, $rev2) = @$self{qw{ rfq reverse }};
+                            if (defined $rev2->{$prime}) {
+                                my $f2 = $rfq2->[$rev2->{$prime}];
+                                if ($f2->{root_exp} >= $root_exp) {
+print "before: $r = $p / $q, root = $root; apply $t2 * $proot leaving $self->{r} = $self->{p} / $self->{q}, root = $root\n";
+                                    die "cast failed";
+                                }
+                            }
+                            print "try_cast ok 1.$c $prime^$root_exp\n";
+                            return;
+                        } else {
+                            print "try_cast failed 1.$c $prime^$root_exp\n";
+                        }
                     }
+                    $known{$h2} //= $t2;
+                }
+            } else {
+                # was included, try excluding it
+                my $m2 = $f2->{proot} % $v;
+                $m2 = ($m2 * $m2) % $v;
+                for my $h (keys %known) {
+                    my $t = $known{$h};
+                    my $h2 = ($h * $m2) % $v;
+                    my $t2 = $t / $f2->{proot};
+                    if ($h2 == $want) {
+                        print "  stage $c success with $t2\n";
+                        if ($self->try_add($t2 * $proot)) {
+                            my($rfq2, $rev2) = @$self{qw{ rfq reverse }};
+                            if (defined $rev2->{$prime}) {
+                                my $f2 = $rfq2->[$rev2->{$prime}];
+                                if ($f2->{root_exp} >= $root_exp) {
+print "before: $r = $p / $q, root = $root; apply $t2 * $proot leaving $self->{r} = $self->{p} / $self->{q}, root = $root\n";
+                                    die "cast failed";
+                                }
+                            }
+                            print "try_cast ok 1.$c $prime^$root_exp\n";
+                            return;
+                        } else {
+                            print "try_cast failed 1.$c $prime^$root_exp\n";
+                        }
+                    }
+                    $known{$h2} //= $t2;
                 }
             }
-            $_ += $p2 for ($xm, $xm2);
         }
-        # failed; try something else
-print ".. no match for $p1\n";
-        --$i1;
-        goto retry_cast;
-    } elsif ($i2 >= 0) {
-        my($p2, $e2, $v2) = @{ $sq2[$i2] };
-        die "todo: try_cast single sq2 [$p2^$e2=$v2]\n";
+        die "too many loops, what next?";
+    } else {
+        die "todo: no f1";
+    }
+    # everything failed, try forcing the issue with first available
+    my $x = ($q / $p)->bsqrt + 1;
+    print "try force from x=$x\n";
+    while (1) {
+        if (($root % $x) == 0) {
+            if ($self->try_add($x)) {
+                print "try_cast: force $x\n";
+                return;
+            } else {
+                print "try_add force failed for $x\n";
+                ++$x;
+                next;
+            }
+        }
+        $x += $x->bgcd($root);
     }
     die "try_cast: nothing left to try\n";
 }
