@@ -660,35 +660,42 @@ bool find_square_s2(uint ri) {
  * square unit fractions with denominators > (m = MINI(ri))^2.
  * Requires depth >= 3.
  */
-bool find_square_sn(uint ri, uint depth) {
-    uint rj = ri + 1;
-/*
-    if (mpz_cmp_ui(PI(ri), 1) == 0
-        && mpz_perfect_square_p(QI(ri))
-        ... and QI(ri) > MINI(ri)^2
-    )
-        return 1;
-*/
+bool find_square_sn(uint depth) {
+    uint ri = 0, rj;
 
-    /* max := floor(sqrt(q * depth / p)) */
-    mpz_mul_ui(MAXI(rj), QI(ri), depth);
-    mpz_cdiv_q(MAXI(rj), MAXI(rj), PI(ri));
-    mpz_sqrt(MAXI(rj), MAXI(rj));
+    while (1) {
+        rj = ri + 1;
+        /* max := floor(sqrt(q * depth / p)) */
+        mpz_mul_ui(MAXI(rj), QI(ri), depth - ri);
+        mpz_cdiv_q(MAXI(rj), MAXI(rj), PI(ri));
+        mpz_sqrt(MAXI(rj), MAXI(rj));
 
-    /* min := max(ceil(sqrt(q / p)), prevmin + 1) */
-    mpz_cdiv_q(MINI(rj), QI(ri), PI(ri));
-    mpz_sqrtrem(MINI(rj), ztemp, MINI(rj));
-    if (mpz_sgn(ztemp) > 0)
+        /* min := max(ceil(sqrt(q / p)), prevmin + 1) */
+        mpz_cdiv_q(MINI(rj), QI(ri), PI(ri));
+        mpz_sqrtrem(MINI(rj), ztemp, MINI(rj));
+        if (mpz_sgn(ztemp) > 0)
+            mpz_add_ui(MINI(rj), MINI(rj), 1);
+        if (mpz_cmp(MINI(rj), MINI(ri)) <= 0)
+            mpz_add_ui(MINI(rj), MINI(ri), 1);
+        goto loop_level;
+
+      next_level:
+        rj = ri + 1;
         mpz_add_ui(MINI(rj), MINI(rj), 1);
-    if (mpz_cmp(MINI(rj), MINI(ri)) <= 0)
-        mpz_add_ui(MINI(rj), MINI(ri), 1);
-
-    while (mpz_cmp(MINI(rj), MAXI(rj)) <= 0) {
+      loop_level:
+        if (mpz_cmp(MINI(rj), MAXI(rj)) > 0) {
+            if (ri--)
+                goto next_level;
+            break;
+        }
         mpq_mul(qtemp, rat[rj].qmin, rat[rj].qmin);
         mpq_sub(RI(rj), RI(ri), qtemp);
-        if ((depth == 3) ? find_square_s2(rj) : find_square_sn(rj, depth - 1))
-            return 1;
-        mpz_add_ui(MINI(rj), MINI(rj), 1);
+        if (depth - ri == 3) {
+            if (find_square_s2(rj))
+                return 1;
+            goto next_level;
+        }
+        ++ri;
     }
     return 0;
 }
@@ -723,7 +730,7 @@ uint find_square_set(mpq_t r, uint min_depth, uint max_depth) {
         t0 += seconds();
     }
     for (uint c = (min_depth > 3) ? min_depth : 3; c <= max_depth; ++c) {
-        if (find_square_sn(0, c))
+        if (find_square_sn(c))
             return c;
         keep_diag();
         gmp_printf("%Qu: not %u (%.2fs) c=%lu/%lu/%lu\n", r, c, seconds(), count_s2, count_p3, count_q3);
