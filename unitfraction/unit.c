@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <time.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -50,6 +51,7 @@ rat_t *rat;
 #define PI(ri) mpq_numref(RI(ri))
 #define MINI(ri) mpq_denref(rat[ri].qmin)
 #define MAXI(ri) rat[ri].max
+uint recover_ri;
 
 mpz_t f2_mod, f2_min, nextdiv, ztemp;
 mpq_t qtemp;
@@ -200,9 +202,97 @@ void init_time(void) {
     }
 }
 
+/* Parse a "305" log line for initialization.
+ * Input string should point after the initial "305 ".
+ */
+void parse_305(char *s) {
+    double dtime;
+
+    uint p, q;
+    p = strtoul(s, &s, 10);
+    assert(s[0] == '/');
+    q = strtoul(s + 1, &s, 10);
+    assert(s[0] == ' ');
+    count_s2 = strtoul(s + 1, &s, 10);
+    assert(s[0] == '/');
+    count_p3 = strtoul(s + 1, &s, 10);
+    assert(s[0] == '/');
+    count_q3 = strtoul(s + 1, &s, 10);
+    assert(s[0] == ' ');
+    assert(s[1] == '[');
+    s += 2;
+
+    recover_ri = 0;
+    while (1) {
+        if (s[0] == ']')
+            break;
+        ulong mini = strtoul(s, &s, 10);
+        ++recover_ri;
+        mpz_set_ui(MINI(recover_ri), mini);
+        if (s[0] != ' ')
+            break;
+        ++s;
+    }
+
+    assert(s[0] == ']');
+    assert(s[1] == ' ');
+    assert(s[2] == '(');
+    double t = strtod(s + 3, &s);
+    t0 = -t;
+    assert(s[0] == 's');
+    assert(s[1] == ')');
+}
+
+char *recover(FILE *fp) {
+    char *last305 = NULL;
+    char *curbuf = NULL;
+    size_t len = 120, len305 = 0;
+
+    while (1) {
+        ssize_t nread = getline(&curbuf, &len, fp);
+        if (nread <= 0) {
+            if (errno == 0)
+                break;
+            fail("error reading %s: %s", rpath, strerror(errno));
+        }
+        if (curbuf[nread - 1] != '\n'
+                || memchr(curbuf, 0, nread) != NULL) {
+            /* corrupt line, file should be truncated */
+            off_t offset = ftello(fp);
+            if (offset == -1)
+                fail("could not ask offset: %s", strerror(errno));
+            /* not ftruncate(), we are open only for reading */
+            if (truncate(rpath, offset - nread) != 0)
+                fail("could not truncate %s to %lu: %s", rpath, offset - nread,
+                        strerror(errno));
+            break;
+        }
+        if (strncmp("305 ", curbuf, 4) == 0) {
+            char *t = last305;
+            last305 = curbuf;
+            curbuf = t;
+            size_t lt = len305;
+            len305 = len;
+            len = lt;
+        } else
+            fail("unexpected log line %.3s in %s", curbuf, rpath);
+    }
+
+    free(curbuf);
+    return last305;
+}
+
 void init_unit(uint max, char* report_path) {
+    char *recover_line = NULL;
+
     rpath = report_path;
     if (rpath) {
+        FILE *fp = fopen(rpath, "r");
+        if (fp) {
+            recover_line = recover(fp);
+            fclose(fp);
+        }
+
         rfp = fopen(rpath, "a");
         if (rfp == NULL)
             fail("%s: %s", rpath, strerror(errno));
@@ -228,6 +318,11 @@ void init_unit(uint max, char* report_path) {
     ZINIT(nextdiv);
     ZINIT(ztemp);
     QINIT(qtemp);
+
+    if (recover_line) {
+        parse_305(recover_line + 4);
+        free(recover_line);
+    }
 }
 
 void done_unit(void) {
@@ -660,8 +755,23 @@ bool find_square_s2(uint ri) {
  * square unit fractions with denominators > (m = MINI(ri))^2.
  * Requires depth >= 3.
  */
-bool find_square_sn(uint depth) {
+bool find_square_sn(uint depth, uint recover) {
     uint ri = 0, rj;
+
+    if (recover) {
+        for (; ri + 1 <= recover; ++ri) {
+            rj = ri + 1;
+            /* max := floor(sqrt(q * depth / p)) */
+            mpz_mul_ui(MAXI(rj), QI(ri), depth - ri);
+            mpz_cdiv_q(MAXI(rj), MAXI(rj), PI(ri));
+            mpz_sqrt(MAXI(rj), MAXI(rj));
+
+            mpq_mul(qtemp, rat[rj].qmin, rat[rj].qmin);
+            mpq_sub(RI(rj), RI(ri), qtemp);
+        }
+        --ri;
+        goto loop_test;
+    }
 
     while (1) {
         rj = ri + 1;
@@ -690,6 +800,7 @@ bool find_square_sn(uint depth) {
         }
         mpq_mul(qtemp, rat[rj].qmin, rat[rj].qmin);
         mpq_sub(RI(rj), RI(ri), qtemp);
+      loop_test:
         if (depth - ri == 3) {
             if (find_square_s2(rj))
                 return 1;
@@ -730,8 +841,9 @@ uint find_square_set(mpq_t r, uint min_depth, uint max_depth) {
         t0 += seconds();
     }
     for (uint c = (min_depth > 3) ? min_depth : 3; c <= max_depth; ++c) {
-        if (find_square_sn(c))
+        if (find_square_sn(c, recover_ri))
             return c;
+        recover_ri = 0;
         keep_diag();
         gmp_printf("%Qu: not %u (%.2fs) c=%lu/%lu/%lu\n", r, c, seconds(), count_s2, count_p3, count_q3);
         count_s2 = 0;
