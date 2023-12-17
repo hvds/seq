@@ -245,12 +245,12 @@ sub try_cast {
     }
 print "targ = $targ\n";
     if ($f1) {
-        # ideal target is $targ * $sq1->{proot}
+        # ideal target is $targ * $f1->{proot}
         my($prime, $root_exp, $proot) = @$f1{qw{ prime root_exp proot }};
         my $v = $prime * $prime;
         my $want = $p % $v;
         print "try type 1 p=$prime^$root_exp want $want\n";
-        my $have = $root / $f1->{proot} / $targ;
+        my $have = $root / $proot / $targ;
         my $havem = ($have * $have) % $v;
         if ($havem == $want) {
             print "  stage 0 success with $targ\n";
@@ -267,37 +267,39 @@ print "targ = $targ\n";
             }
         }
         my %known = ($havem => $targ);
-# FIXME: if f2->root_exp > 1, we should iterate over the options to
-# generate multiple possible new entries
         for my $c (0 .. $max_loop) {
             my $f2 = $rfq->[$c];
             next if $f1 == $f2;
+            my($prime2, $exp2) = @$f2{qw{ prime root_exp }};
+
             # if was excluded, try including it; else vice-versa
-            my $incl = $f2->{sq};
-            my $m2 = $incl ? invmod($f2->{proot}, $v) : ($f2->{proot} % $v);
-            $m2 = ($m2 * $m2) % $v;
+            my $incl = $f2->{sq} ? 1 : 0;
+            my $m2p = $incl ? invmod($prime2, $v): ($prime2 % $v);
+            $m2p = ($m2p * $m2p) % $v;
             for my $h (keys %known) {
                 my $t = $known{$h};
-                my $h2 = ($h * $m2) % $v;
-                my $t2 = $incl ? ($t * $f2->{proot}) : ($t / $f2->{proot});
-                if ($h2 == $want) {
-                    print "  stage $c success with $t2\n";
-                    if ($self->try_add($t2 * $proot)) {
-                        my($rfq2, $rev2) = @$self{qw{ rfq reverse }};
-                        if (defined $rev2->{$prime}) {
-                            my $f2 = $rfq2->[$rev2->{$prime}];
-                            if ($f2->{root_exp} >= $root_exp) {
-print "before: $r = $p / $q, root = $root; apply $t2 * $proot leaving $self->{r} = $self->{p} / $self->{q}, root = $root\n";
-                                die "cast failed";
+                for my $power (1 .. $exp2) {
+                    my $h = ($h * $m2p) % $v;
+                    my $t = $incl ? ($t * $prime2) : ($t / $prime2);
+                    if ($h == $want) {
+                        print "  stage $c success with $t\n";
+                        if ($self->try_add($t * $proot)) {
+                            my($rfq2, $rev2) = @$self{qw{ rfq reverse }};
+                            if (defined $rev2->{$prime}) {
+                                my $fq2 = $rfq2->[$rev2->{$prime}];
+                                if ($fq2->{root_exp} >= $root_exp) {
+print "before: $r = $p / $q, root = $root; apply $t * $proot leaving $self->{r} = $self->{p} / $self->{q}, root = $root\n";
+                                    die "cast failed";
+                                }
                             }
+                            print "try_cast ok 1.$c $prime^$root_exp\n";
+                            return;
+                        } else {
+                            print "try_cast failed 1.$c $prime^$root_exp\n";
                         }
-                        print "try_cast ok 1.$c $prime^$root_exp\n";
-                        return;
-                    } else {
-                        print "try_cast failed 1.$c $prime^$root_exp\n";
                     }
+                    $known{$h} //= $t;
                 }
-                $known{$h2} //= $t2;
             }
         }
         die "too many loops, what next?";
