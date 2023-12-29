@@ -460,13 +460,8 @@ bool init_sq_divs(uint ri) {
         if (pi >= nprime)
             extend_sieve(maxsieve + SIEVESIZE);
     }
-    fcount = ni;
-    if (fcount == 0) {
-        mpz_set_ui(f[0].pk, 1);
-        f[0].i = 0;
-        return 1;
-    }
 
+    fcount = ni;
     if (mpz_cmp_ui(nextdiv, 1) > 0) {
         ++fcount;
         if (fcount > fsize)
@@ -478,6 +473,11 @@ bool init_sq_divs(uint ri) {
         mpz_set(f[ni].pk, nextdiv);
         for (uint fi = 0; fi < ni; ++fi)
             mpz_set(f[fi].pk, nextdiv);
+    }
+    if (fcount == 0) {
+        mpz_set_ui(f[0].pk, 1);
+        f[0].i = 0;
+        return 1;
     }
     return 1;
 }
