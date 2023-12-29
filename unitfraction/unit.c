@@ -26,6 +26,7 @@ typedef struct fac_s {
     uint p;     /* prime */
     uint k;     /* power */
     uint i;     /* position of divisors iterator */
+    bool large_p;   /* treat p as sqrt(p) */
     mpz_t pk;   /* power of divisors iterator */
 } fac_t;
 
@@ -415,6 +416,7 @@ bool init_sq_divs(uint ri) {
             f[ni].p = 4;
             f[ni].k = k;
             f[ni].i = 0;
+            f[ni].large_p = 0;
             mpz_set_ui(f[ni].pk, 1);
             ++ni;
         }
@@ -438,7 +440,13 @@ bool init_sq_divs(uint ri) {
                 mpz_mul_ui(nextdiv, nextdiv, p);
             }
             if (k) {
-                f[ni].p = p * p;
+                if (p > 0xffff) {
+                    f[ni].p = p;
+                    f[ni].large_p = 1;
+                } else {
+                    f[ni].p = p * p;
+                    f[ni].large_p = 0;
+                }
                 f[ni].k = k;
                 f[ni].i = 0;
                 mpz_set_ui(f[ni].pk, 1);
@@ -466,6 +474,7 @@ bool init_sq_divs(uint ri) {
         f[ni].p = 1;
         f[ni].k = 0;
         f[ni].i = 0;
+        f[ni].large_p = 0;
         mpz_set(f[ni].pk, nextdiv);
         for (uint fi = 0; fi < ni; ++fi)
             mpz_set(f[fi].pk, nextdiv);
@@ -496,6 +505,8 @@ bool next_div(mpz_t max) {
             ++fi;
         } else {
             mpz_mul_ui(f[fi].pk, f[fi].pk, f[fi].p);
+            if (f[fi].large_p)
+                mpz_mul_ui(f[fi].pk, f[fi].pk, f[fi].p);
             if (mpz_cmp(f[fi].pk, max) <= 0)
                 break;
             ++fi;
