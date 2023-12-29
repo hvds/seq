@@ -1,5 +1,6 @@
 #include "unit.h"
 #include "diag.h"
+#include "sieve.h"
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -55,6 +56,8 @@ uint recover_ri;
 
 mpz_t f2_mod, f2_min, nextdiv, ztemp;
 mpq_t qtemp;
+
+#define SIEVESIZE 1000000
 
 char *rpath = NULL; /* path to log file */
 FILE *rfp = NULL;   /* file handle to log file */
@@ -274,6 +277,8 @@ char *recover(FILE *fp) {
             size_t lt = len305;
             len305 = len;
             len = lt;
+        } else if (strncmp("000 ", curbuf, 4) == 0) {
+            /* comment */
         } else
             fail("unexpected log line %.3s in %s", curbuf, rpath);
     }
@@ -301,6 +306,7 @@ void init_unit(uint max, char* report_path) {
     t0 = seconds();
     init_diag();    /* ignore result: worst case we lose ^Z handling */
     init_time();
+    extend_sieve(SIEVESIZE);
     maxdepth = max;
     rat = malloc(maxdepth * sizeof(rat_t));
     for (uint i = 0; i < maxdepth; ++i) {
@@ -413,9 +419,11 @@ bool init_sq_divs(uint ri) {
             ++ni;
         }
     }
-    uint p = 3;
+    uint pi = 1;
     while (mpz_cmp_ui(ztemp, 1) > 0) {
+        uint p = prime[pi];
         if (mpz_divisible_ui_p(ztemp, p)) {
+          final_prime:
             if (ni + 1 >= fsize)
                 resize_fac(fsize + 8);
             uint k = 0;
@@ -436,8 +444,13 @@ bool init_sq_divs(uint ri) {
                 mpz_set_ui(f[ni].pk, 1);
                 ++ni;
             }
+        } else if (mpz_cmp_ui(ztemp, p * p) < 0) {
+            p = mpz_get_ui(ztemp);
+            goto final_prime;
         }
-        p += 2;
+        ++pi;
+        if (pi >= nprime)
+            extend_sieve(maxsieve + SIEVESIZE);
     }
     fcount = ni;
     if (fcount == 0) {
