@@ -1,6 +1,7 @@
 #!/opt/maths/bin/perl
 use strict;
 use warnings;
+use Math::GMP;
 use lib 'lib';
 use Totient;
 
@@ -10,7 +11,7 @@ Show each x: phi(x) = n.
 
 =cut
 
-my($n) = @ARGV;
+my($n) = map Math::GMP->new($_), @ARGV;
 my @t = Totient::totient($n);
 print @t ? "@t\n" : "none\n";
 exit 0;

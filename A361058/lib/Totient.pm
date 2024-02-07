@@ -3,16 +3,19 @@ package Totient;
 use strict;
 use warnings;
 use Math::Prime::Util qw{ factor_exp is_prime divisors };
+use Math::GMP;
 
 =head1 Totient::totient
 
 Return a list of integers x such that phi(x) = n.
 
-TODO: handle large integers.
+Results are returned as strings, so they can easily be instantiated as
+bigints if needed without loss of precision.
 
 =cut
 
 our $DEBUG = 0;
+my $ztwo = Math::GMP->new(2);
 
 # Assume the 5 known Fermat primes are the only ones that exist in any
 # range we'll be asked to deal with.
@@ -30,12 +33,12 @@ sub totient {
     while (@stack) {
         my($n, $mult, $used) = @{ pop @stack };
         if ($n == 1) {
-            $result{$_ * $mult} = 1 for (1, 2);
+            $result{$mult * $_} = 1 for (1, 2);
             next;
         }
         next if $n & 1;
         if ($n == 2) {
-            $result{$_ * $mult} = 1 for ($used->{3} ? (4) : (3, 4, 6));
+            $result{$mult * $_} = 1 for ($used->{3} ? (4) : (3, 4, 6));
             next;
         }
 
@@ -46,7 +49,7 @@ sub totient {
             next if $used->{$pi};
             $used->{$pi} = 1;
             next if $n % ($pi - 1);
-            my $xu = $pi;
+            my $xu = Math::GMP->new($pi);
             my $nu = $n / ($pi - 1);
             for my $eu (0 .. $ei) {
                 push @stack, [ $nu, $xu * $mult, { %$used } ];
@@ -56,8 +59,9 @@ sub totient {
         }
 
         # any remaining results must be squarefree other than powers of 2
-        if (!$used->{$n + 1} && is_prime($n + 1)) {
-            $result{$_ * $mult} = 1 for ($n + 1, ($n + 1) * 2);
+        my $np1 = $n + 1;
+        if (!$used->{$np1} && is_prime($np1)) {
+            $result{$mult * $_} = 1 for ($np1, $np1 * 2);
         }
 
         # any remaining result is also composite
@@ -66,7 +70,7 @@ sub totient {
         next if $e2 == 1;
 
         if (@$fn > 1) {
-            my $base = 2 * $fn->[-1][0];
+            my $base = $ztwo * $fn->[-1][0];
             my $rest = $n / $base;
             for my $d (divisors($rest)) {
                 last if $d == $rest;
@@ -86,7 +90,7 @@ sub totient {
             $used->{$prime} = 1;
             push @stack, [ $n / ($prime - 1), $prime * $mult, { %$used } ];
         }
-        $result{$_ * $mult} = 1 for ($n * 2);
+        $result{$mult * $_} = 1 for ($n * 2);
         next;
     }
     return sort { $a <=> $b } keys %result;
