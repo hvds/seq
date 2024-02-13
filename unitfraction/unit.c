@@ -89,17 +89,17 @@ void reset_buf(void) {
 void append_buf(char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    uint size = diag_bufp + gmp_vsnprintf(
+    uint newp = diag_bufp + gmp_vsnprintf(
             diag_buf + diag_bufp, diag_buf_size - diag_bufp, fmt, ap);
     va_end(ap);
-    if (size > diag_buf_size) {
-        diag_buf = realloc(diag_buf, size + 32);
-        diag_buf_size = size + 32;
+    if (newp + 1 > diag_buf_size) {
+        diag_buf = realloc(diag_buf, newp + 32);
+        diag_buf_size = newp + 32;
         va_start(ap, fmt);
         gmp_vsprintf(diag_buf + diag_bufp, fmt, ap);
         va_end(ap);
     }
-    diag_bufp = size;
+    diag_bufp = newp;
     return;
 }
 
