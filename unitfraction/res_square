@@ -1,6 +1,7 @@
 Minimal number of distinct square unit fractions required to sum to r,
-where r takes on values of the Farey series; or -1 if no sum is possible.
-Note that sum_2^\inf{1/n^2} = \pi^2/6 - 1 ~= 0.64493406684823
+for rational 0 <= r <= 1 with denominator <= 50.
+Note that sum_2^\inf{1/n^2} = \pi^2/6 - 1 ~= 0.64493406684823, so we
+skip rationals between that limit and 1.
 
 p/q = 1/a^2 + 1/b^2
 => \exists d: d | q^2, q + d = pa^2, q + q^2/d = pb^2
