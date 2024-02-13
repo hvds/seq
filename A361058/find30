@@ -12,7 +12,7 @@ use H::Heap;
 use H::Diag qw{ diag keep_diag };
 
 my $startn = Math::GMP->new(shift(@ARGV) || qw{
-    10819943828999706238674145962073807388672
+    1086647751414458889070048279948903352975245694589909473065284173805957934264679923712
 });
 my @primes = map Math::GMP->new($_), (2, 31, 858874531);
 my $powers = Powers->new(\@primes);
@@ -24,20 +24,28 @@ my $mul3 = 30;
 $startn /= $mul1;
 $powers->fetch while $powers->peek->[0] < $startn;
 
+my $check_31 = sub {
+    die if $_[0] % 31;
+    1;
+};
+
 while (my $s = $powers->fetch) {
     my($n, $e) = @$s;
     $n *= $mul1;
     diag("try n=$n [@$e]");
 
     my $t1 = $n * $mul2;
-    my @x = Totient::totient($t1);
+    my @x;
+    my $good = eval {
+        @x = Totient::totient($t1, $check_31);
+        1;
+    };
     if (@x == 0) {
 #       keep_diag();
 #       print "  skip, $t1 nontotient\n";
         next;
     }
-    my $x0 = first { Math::GMP->new($_) % 31 } @x;
-    if ($x0) {
+    if (!$good) {
 #       keep_diag();
 #       print "  skip, $t1 has bad solution $x0\n";
         next;
