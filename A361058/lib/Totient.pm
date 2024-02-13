@@ -5,12 +5,16 @@ use warnings;
 use Math::Prime::Util qw{ factor_exp is_prime divisors };
 use Math::GMP;
 
-=head1 Totient::totient
+=head1 Totient::totient ($n, [ $cb ])
 
-Return a list of integers x such that phi(x) = n.
+Return a list of integers C<$x> such that C<phi($x) == $n>.
 
 Results are returned as strings, so they can easily be instantiated as
 bigints if needed without loss of precision.
+
+If a callback C<$cb> is provided, it will be invoked with C<$x> as a
+number (possibly a L<Math::GMP> object) before adding it to the list:
+if it returns a false value, C<$x> will not be included in the result.
 
 =cut
 
@@ -23,25 +27,43 @@ my @fermat = (
     [ 1, 3 ], [ 2, 5 ], [ 4, 17 ], [ 8, 257 ], [ 16, 65537 ],
 );
 sub totient {
-    my($n) = @_;
-    return (1, 2) if $n == 1;
-    return () if $n & 1;
-    return (3, 4, 6) if $n == 2;
+    my($n, $cb) = @_;
+
+    my %result;
+    my $save = $cb ? sub {
+        my($n) = @_;
+        $result{$n} = 1 if $cb->($n);
+    } : sub {
+        my($n) = @_;
+        $result{$n} = 1;
+    };
+
+    if ($n == 1) {
+        $save->($_) for (1, 2);
+        goto done;
+    }
+    if ($n & 1) {
+        goto done;
+    }
+    if ($n == 2) {
+        $save->($_) for (3, 4, 6);
+        goto done;
+    }
 
     my @stack = ([ $n, 1, {}]);
-    my %result;
     while (@stack) {
         my($n, $mult, $used) = @{ pop @stack };
         if ($n == 1) {
-            $result{$mult * $_} = 1 for (1, 2);
+            $save->($mult * $_) for (1, 2);
             next;
         }
         next if $n & 1;
         if ($n == 2) {
-            $result{$mult * $_} = 1 for ($used->{3} ? (4) : (3, 4, 6));
+            $save->($mult * $_) for ($used->{3} ? (4) : (3, 4, 6));
             next;
         }
 
+# FIXME: it's always the same prime factors, try to avoid refactorising
         my $fn = [ factor_exp($n) ];
         # first try using any odd prime that divides n
         for my $i (reverse 1 .. $#$fn) {
@@ -61,7 +83,7 @@ sub totient {
         # any remaining results must be squarefree other than powers of 2
         my $np1 = $n + 1;
         if (!$used->{$np1} && is_prime($np1)) {
-            $result{$mult * $_} = 1 for ($np1, $np1 * 2);
+            $save->($mult * $_) for ($np1, $np1 * 2);
         }
 
         # any remaining result is also composite
@@ -90,9 +112,10 @@ sub totient {
             $used->{$prime} = 1;
             push @stack, [ $n / ($prime - 1), $prime * $mult, { %$used } ];
         }
-        $result{$mult * $_} = 1 for ($n * 2);
+        $save->($mult * $_) for ($n * 2);
         next;
     }
+  done:
     return sort { $a <=> $b } keys %result;
 }
 
