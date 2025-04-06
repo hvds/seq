@@ -1,0 +1,34 @@
+#!/opt/axiom/bin/perl
+use strict;
+use warnings;
+use feature qw{ state };
+
+use Regexp::Grammars;
+use lib 'lib';
+use Axiom::Expr;
+use Axiom::Dict;
+use Prove::State;
+
+my $level = shift(@ARGV) || 1;
+my $s = [
+    'A = \int_{a=0}^1{ \int_{b=0}^1{ \int_{c=0}^1{ \int_{d=0}^1{ \int_{e=0}^1{ \int_{f=0}^1{ \int_{g=0}^1{ \min(a+b+c,\min(a+d+g,e+f+g)) } } } } } } }',
+    'A = \int_{a=0}^1{ \int_{b=0}^1{ \int_{c=0}^1{ \int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } }+\int_{f=a+d-e}^1{ \int_{g=0}^1{ \min(a+b+c,a+d+g) } } }+\int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^1{ \min(a+b+c,a+d+g) } } } }+\int_{d=1-a}^1{ \int_{e=0}^{-1+a+d}{ \int_{f=0}^1{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } }+\int_{e=-1+a+d}^1{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } }+\int_{f=a+d-e}^1{ \int_{g=0}^1{ \min(a+b+c,a+d+g) } } } } } } }',
+    'A = \int_{a=0}^1{ \int_{b=0}^{1-a}{ \int_{c=0}^{1-a-b}{ \int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=0}^{b+c}{ \int_{e=0}^{a+d}{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } }+\int_{d=b+c}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=a+d-e}^1{ \int_{g=0}^1{ a+b+c } } } } }+\int_{c=1-a-b}^{1-b}{ \int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } }+\int_{c=1-b}^1{ \int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=0}^{-1+b+c}{ \int_{e=0}^{a+d}{ \int_{f=a+d-e}^1{ \int_{g=0}^1{ a+d+g } } } }+\int_{d=-1+b+c}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } }+\int_{c=0}^{1-a-b}{ \int_{d=0}^{b+c}{ \int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } }+\int_{d=b+c}^{1-a}{ \int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^1{ a+b+c } } } } }+\int_{c=1-a-b}^{1-b}{ \int_{d=0}^{1-a}{ \int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } }+\int_{c=1-b}^1{ \int_{d=0}^{-1+b+c}{ \int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^1{ a+d+g } } } }+\int_{d=-1+b+c}^{1-a}{ \int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } }+\int_{c=0}^{1-a-b}{ \int_{d=1-a}^1{ \int_{e=0}^{-1+a+d}{ \int_{f=0}^1{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^1{ \int_{e=-1+a+d}^1{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^1{ \int_{e=-1+a+d}^1{ \int_{f=a+d-e}^1{ \int_{g=0}^1{ a+b+c } } } } }+\int_{c=1-a-b}^{1-b}{ \int_{d=1-a}^1{ \int_{e=0}^{-1+a+d}{ \int_{f=0}^1{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^1{ \int_{e=-1+a+d}^1{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^{b+c}{ \int_{e=-1+a+d}^1{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } }+\int_{d=b+c}^1{ \int_{e=-1+a+d}^1{ \int_{f=a+d-e}^1{ \int_{g=0}^1{ a+b+c } } } } }+\int_{c=1-b}^1{ \int_{d=1-a}^1{ \int_{e=0}^{-1+a+d}{ \int_{f=0}^1{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^1{ \int_{e=-1+a+d}^1{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^1{ \int_{e=-1+a+d}^1{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } } }+\int_{b=1-a}^1{ \int_{c=0}^{1-b}{ \int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } }+\int_{c=1-b}^{2-a-b}{ \int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=0}^{-1+b+c}{ \int_{e=0}^{a+d}{ \int_{f=a+d-e}^1{ \int_{g=0}^1{ a+d+g } } } }+\int_{d=-1+b+c}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } }+\int_{c=2-a-b}^1{ \int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=0}^{1-a}{ \int_{e=0}^{a+d}{ \int_{f=a+d-e}^1{ \int_{g=0}^1{ a+d+g } } } } }+\int_{c=0}^{1-b}{ \int_{d=0}^{1-a}{ \int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } }+\int_{c=1-b}^{2-a-b}{ \int_{d=0}^{-1+b+c}{ \int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^1{ a+d+g } } } }+\int_{d=-1+b+c}^{1-a}{ \int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } }+\int_{c=2-a-b}^1{ \int_{d=0}^{1-a}{ \int_{e=a+d}^1{ \int_{f=0}^1{ \int_{g=0}^1{ a+d+g } } } } }+\int_{c=0}^{1-b}{ \int_{d=1-a}^1{ \int_{e=0}^{-1+a+d}{ \int_{f=0}^1{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^1{ \int_{e=-1+a+d}^1{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^{b+c}{ \int_{e=-1+a+d}^1{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } }+\int_{d=b+c}^1{ \int_{e=-1+a+d}^1{ \int_{f=a+d-e}^1{ \int_{g=0}^1{ a+b+c } } } } }+\int_{c=1-b}^{2-a-b}{ \int_{d=1-a}^1{ \int_{e=0}^{-1+a+d}{ \int_{f=0}^1{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^1{ \int_{e=-1+a+d}^1{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^1{ \int_{e=-1+a+d}^1{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } }+\int_{c=2-a-b}^1{ \int_{d=1-a}^1{ \int_{e=0}^{-1+a+d}{ \int_{f=0}^1{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^1{ \int_{e=-1+a+d}^1{ \int_{f=0}^{a+d-e}{ \int_{g=0}^1{ \min(a+b+c,e+f+g) } } } }+\int_{d=1-a}^{-1+b+c}{ \int_{e=-1+a+d}^1{ \int_{f=a+d-e}^1{ \int_{g=0}^1{ a+d+g } } } }+\int_{d=-1+b+c}^1{ \int_{e=-1+a+d}^1{ \int_{f=a+d-e}^1{ \int_{g=0}^{b+c-d}{ a+d+g }+\int_{g=b+c-d}^1{ a+b+c } } } } } } }'
+]->[$level - 1];
+my $e = expr($s);
+my $state = Prove::State->new($e);
+$state->construct(@{ [
+    [ [qw{ a d g }], [qw{ e f g }] ],
+    [ [qw{ a b c }], [qw{ a d g }] ],
+    [ [qw{ a b c }], [qw{ e f g }] ],
+]->[$level - 1] });
+exit 0;
+
+sub expr {
+    my($s, $debug) = @_;
+    my $d = Axiom::Dict->new;
+    $d->insert('A', 'var');
+    my $e = Axiom::Expr->parse($d, $s, $debug);
+    $e->resolve($d);
+    return $e;
+}

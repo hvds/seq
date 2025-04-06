@@ -1,0 +1,101 @@
+Adapted from a problem mentioned in 'chalkdust' issue 20 (August 2024):
+
+Consider a rectangular grid of a x b nodes, in which the cost of traversing
+from one node to an orthogonally adjacent node varies uniformly over [0, 1].
+What is the expected cost of the cheapest path from the southwest to the
+northeast corner, where each step moves only eastwards or northwards?
+
+Trivially f(a, 1) = (a-1)/2, f(a, b) = f(b, a).
+
+In general there are ab nodes, a(b-1)+b(a-1) = 2ab-a-b lines, and
+binomial(a+b-2,a-1) possible paths each of length a+b-2. The solution
+can be modelled as a nested integral over the costs, eg:
+  f(2, 2) = \int_{a=0}^1{ \int_{b=0}^1{ \int_{c=0}^1{ \int_{d=0}^1{
+              \min(a+b,c+d) } } } }
+
+The perl program mkint calculates f(a,b) by finding ways to split the
+integrals such that the min() is known and thus integrable; it finds:
+
+f(2, 2) = 23/30 ~= 0.767 (0.09s)
+f(2, 3) = 1889/1680 ~= 1.124 (3.48s)
+f(3, 2) = 1889/1680 ~= 1.516 (1.42s)
+f(4, 2) = 1080677/712800 ~= 1.926 (35.91s)
+f(5, 2) = 2997907897/1556755200 (6755.88s)
+
+The code is currently too slow to calculate f(3,3) - where f(5,2) splits
+the base integral into 11,852 parts, for f(3,3) we will have (estimated)
+between 1e7 and 1e10 parts. The plan is therefore to rewrite it in C for
+speed, with progress logged to file so that we can recover after any
+interruption.
+
+---
+
+% /usr/bin/time ./mkint 2 3
+abc adg efg
+have 6 parts after split abc adg
+have 45 parts after split adg efg
+have 134 parts after split abc efg
+A = 169/420 + 179/560 + 169/420
+  = 1889/1680
+3.48user 0.00system 0:03.49elapsed 100%CPU (0avgtext+0avgdata 22508maxresident)k
+0inputs+0outputs (0major+4135minor)pagefaults 0swaps
+
+% /usr/bin/time ./mkint 3 2
+abe cde cfg
+have 6 parts after split cde cfg
+have 21 parts after split abe cde
+have 68 parts after split abe cfg
+....................................................................
+A = 169/420 + 179/560 + 169/420
+  = 1889/1680
+1.42user 0.00system 0:01.43elapsed 99%CPU (0avgtext+0avgdata 22336maxresident)k
+0inputs+0outputs (0major+4102minor)pagefaults 0swaps
+
+% /usr/bin/time ./mkint 4 2
+abeh cdeh cfgh cfij
+have 6 parts after split cfgh cfij
+have 21 parts after split cdeh cfgh
+have 81 parts after split abeh cdeh
+have 222 parts after split cdeh cfij
+have 363 parts after split abeh cfgh
+have 503 parts after split abeh cfij
+A = (17549113 + 12709843 + 12709843 + 17549113)/39916800
+  = 1080677/712800
+35.91user 0.01system 0:35.93elapsed 100%CPU (0avgtext+0avgdata 23396maxresident)k
+0inputs+0outputs (0major+4340minor)pagefaults 0swaps
+
+% /usr/bin/time ./mkint 5 2
+abehk cdehk cfghk cfijk cfilm
+have 6 parts after split cfijk cfilm
+have 21 parts after split cfghk cfijk
+have 81 parts after split cdehk cfghk
+have 306 parts after split abehk cdehk
+have 447 parts after split cfghk cfilm
+have 870 parts after split cdehk cfijk
+have 2468 parts after split abehk cfghk
+have 2888 parts after split cdehk cfilm
+have 3308 parts after split abehk cfijk
+have 11852 parts after split abehk cfilm
+A = 249338839/518918400 + 258893797/778377600 + 2072443/6918912 + 258893797/778377600 + 249338839/518918400
+  = 2997907897/1556755200
+5230.47user 0.16system 1:27:10elapsed 100%CPU (0avgtext+0avgdata 45300maxresident)k
+0inputs+0outputs (0major+9812minor)pagefaults 0swaps
+
+% /usr/bin/time ./mkint 3 3 
+abch adgh adil efgh efil ejkl
+have 6 parts after split adgh adil
+have 6 parts after split efgh efil
+have 45 parts after split efil ejkl
+have 60 parts after split abch adgh
+have 177 parts after split adgh efgh
+have 287 parts after split adil efil
+have 3392 parts after split efgh ejkl
+have 93842 parts after split abch adil
+have 963366 parts after split adil ejkl
+have 975902 parts after split abch efgh
+have 977758 parts after split adgh ejkl
+have 977758 parts after split adgh efil
+have 977758 parts after split adil efgh
+5573 / 977758^CCommand terminated by signal 2
+46126.92user 20.48system 12:49:15elapsed 99%CPU (0avgtext+0avgdata 4915168maxresident)k
+0inputs+0outputs (0major+1228630minor)pagefaults 0swaps

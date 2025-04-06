@@ -1,0 +1,267 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use Math::BigRat only => 'GMP';
+use lib qw{lib};
+use Prove::Integral;
+use Prove::LinCom;
+use H::Diag qw{ diag keep_diag };
+
+my($y, $x) = @ARGV;
+my $k = 2 * $x * $y - $x - $y;  # number of edges
+my @path = gen_paths($x, $y);
+print join(' ', map _path($_), @path), "\n";
+my $all_paths = (1 << @path) - 1;
+my @scpath = map _scpath($_), @path;
+my @order = decide_order(\@path);
+my($lc0, $lc1) = map Prove::LinCom->new([$_]), (0, 1);
+my $base = [ Prove::Integral->new({
+    pexpr => $all_paths,
+    istack => [ map [ $lc0, $lc1 ], 1 .. $k ],
+}) ];
+for my $split (@order) {
+    split_all($base, @$split);
+}
+local $| = 1;
+my @sum = map Math::BigRat->new(0), (0 .. $#path);
+for my $i (0 .. $#$base) {
+    my $int = $base->[$i];
+    my $which = pick_path($int->{pexpr});
+    $int->{scexpr} = $scpath[$which] // die;
+    $sum[$which] += $int->integrate;
+    diag("$i / @{[ 0+@$base ]}");
+}
+diag('');
+my $sum = Math::BigRat->new(0);
+$sum += $_ for @sum;
+print "\nA = @{[ join ' + ', @sum ]}\n  = $sum\n";
+exit 0;
+
+sub debug {
+    my($int, $sum) = @_;
+    my $sc = "@{ $int->scexpr }";
+    my $wint = $int->debugs;
+    $sum *= 40320;
+    warn "$sum = [$sc] over $wint\n";
+}
+
+sub split_all {
+    my($base, $i, $j) = @_;
+    my $targ = make_split_target(\@path, $i, $j);
+    @$base = map {
+        my $int = $base->[$_];
+        diag("$_ / @{[ 0+@$base ]}") if !($_ % 1000);
+        apply_split($int, $targ);
+    } 0 .. $#$base;
+    diag('');
+    printf "have %s parts after split %s %s\n",
+            0+@$base, _path($path[$i]), _path($path[$j]);
+    return;
+}
+
+#
+# Given a pair of paths to target, split the given integral into pieces
+# that can discriminate which of the paths is the minimum.
+#
+sub apply_split {
+    my($int, $targ) = @_;
+    return ($int) unless match($int, $targ);
+    my($what, $args) = dispose($int, $targ->{pivot});
+    if ($what eq 'resolve') {
+        # We know which is the minimum, so mask the other from the set of
+        # possibilities and return this integral.
+        $int->{pexpr} &= $targ->{pathmask}[$args];
+        return ($int);
+    }
+    # We need to split this integral, so do that and then recursively
+    # apply the same request to the two results.
+    my($i, $lc) = @$args;
+    return map apply_split($_, $targ), make_split($int, $i, $lc);
+}
+
+#
+# Given a linear combination pivot, discover whether for the ranges in this
+# integral the pivot is always negative or always positive, else find a way
+# to split one of the ranges that gets us a step closer to forcing that.
+#
+sub dispose {
+    my($int, $lc) = @_;
+    my $range = $int->range($lc);
+warn(sprintf "(%s) %s range [%s, %s]\n", $int->tag, _expr($lc), @$range) if $::DD;
+    die if $range->[1] <= $range->[0];
+    # range of pivot is always negative
+    return +('resolve', 0) if $range->[1] <= 0;
+    # range of pivot is always positive
+    return +('resolve', 1) if $range->[0] >= 0;
+my $args = find_split($int, $lc);
+keep_diag() if $::DD;
+warn "try split @{[ $int->debugs ]} over [@$lc] getting $args->[0]: [@{ $args->[1] }]\n" if $::DD;
+return +('split', $args);
+    # pivot straddles zero, so find a split
+    return +('split', find_split($int, $lc));
+}
+
+#
+# Given a linear combination pivot, find a way to split one of the ranges
+# in the specified integral that helps to discriminate when the pivot is
+# positive or negative.
+#
+sub find_split {
+    my($int, $lc) = @_;
+    my($i, $c) = $lc->top;
+    my $lc2 = $lc->popone;
+    my($r1, $r2);
+
+    my $lct1 = $lc2->addmul($int->i($i)->[($c < 0) ? 0 : 1], $c);
+    my $range1 = $int->range($lct1);
+warn(sprintf "(%s) min %s expr %s range [%s, %s]\n", $int->tag, chr(ord('a')-1+$i), _expr($lct1), @$range1) if $::DD;
+return
+    $r1 = find_split($int, $lct1) unless $range1->[0] >= 0;
+
+    my $lct2 = $lc2->addmul($int->i($i)->[($c < 0) ? 1 : 0], $c);
+    my $range2 = $int->range($lct2);
+warn(sprintf "(%s) max %s expr %s range [%s, %s]\n", $int->tag, chr(ord('a')-1+$i), _expr($lct2), @$range2) if $::DD;
+return
+    $r2 = find_split($int, $lct2) unless $range2->[1] <= 0;
+
+    return [ $i,
+        # try to avoid bigrats as long as possible
+        ($c == 1) ? $lc2->negate
+        : ($c == -1) ? $lc2
+        : $lc2->divc(-$c)
+    ]
+; #if !$r1 && !$r2;
+    return $r1 if !$r2;
+    return $r2 if !$r1;
+    return $r2 if $r2->[0] < $r1->[0];
+    # if ==, there may be more to win by comparing the lc's; but that's hard,
+    # they may be incommensurate.
+    return $r1;
+}
+
+sub _expr {
+    my($lc) = @_;
+    my @s;
+    for (0 .. $#$lc) {
+        my $s = $lc->[$_] or next;
+        my @p = ("$s" =~ m{^(-?)(\d+)((?:/\d+)?)$});
+        splice @p, 2, 0, chr(ord('a')+$_-1) if $_;
+        $p[0] ||= '+' if @s;
+        splice @p, 1, 1 if $p[1] == 1 && $_;
+        push @s, join '', @p;
+    }
+    @s ? join('', @s) : '0';
+}
+
+sub make_split {
+    my($int, $who, $lc) = @_;
+    my $orig = $int->istack->[$who - 1];
+    my($left, $right) = map Prove::Integral->new({ %$int }), (1, 2);
+warn(sprintf "split %s %s[%s, %s] at %s to %s, %s\n", $int->tag, chr(ord('a')+$who-1), map(_expr($_), @$orig, $lc), $left->tag, $right->tag) if $::DD;
+    $_->{istack} = [ @{ $_->{istack} } ] for ($left, $right);
+    $left->istack->[$who - 1] = [ $orig->[0], $lc ];
+    $right->istack->[$who - 1] = [ $lc, $orig->[1] ];
+    return +($left, $right);
+}
+
+sub match {
+    my($int, $targ) = @_;
+    return 1 if ($int->{pexpr} & $targ->{allbits}) == $targ->{allbits};
+    return 0;
+}
+
+sub make_split_target {
+    my($path, $li, $ri) = @_;
+    my($lb, $rb) = (1 << $li, 1 << $ri);
+    my $allbits = $lb | $rb;
+    my @pathmask = map ~$_, ($rb, $lb);
+    my @lc;
+    ++$lc[$_] for @{ $path->[$li] };
+    --$lc[$_] for @{ $path->[$ri] };
+    $_ //= 0 for @lc;
+    pop @lc while @lc && !$lc[-1];
+    return {
+        pivot => Prove::LinCom->new(\@lc),
+        allbits => $allbits,
+        pathmask => \@pathmask,
+    };
+}
+
+sub pick_path {
+    my($bits) = @_;
+    die if $bits & ($bits - 1);
+    my $i = 0;
+    while (!($bits & 1)) {
+        $bits >>= 1;
+        ++$i;
+    }
+    return $i;
+}
+
+sub _gen_from {
+    my($x, $y, $i, $j) = @_;
+    my $go_east = ($i < $x - 1);
+    my $go_north = ($j < $y - 1);
+    my $nexte = $j * (2 * $x - 1) + $i + 1;
+    my $nextn = ($j + 1) * (2 * $x - 1) - $i;
+    return (
+        ($go_east ? (map [ $nexte, @$_ ], _gen_from($x, $y, $i + 1, $j)) : ()),
+        ($go_north ? (map [ $nextn, @$_ ], _gen_from($x, $y, $i, $j + 1)) : ()),
+        ((!$go_east && !$go_north) ? [] : ()),
+    );
+}
+
+sub gen_paths {
+    my($x, $y) = @_;
+    return _gen_from($x, $y, 0, 0);
+}
+
+sub _bits {
+    my($v) = @_;
+    my $bits = unpack '%32b*', $v;
+    return $bits;
+}
+
+sub _sortval {
+    my($v, $w) = @_;
+    # primary key is number of shared bits: we want pairs with more shared
+    # bits to be resolved before pairs with fewer shared bits;
+    # secondary key is index of lowest unshared bit: we want pairs with
+    # higher least unshared bit to be resolved before pairs with lower
+    # (and recursively keying on next least unshared bit).
+    my $unshared = $v ^ $w;
+    return join '', chr(_bits($unshared)),
+            pack('B*', unpack 'b*', $unshared);
+}
+
+sub decide_order {
+    my($paths) = @_;
+    my @vec = map {
+        my $s = '';
+        vec($s, $_ - 1, 1) = 1 for @$_;
+        $s;
+    } @$paths;
+    my %match = map {
+        my $i = $_;
+        map {
+            my $j = $_;
+            my $v = _sortval($vec[$i], $vec[$j]);
+            +("$i $j" => $v);
+        } $i + 1 .. $#vec;
+    } 0 .. $#vec;
+    my @x = map [ split ' ' ], sort { $match{$a} cmp $match{$b} } keys %match;
+    return @x;
+}
+
+sub _scpath {
+    my($path) = @_;
+    my @lc;
+    ++$lc[$_] for @$path;
+    $_ //= 0 for @lc;
+    return Prove::LinCom->new(\@lc);
+}
+
+sub _path {
+    my($path) = @_;
+    return join '', map chr(ord('a') - 1 + $_), @$path;
+}
