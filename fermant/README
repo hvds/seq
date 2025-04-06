@@ -24,9 +24,30 @@ f(5, 2) = 2997907897/1556755200 (6755.88s)
 
 The code is currently too slow to calculate f(3,3) - where f(5,2) splits
 the base integral into 11,852 parts, for f(3,3) we will have (estimated)
-between 1e7 and 1e10 parts. The plan is therefore to rewrite it in C for
-speed, with progress logged to file so that we can recover after any
-interruption.
+between 1e7 and 1e10 parts.
+
+The C program int agrees with these calculations at least to f(2,5).
+
+The effort revolves around finding subsets of the ranges that force
+a particular linear combination of the 2ab-a-b variables (with rational
+coefficients) to be uniformly either non-negative or non-positive.
+The core of the algorithm revolves around the idea that if the linear
+combination Q_n = x+cy, then there is nothing to do if min(x+cy) >= 0,
+nor if max(x+cy) <= 0. In the remaining case, if min(x)+max(cy) >= 0
+and max(x)+min(cy) <= 0 we can split the variable y at -x/c. If not,
+we repeat the algorithm on Q_{n-1} = x-min(cy), and on Q'_{n-1} = x-max(cy).
+
+More generally, let P = Q_n = q_0 + \sum_{i=1}^n{q_i v_i} with q_i \in Q, such
+that each v_i \in [a_i, b_i] with 0 <= a_i <= b_i <= 1, a_i and b_i both of
+form Q_{i-1}.
+
+Given P' = P - q_n v_n, if min(P) < 0, max(P) > 0, min(P' - max(q_n v_n)) >= 0,
+max(P' - min(q_n v_n)) <= 0, then [to prove]:
+1) a_n <= -P'/q_n <= b_n;
+2) when v_n \in [a_n, -P'/q_n], either P >= 0, or P <= 0, uniformly;
+3) when v_n \in [-P'/q_n, b_n], either P >= 0, or P <= 0, uniformly.
+
+(Proven for n=1, can we continue the proof by induction?)
 
 ---
 
@@ -39,6 +60,10 @@ A = 169/420 + 179/560 + 169/420
   = 1889/1680
 3.48user 0.00system 0:03.49elapsed 100%CPU (0avgtext+0avgdata 22508maxresident)k
 0inputs+0outputs (0major+4135minor)pagefaults 0swaps
+% /usr/bin/time ./int 2 3
+367 int(2, 3) = 1889/1680: (0.00s)
+0.00user 0.00system 0:00.00elapsed 100%CPU (0avgtext+0avgdata 2332maxresident)k
+0inputs+0outputs (0major+98minor)pagefaults 0swaps
 
 % /usr/bin/time ./mkint 3 2
 abe cde cfg
@@ -50,6 +75,9 @@ A = 169/420 + 179/560 + 169/420
   = 1889/1680
 1.42user 0.00system 0:01.43elapsed 99%CPU (0avgtext+0avgdata 22336maxresident)k
 0inputs+0outputs (0major+4102minor)pagefaults 0swaps
+367 int(3, 2) = 1889/1680: (0.02s)
+0.01user 0.00system 0:00.01elapsed 100%CPU (0avgtext+0avgdata 2400maxresident)k
+0inputs+0outputs (0major+111minor)pagefaults 0swaps
 
 % /usr/bin/time ./mkint 4 2
 abeh cdeh cfgh cfij
@@ -63,6 +91,9 @@ A = (17549113 + 12709843 + 12709843 + 17549113)/39916800
   = 1080677/712800
 35.91user 0.01system 0:35.93elapsed 100%CPU (0avgtext+0avgdata 23396maxresident)k
 0inputs+0outputs (0major+4340minor)pagefaults 0swaps
+367 int(2, 4) = 1080677/712800: (0.11s)
+0.09user 0.00system 0:00.09elapsed 100%CPU (0avgtext+0avgdata 2592maxresident)k
+0inputs+0outputs (0major+177minor)pagefaults 0swaps
 
 % /usr/bin/time ./mkint 5 2
 abehk cdehk cfghk cfijk cfilm
@@ -80,6 +111,9 @@ A = 249338839/518918400 + 258893797/778377600 + 2072443/6918912 + 258893797/7783
   = 2997907897/1556755200
 5230.47user 0.16system 1:27:10elapsed 100%CPU (0avgtext+0avgdata 45300maxresident)k
 0inputs+0outputs (0major+9812minor)pagefaults 0swaps
+367 int(2, 5) = 2997907897/1556755200: (28.52s)
+26.44user 0.00system 0:26.45elapsed 100%CPU (0avgtext+0avgdata 6304maxresident)k
+0inputs+0outputs (0major+1128minor)pagefaults 0swaps
 
 % /usr/bin/time ./mkint 3 3 
 abch adgh adil efgh efil ejkl
