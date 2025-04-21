@@ -58,15 +58,20 @@ while (1) {
         try_cast($self);
     }
 }
+#printf "logs: [%s]\n", loglog();
 exit 0;
 
 our(@d, %d);
 my @cur;
+#my @log2;
+#sub loglog { join ' ', map $_ // 0, @log2 }
 sub try_srg {
     use feature qw{ state };
     state $counter = 0;
     my($targ, $cur, $min, $best) = @_;
+#++$log2[$targ->log2];
 diag("t=$targ c=$cur m=$min b=@{[ $best // 'u' ]} [@cur]")
+#diag("t=$targ c=$cur m=$min b=@{[ $best // 'u' ]} [@cur] [@{[loglog()]}]")
         if (++$counter % 100000) == 0;
     return unless $d[$min];
     my $exact = $d{$targ};
@@ -74,6 +79,7 @@ diag("t=$targ c=$cur m=$min b=@{[ $best // 'u' ]} [@cur]")
         my @all = sort { $a <=> $b } (@sq, @cur, $exact);
         keep_diag();
         print 0+@all, " [@all]\n";
+#       print 0+@all, " [@all] [@{[loglog()]}]\n";
         return [$exact];
     }
 
@@ -324,3 +330,28 @@ print "before: $r = $p / $q, root = $root; apply $t * $proot leaving $self->{r} 
     }
     die "try_cast: nothing left to try\n";
 }
+
+package Math::BigInt {
+    sub log2 {
+        my $value = shift->{value};
+        die unless $value->isa('Math::BigInt::GMP');
+        return gmp_log2($value);
+    }
+
+    use Inline qw{ C config libs -lgmp };
+    use Inline C => <<C;
+#include <gmp.h>
+int gmp_log2(SV *sv) {
+    MAGIC *mg;
+    mpz_t *z = NULL;
+    for (mg = SvMAGIC(SvRV(sv)); mg; mg = mg->mg_moremagic) {
+        if (mg->mg_type == PERL_MAGIC_ext) {
+            z = (mpz_t *)mg->mg_ptr;
+        }
+    }
+    if (!z)
+        return 0;
+    return mpz_sizeinbase(*z, 2);
+}
+C
+};
