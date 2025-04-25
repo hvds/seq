@@ -8,6 +8,7 @@ extern uint na, nb; /* we are calculating g(na, nb) */
 extern uint nv;     /* ... which is an integration over nv variables */
 extern int debug_split;
 extern int debug_integrate;
+extern volatile bool need_diag;
 
 double elapsed(void);
 double seconds(double t1);

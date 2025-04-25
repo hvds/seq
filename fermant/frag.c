@@ -181,7 +181,14 @@ fid_t find_split(fid_t fi, int *cs, int q, uint vmax) {
     return fn;
 }
 
+fid_t base_fi, base_nfrags;
+
 void split_one(fid_t fi, int *c, uint vmax, uint pi, uint pj) {
+    if (need_diag) {
+        diag("split %u/%u +%u", base_fi, base_nfrags, nfrags - base_nfrags);
+        need_diag = 0;
+    }
+
     find_range(fi, c, 1, vmax);
     int plow = FRC[0].num;
     int qlow = FRC[0].den;
@@ -224,8 +231,8 @@ void split_all_for(uint pi, uint pj) {
     }
 
     for (fid_t fi = 0; fi < nfrags; ++fi) {
-        if ((fi % 100) == 0)
-            diag("split %u/%u", fi, nfrags);
+        base_fi = fi;
+        base_nfrags = nfrags;
         if (debug_split) {
             char buf[frag_dumpsize()];
             frag_disp(buf, sizeof(buf), fi);
@@ -238,5 +245,4 @@ void split_all_for(uint pi, uint pj) {
         }
         split_one(fi, &c[0], vmax, pi, pj);
     }
-    diag("");
 }
