@@ -7,10 +7,13 @@
 #include "path.h"
 #include "limit.h"
 
-typedef struct {
-    limitid_t low;
-    limitid_t high;
-} range_t;
+/* notionally:
+    typedef struct {
+        limit_t low;
+        limit_t high;
+    } range_t;
+*/
+typedef void range_t;
 
 typedef struct {
     int num;
@@ -20,7 +23,7 @@ typedef struct {
 typedef uint fid_t;
 typedef struct {
     pathset_t ps;   /* paths reachable */
-    range_t r[0];   /* r[nv] */
+    char r[0];      /* range_t r[nv] */
 } frag_t;
 
 extern crange_t FRC[2];
@@ -37,23 +40,23 @@ extern uint frag_disp(char *buf, uint bufsize, fid_t l);
 extern void frag_dump(fid_t l);
 
 __inline uint range_size(void) {
-    return sizeof(range_t);
+    return limit_size() * 2;
 }
 
-__inline limitid_t range_low(range_t *rp) {
-    return rp->low;
+__inline limit_t *range_low(range_t *rp) {
+    return (limit_t *)add_p(rp, 0);
 }
 
-__inline limitid_t range_high(range_t *rp) {
-    return rp->high;
+__inline limit_t *range_high(range_t *rp) {
+    return (limit_t *)add_p(rp, limit_size());
 }
 
-__inline void range_low_set(range_t *rp, limitid_t li) {
-    rp->low = li;
+__inline void range_low_set(range_t *rp, limit_t *lp) {
+    limitp_dup(range_low(rp), lp);
 }
 
-__inline void range_high_set(range_t *rp, limitid_t li) {
-    rp->high = li;
+__inline void range_high_set(range_t *rp, limit_t *lp) {
+    limitp_dup(range_high(rp), lp);
 }
 
 __inline uint frag_size(void) {
@@ -102,7 +105,8 @@ __inline void frag_ps_set(fid_t fi, pathset_t ps) {
 
 __inline range_t *frag_range(fid_t fi, uint vi) {
     assert(vi > 0);
-    return &(frag_p(fi)->r[vi - 1]);
+    return (range_t *)add_p(frag_p(fi),
+            sizeof(frag_t) + (vi - 1) * range_size());
 }
 
 #endif /* FRAG_H */

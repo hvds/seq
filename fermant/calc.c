@@ -604,7 +604,7 @@ void safe_integrate(exprid_t e0, uint vi) {
 }
 
 static inline void eval_lim(
-    limitid_t lim, int dir,
+    limit_t *lim, int dir,
     mulid_t msrc, mulid_t mdst, uint targ,
     mpq_t *cq,
     lincom_t *lcsrc, lincom_t *lcdst,
@@ -614,10 +614,10 @@ static inline void eval_lim(
 ) {
     mul_copy(mdst, msrc);
     mul_remove(mdst, targ);
-    int clim = coeff * limit_num(lim);
-    int csrc = limit_den(lim);
+    int clim = coeff * limitp_num(lim);
+    int csrc = limitp_den(lim);
     mpq_set_si(*cq, 1, csrc);
-    lincom_t *lclim = limit_lc(lim);
+    lincom_t *lclim = limitp_lc(lim);
     /* given (x+yv)^a, we substitute p/q z for v by calculating
      * (qx+pyz) and adjusting external const by 1/q^a */
     for (uint j = 0; j < vi; ++j)

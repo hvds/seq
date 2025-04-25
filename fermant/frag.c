@@ -12,10 +12,10 @@
 #include "diag.h"
 
 extern inline uint range_size(void);
-extern inline limitid_t range_low(range_t *rp);
-extern inline limitid_t range_high(range_t *rp);
-extern inline void range_low_set(range_t *rp, limitid_t li);
-extern inline void range_high_set(range_t *rp, limitid_t li);
+extern inline limit_t *range_low(range_t *rp);
+extern inline limit_t *range_high(range_t *rp);
+extern inline void range_low_set(range_t *rp, limit_t *li);
+extern inline void range_high_set(range_t *rp, limit_t *li);
 extern inline uint frag_size(void);
 extern inline frag_t *frag_p(fid_t f);
 extern inline void resize_frags(uint extra);
@@ -43,10 +43,10 @@ uint frag_disp(char *buf, uint bufsize, fid_t fi) {
     pos += snprintf(&buf[pos], bufsize - pos, "frag 0x%x: ", frag_ps(fi));
     for (uint vi = 1; vi <= nv; ++vi) {
         pos += snprintf(&buf[pos], bufsize - pos, "[");
-        pos += limit_disp(&buf[pos], bufsize - pos,
+        pos += limitp_disp(&buf[pos], bufsize - pos,
                 range_low(frag_range(fi, vi - 1)));
         pos += snprintf(&buf[pos], bufsize - pos, ", ");
-        pos += limit_disp(&buf[pos], bufsize - pos,
+        pos += limitp_disp(&buf[pos], bufsize - pos,
                 range_high(frag_range(fi, vi - 1)));
         pos += snprintf(&buf[pos], bufsize - pos, "]");
         if (vi < nv)
@@ -65,19 +65,11 @@ void done_frags(void) {
     for (uint fi = 0; fi < nfrags; ++fi)
         free_frag(frags[fi]);
     free(frags);
-    free(limits);
+    done_limits();
 }
 
 void init_frags(void) {
-    resize_limits(0);           /* malloc for fixed limits */
-    memset(limit_lc(LIM0), 0, lc_size());
-    limit_num_set(LIM0, 0);
-    limit_den_set(LIM0, 1);
-    memset(limit_lc(LIM1), 0, lc_size());
-    lc_set(limit_lc(LIM1), 0, 1);
-    limit_num_set(LIM1, 1);
-    limit_den_set(LIM1, 1);
-
+    init_limits();
     fid_t fi = new_frag();
     frag_ps_set(fi, all_paths());
     for (uint vi = 1; vi <= nv; ++vi) {
@@ -89,18 +81,18 @@ void init_frags(void) {
 int denorm_addmul(fid_t fi, int *c, int q, uint vmax, int dir) {
     int cmax = c[vmax];
     assert(cmax != 0);
-    limitid_t lmax = ((dir < 0) ^ (cmax < 0))
+    limit_t *lmax = ((dir < 0) ^ (cmax < 0))
         ? range_low(frag_range(fi, vmax))
         : range_high(frag_range(fi, vmax));
-    cmax *= limit_num(lmax);
-    int qmax = limit_den(lmax);
+    cmax *= limitp_num(lmax);
+    int qmax = limitp_den(lmax);
     if (qmax > 1) {
         int g = igcd(cmax, qmax);
         cmax /= g;
         qmax /= g;
     }
     for (uint vi = 0; vi < vmax; ++vi)
-        c[vi] = c[vi] * qmax + lc_get(limit_lc(lmax), vi) * cmax;
+        c[vi] = c[vi] * qmax + lc_get(limitp_lc(lmax), vi) * cmax;
     return q * qmax;
 }
 
@@ -162,21 +154,22 @@ fid_t find_split(fid_t fi, int *cs, int q, uint vmax) {
         return find_split(fi, c, qmax, vmax - 1);
 
     /* we want to split vi at -li_{vi-1} / c */
-    limitid_t ln = new_limit();
-    limit_set_norm(ln, cs, -cs[vmax], vmax - 1);
+    char vln[limit_size()];
+    limit_t *ln = (limit_t *)&vln[0];
+    limitp_set_norm(ln, cs, -cs[vmax], vmax - 1);
 
     fid_t fn = frag_dup(fi);
     if (debug_split) {
         char buf1[limit_dumpsize()], buf2[limit_dumpsize()],
                 buf3[limit_dumpsize()];
-        limit_disp(buf1, sizeof(buf1), range_low(frag_range(fi, vmax)));
-        limit_disp(buf2, sizeof(buf2), range_high(frag_range(fi, vmax)));
-        limit_disp(buf3, sizeof(buf3), ln);
+        limitp_disp(buf1, sizeof(buf1), range_low(frag_range(fi, vmax)));
+        limitp_disp(buf2, sizeof(buf2), range_high(frag_range(fi, vmax)));
+        limitp_disp(buf3, sizeof(buf3), ln);
         fprintf(stderr, "split %c[%s, %s] at %s to %u, %u\n",
                 'a' + vmax - 1, buf1, buf2, buf3, fi, fn);
     }
-    assert(limit_cmp(ln, range_low(frag_range(fi, vmax)), vmax - 1) != 0);
-    assert(limit_cmp(ln, range_high(frag_range(fi, vmax)), vmax - 1) != 0);
+    assert(limitp_cmp(ln, range_low(frag_range(fi, vmax)), vmax - 1) != 0);
+    assert(limitp_cmp(ln, range_high(frag_range(fi, vmax)), vmax - 1) != 0);
     range_high_set(frag_range(fi, vmax), ln);
     range_low_set(frag_range(fn, vmax), ln);
     return fn;
