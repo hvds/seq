@@ -12,12 +12,18 @@
 #include "diag.h"
 
 extern inline uint range_size(void);
+extern inline limitid_t range_low(range_t *rp);
+extern inline limitid_t range_high(range_t *rp);
+extern inline void range_low_set(range_t *rp, limitid_t li);
+extern inline void range_high_set(range_t *rp, limitid_t li);
 extern inline uint frag_size(void);
 extern inline frag_t *frag_p(fid_t f);
 extern inline void resize_frags(uint extra);
 extern inline void free_frag(frag_t *fp);
 extern inline fid_t new_frag(void);
 extern inline fid_t frag_dup(fid_t fi);
+extern inline pathset_t frag_ps(fid_t fi);
+extern inline void frag_ps_set(fid_t fi, pathset_t ps);
 extern inline range_t *frag_range(fid_t f, uint vi);
 
 crange_t FRC[2];
@@ -32,24 +38,21 @@ uint frag_dumpsize(void) {
     return 30 + (npaths + 3)/4 + (limit_dumpsize() * 2 + 6) * nv + 2;
 }
 
-uint fragp_disp(char *buf, uint bufsize, frag_t *fp) {
+uint frag_disp(char *buf, uint bufsize, fid_t fi) {
     uint pos = 0;
-    pos += snprintf(&buf[pos], bufsize - pos, "frag %u(%u) 0x%x: ",
-            fp->fid, fp->parent, fp->ps);
+    pos += snprintf(&buf[pos], bufsize - pos, "frag 0x%x: ", frag_ps(fi));
     for (uint vi = 1; vi <= nv; ++vi) {
         pos += snprintf(&buf[pos], bufsize - pos, "[");
-        pos += limit_disp(&buf[pos], bufsize - pos, fp->r[vi-1].low);
+        pos += limit_disp(&buf[pos], bufsize - pos,
+                range_low(frag_range(fi, vi - 1)));
         pos += snprintf(&buf[pos], bufsize - pos, ", ");
-        pos += limit_disp(&buf[pos], bufsize - pos, fp->r[vi-1].high);
+        pos += limit_disp(&buf[pos], bufsize - pos,
+                range_high(frag_range(fi, vi - 1)));
         pos += snprintf(&buf[pos], bufsize - pos, "]");
         if (vi < nv)
             pos += snprintf(&buf[pos], bufsize - pos, "; ");
     }
     return pos;
-}
-
-uint frag_disp(char *buf, uint bufsize, fid_t fi) {
-    return fragp_disp(buf, bufsize, frag_p(fi));
 }
 
 void frag_dump(fid_t fi) {
@@ -76,12 +79,10 @@ void init_frags(void) {
     limit_den_set(LIM1, 1);
 
     fid_t fi = new_frag();
-    frag_p(fi)->fid = fi;
-    frag_p(fi)->parent = fi;
-    frag_p(fi)->ps = all_paths();
+    frag_ps_set(fi, all_paths());
     for (uint vi = 1; vi <= nv; ++vi) {
-        frag_range(fi, vi)->low = LIM0;
-        frag_range(fi, vi)->high = LIM1;
+        range_low_set(frag_range(fi, vi), LIM0);
+        range_high_set(frag_range(fi, vi), LIM1);
     }
 }
 
@@ -89,8 +90,8 @@ int denorm_addmul(fid_t fi, int *c, int q, uint vmax, int dir) {
     int cmax = c[vmax];
     assert(cmax != 0);
     limitid_t lmax = ((dir < 0) ^ (cmax < 0))
-        ? frag_range(fi, vmax)->low
-        : frag_range(fi, vmax)->high;
+        ? range_low(frag_range(fi, vmax))
+        : range_high(frag_range(fi, vmax));
     cmax *= limit_num(lmax);
     int qmax = limit_den(lmax);
     if (qmax > 1) {
@@ -168,16 +169,16 @@ fid_t find_split(fid_t fi, int *cs, int q, uint vmax) {
     if (debug_split) {
         char buf1[limit_dumpsize()], buf2[limit_dumpsize()],
                 buf3[limit_dumpsize()];
-        limit_disp(buf1, sizeof(buf1), frag_range(fi, vmax)->low);
-        limit_disp(buf2, sizeof(buf2), frag_range(fi, vmax)->high);
+        limit_disp(buf1, sizeof(buf1), range_low(frag_range(fi, vmax)));
+        limit_disp(buf2, sizeof(buf2), range_high(frag_range(fi, vmax)));
         limit_disp(buf3, sizeof(buf3), ln);
         fprintf(stderr, "split %c[%s, %s] at %s to %u, %u\n",
                 'a' + vmax - 1, buf1, buf2, buf3, fi, fn);
     }
-    assert(limit_cmp(ln, frag_range(fi, vmax)->low, vmax - 1) != 0);
-    assert(limit_cmp(ln, frag_range(fi, vmax)->high, vmax - 1) != 0);
-    frag_range(fi, vmax)->high = ln;
-    frag_range(fn, vmax)->low = ln;
+    assert(limit_cmp(ln, range_low(frag_range(fi, vmax)), vmax - 1) != 0);
+    assert(limit_cmp(ln, range_high(frag_range(fi, vmax)), vmax - 1) != 0);
+    range_high_set(frag_range(fi, vmax), ln);
+    range_low_set(frag_range(fn, vmax), ln);
     return fn;
 }
 
@@ -196,11 +197,11 @@ void split_one(fid_t fi, int *c, uint vmax, uint pi, uint pj) {
     int qhigh = FRC[1].den;
     assert(plow * qhigh < qlow * phigh);
     if (phigh <= 0) {
-        frag_p(fi)->ps &= ~(1 << pj);
+        frag_ps_set(fi, frag_ps(fi) & ~(1 << pj));
         return;
     }
     if (plow >= 0) {
-        frag_p(fi)->ps &= ~(1 << pi);
+        frag_ps_set(fi, frag_ps(fi) & ~(1 << pi));
         return;
     }
     /* pivot straddles zero, so find a split */
@@ -238,7 +239,7 @@ void split_all_for(uint pi, uint pj) {
             frag_disp(buf, sizeof(buf), fi);
             fprintf(stderr, "try split %s\n", buf);
         }
-        if ((frag_p(fi)->ps & ps) != ps) {
+        if ((frag_ps(fi) & ps) != ps) {
             if (debug_split)
                 fprintf(stderr, ".. does not match\n");
             continue;

@@ -667,9 +667,9 @@ exprid_t inteval(exprid_t e0, range_t *rp, uint vi) {
         pow_t p = term_pow(t0);
         int coeff = lc_get(lc0, vi);
 
-        eval_lim(rp->high, 1,
+        eval_lim(range_high(rp), 1,
                 m0, m1, seen, &ieq, lc0, lc1, coeff, p, vi, cmp, e1);
-        eval_lim(rp->low, -1,
+        eval_lim(range_low(rp), -1,
                 m0, m1, seen, &ieq, lc0, lc1, coeff, p, vi, cmp, e1);
     }
     return e1;
@@ -707,7 +707,7 @@ void report_total(void) {
 }
 
 void integrate(fid_t fi) {
-    pathset_t ps = frag_p(fi)->ps;
+    pathset_t ps = frag_ps(fi);
     if (pathset_count(ps) != 1)
         fail("panic: ps=%#x for fi %u\n", ps, fi);
     path_t pi = pathset_first(ps);

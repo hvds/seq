@@ -19,8 +19,6 @@ typedef struct {
 
 typedef uint fid_t;
 typedef struct {
-    fid_t fid;
-    fid_t parent;
     pathset_t ps;   /* paths reachable */
     range_t r[0];   /* r[nv] */
 } frag_t;
@@ -35,12 +33,27 @@ extern void init_frags(void);
 extern void done_frags(void);
 extern void split_all_for(uint pi, uint pj);
 extern uint frag_dumpsize(void);
-extern uint fragp_disp(char *buf, uint bufsize, frag_t *lp);
 extern uint frag_disp(char *buf, uint bufsize, fid_t l);
 extern void frag_dump(fid_t l);
 
 __inline uint range_size(void) {
     return sizeof(range_t);
+}
+
+__inline limitid_t range_low(range_t *rp) {
+    return rp->low;
+}
+
+__inline limitid_t range_high(range_t *rp) {
+    return rp->high;
+}
+
+__inline void range_low_set(range_t *rp, limitid_t li) {
+    rp->low = li;
+}
+
+__inline void range_high_set(range_t *rp, limitid_t li) {
+    rp->high = li;
 }
 
 __inline uint frag_size(void) {
@@ -76,14 +89,20 @@ __inline void free_frag(frag_t *fp) {
 __inline fid_t frag_dup(fid_t fi) {
     fid_t fn = new_frag();
     memcpy(frag_p(fn), frag_p(fi), frag_size());
-    frag_p(fn)->fid = fn;
-    frag_p(fn)->parent = fi;
     return fn;
 }
 
-__inline range_t *frag_range(fid_t f, uint vi) {
+__inline pathset_t frag_ps(fid_t fi) {
+    return frag_p(fi)->ps;
+}
+
+__inline void frag_ps_set(fid_t fi, pathset_t ps) {
+    frag_p(fi)->ps = ps;
+}
+
+__inline range_t *frag_range(fid_t fi, uint vi) {
     assert(vi > 0);
-    return &(frag_p(f)->r[vi - 1]);
+    return &(frag_p(fi)->r[vi - 1]);
 }
 
 #endif /* FRAG_H */
