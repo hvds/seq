@@ -25,7 +25,7 @@ extern limit_t *LIM1;
 extern void init_limits(void);
 extern void done_limits(void);
 
-__inline void *add_p(void *vp, uint off) {
+__inline void *add_p(void *vp, size_t off) {
     return (void *)(((char *)vp) + off);
 }
 

@@ -11,6 +11,7 @@
 #include "limit.h"
 #include "diag.h"
 
+extern inline void reset_frags(void);
 extern inline uint range_size(void);
 extern inline limit_t *range_low(range_t *rp);
 extern inline limit_t *range_high(range_t *rp);
@@ -19,7 +20,6 @@ extern inline void range_high_set(range_t *rp, limit_t *li);
 extern inline uint frag_size(void);
 extern inline frag_t *frag_p(fid_t f);
 extern inline void resize_frags(uint extra);
-extern inline void free_frag(frag_t *fp);
 extern inline fid_t new_frag(void);
 extern inline fid_t frag_dup(fid_t fi);
 extern inline pathset_t frag_ps(fid_t fi);
@@ -27,10 +27,9 @@ extern inline void frag_ps_set(fid_t fi, pathset_t ps);
 extern inline range_t *frag_range(fid_t f, uint vi);
 
 crange_t FRC[2];
-frag_t **frags = NULL;
+frag_t *frags = NULL;
 uint nfrags = 0;
 uint sizefrags = 0;
-uint next_fragid = 0;
 
 uint frag_dumpsize(void) {
     /* "frag 999(998) 0x18: [0, a+b]; [...]...\n" */
@@ -62,8 +61,6 @@ void frag_dump(fid_t fi) {
 }
 
 void done_frags(void) {
-    for (uint fi = 0; fi < nfrags; ++fi)
-        free_frag(frags[fi]);
     free(frags);
     done_limits();
 }

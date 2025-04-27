@@ -9,7 +9,7 @@
 limit_t *LIM0;
 limit_t *LIM1;
 
-extern inline void *add_p(void *vp, uint off);
+extern inline void *add_p(void *vp, size_t off);
 extern inline uint limit_size(void);
 extern inline lincom_t *limitp_lc(limit_t *lp);
 extern inline limitz_t limitp_num(limit_t *lp);

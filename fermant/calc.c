@@ -65,7 +65,7 @@ static inline void mpq_set_sisi(mpq_t q, int num, int den) {
 }
 
 static inline lincom_t *calc_path_lc(uint pi) {
-    return (lincom_t *)(add_p(path_lc, pi * lc_size()));
+    return (lincom_t *)(add_p(path_lc, (size_t)pi * (size_t)lc_size()));
 }
 
 static inline uint term_size(void) {
@@ -146,7 +146,8 @@ static inline uint mul_count(mulid_t mi) {
 }
 
 static inline term_t *mul_term(mulid_t mi, uint off) {
-    return (term_t *)add_p(&mul_p(mi)->term[0], off * term_size());
+    return (term_t *)add_p(&mul_p(mi)->term[0],
+            (size_t)off * (size_t)term_size());
 }
 
 static inline lincom_t *mul_lc(mulid_t mi, uint off) {

@@ -27,10 +27,9 @@ typedef struct {
 } frag_t;
 
 extern crange_t FRC[2];
-extern frag_t **frags;
+extern frag_t *frags;
 extern uint nfrags;
 extern uint sizefrags;
-extern uint next_fragid;
 
 extern void init_frags(void);
 extern void done_frags(void);
@@ -38,6 +37,10 @@ extern void split_all_for(uint pi, uint pj);
 extern uint frag_dumpsize(void);
 extern uint frag_disp(char *buf, uint bufsize, fid_t l);
 extern void frag_dump(fid_t l);
+
+__inline void reset_frags(void) {
+    nfrags = 0;
+}
 
 __inline uint range_size(void) {
     return limit_size() * 2;
@@ -64,7 +67,7 @@ __inline uint frag_size(void) {
 }
 
 __inline frag_t *frag_p(fid_t fi) {
-    return frags[fi];
+    return (frag_t *)add_p(frags, (size_t)fi * (size_t)frag_size());
 }
 
 __inline void resize_frags(uint extra) {
@@ -73,20 +76,13 @@ __inline void resize_frags(uint extra) {
     uint newsize = 3 * sizefrags / 2;
     while (nfrags + extra > newsize)
         newsize += 100;
-    frags = realloc(frags, newsize * sizeof(frag_t *));
+    frags = realloc(frags, (size_t)newsize * (size_t)frag_size());
     sizefrags = newsize;
 }
 
 __inline fid_t new_frag(void) {
-    fid_t fi = next_fragid++;
-    frag_t *fp = calloc(1, frag_size());
     resize_frags(1);
-    frags[nfrags++] = fp;
-    return fi;
-}
-
-__inline void free_frag(frag_t *fp) {
-    free(fp);
+    return nfrags++;
 }
 
 __inline fid_t frag_dup(fid_t fi) {
