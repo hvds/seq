@@ -17,9 +17,9 @@
 
 #include "int.h"
 #include "path.h"
-#include "resolve.h"
 #include "frag.h"
 #include "calc.h"
+#include "source.h"
 #include "diag.h"
 
 /* primary parameters - we are searching for g(na, nb), the expected cost
@@ -67,7 +67,6 @@ double elapsed(void) {
 void done(void) {
     done_calc();
     done_frags();
-    done_resolve();
     done_paths();
 }
 
@@ -128,27 +127,30 @@ void init_post(void) {
     init_time();
     init_diag();    /* ignore result: worst case we lose ^Z handling */
 
-    /* generate list of paths
+    /* generate list of paths and resolutions
      * TODO: add strategies
      */
     init_paths(0);
-    /* generate list of resolutions */
-    init_resolve();
-    /* define initial integral */
     init_frags();
     init_calc(npaths);
 
 }
 
-void run(void) {
-    split_all();
-    for (fid_t fi = 0; fi < nfrags; ++fi) {
+void run(uint recover) {
+    uint num = split_all(recover);
+    int fdi = resolve_reader(nresolve);
+    uint count = 0;
+    while (read_frag(fdi)) {
         if (need_diag) {
-            diag("int %u/%u", fi, nfrags);
+            diag("int %u/%u", count, num);
             need_diag = 0;
         }
-        integrate(fi);
+        ++count;
+        integrate(nfrags - 1);
+        reset_frags();
     }
+    if (fdi)
+        close(fdi);
     diag("");
     report_total();
 }
@@ -178,12 +180,15 @@ void recurse(e_is jump_continue) {
 }
 int main(int argc, char **argv, char **envp) {
     int i = 1;
+    uint run_recover = 0;
     prctl(PR_SET_NAME, argv[0]);
     while (i < argc && argv[i][0] == '-') {
         char *arg = argv[i++];
         if (arg[1] == '-')
             break;
-        if (strncmp("-Ls", arg, 3) == 0)
+        if (strncmp("-r", arg, 2) == 0)
+            run_recover = strtoul(&arg[2], NULL, 10);
+        else if (strncmp("-Ls", arg, 3) == 0)
             diag_delay = strtoul(&arg[3], NULL, 10);
         else
             fail("unknown option '%s'", arg);
@@ -200,7 +205,7 @@ int main(int argc, char **argv, char **envp) {
 
     init_post();
 
-    run();
+    run(run_recover);
     keep_diag();
 
     double tz = utime();

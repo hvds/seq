@@ -11,10 +11,17 @@ typedef uint path_t;
 /* a vector of npaths bits representing the paths available in a fragment */
 typedef uint pathset_t;
 
+/* a pair of path indices representing the process of resolving which path
+ * is shorter in a given context */
+typedef struct {
+    uint pi;
+    uint pj;
+} resolve_t;
+
+extern uint npaths;     /* the number of paths */
 extern path_t *paths;
-extern uint npaths;
 extern uint sizepaths;
-extern uint pathlen;
+extern uint nresolve;   /* the number of resolutions */
 
 extern void init_paths(int strategy);
 extern void done_paths(void);
@@ -22,6 +29,7 @@ extern uint render_path(char *buf, uint buflen, uint pi);
 /* takes (const path_t *) */
 extern int path_comparator(const void *a, const void *b);
 extern pathset_t all_paths(void);
+extern uint split_all(uint recover);
 
 __inline path_t path_p(uint pi) {
     return paths[pi];

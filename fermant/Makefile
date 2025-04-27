@@ -1,5 +1,5 @@
-CINT = int.c path.c resolve.c lincom.c limit.c frag.c calc.c diag.c num.c
-HINT = int.h path.h resolve.h lincom.h limit.h frag.h calc.h diag.h num.h
+CINT = int.c path.c source.c lincom.c limit.c frag.c calc.c diag.c num.c
+HINT = int.h path.h source.h lincom.h limit.h frag.h calc.h diag.h num.h
 
 CC_OPT = -O2
 CC_DOPT = -O0 -DDEBUG

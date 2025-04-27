@@ -33,10 +33,11 @@ extern uint sizefrags;
 
 extern void init_frags(void);
 extern void done_frags(void);
-extern void split_all_for(uint pi, uint pj);
+extern uint split_all_for(int fdi, int fdo, uint pi, uint pj);
 extern uint frag_dumpsize(void);
 extern uint frag_disp(char *buf, uint bufsize, fid_t l);
 extern void frag_dump(fid_t l);
+extern bool read_frag(int fdi);
 
 __inline void reset_frags(void) {
     nfrags = 0;

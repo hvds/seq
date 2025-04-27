@@ -1,15 +1,20 @@
 #include <stdlib.h>
 #include <strings.h>
+#include <unistd.h>
 
 #include "int.h"
 #include "path.h"
 #include "num.h"
+#include "frag.h"
+#include "source.h"
 #include "diag.h"
 
 path_t *paths = NULL;
 uint npaths = 0;
 uint sizepaths = 0;
-uint pathlen;
+resolve_t *resolves = NULL;
+uint nresolve = 0;
+uint sizeresolve = 0;
 
 extern inline path_t path_p(uint pi);
 extern inline path_t include_line(path_t cur, uint var);
@@ -72,6 +77,18 @@ int path_comparator(const void *a, const void *b) {
     return (pa & mindiff) ? -1 : 1;
 }
 
+int resolve_comparator(const void *a, const void *b) {
+    resolve_t *ra = (resolve_t *)a;
+    resolve_t *rb = (resolve_t *)b;
+    path_t pa = path_xor(ra->pi, ra->pj);
+    path_t pb = path_xor(rb->pi, rb->pj);
+    uint ca = path_count(pa);
+    uint cb = path_count(pb);
+    if (ca != cb)
+        return (int)ca - (int)cb;
+    return -path_comparator(&pa, &pb);
+}
+
 /* Writes a zero-terminated text representation of the path with the specified
  * index into the provided buffer. Returns the length written.
  */
@@ -119,6 +136,7 @@ void gen_paths_r(path_t cur, uint x, uint y) {
 void done_paths(void) {
     free(paths);
     free(transvar);
+    free(resolves);
 }
 
 /* Generate all paths, using the variable allocation defined by the
@@ -138,7 +156,6 @@ void init_paths(int strategy) {
 
     init_variable_allocation(strategy);
 
-    pathlen = (na - 1) + (nb - 1);
     gen_paths_r((path_t)0, 0, 0);
     qsort(paths, npaths, sizeof(path_t), &path_comparator);
 
@@ -147,8 +164,49 @@ void init_paths(int strategy) {
         render_path(buf, sizeof(buf), pi);
         report("path %d: %s (%0x)\n", pi, buf, paths[pi]);
     }
+
+    sizeresolve = npaths * (npaths - 1) / 2;
+    resolves = calloc(sizeresolve, sizeof(resolve_t));
+    uint ri = 0;
+    for (uint pi = 0; pi < npaths; ++pi) {
+        for (uint pj = pi + 1; pj < npaths; ++pj) {
+            if (ri >= sizeresolve)
+                fail("panic: resolves overflow");
+            resolves[ri].pi = pi;
+            resolves[ri].pj = pj;
+            ++ri;
+        }
+    }
+    nresolve = ri;
+    qsort(resolves, nresolve, sizeof(resolve_t), &resolve_comparator);
+
+    char buf1[2 * nv], buf2[2 * nv];
+    for (uint ri = 0; ri < nresolve; ++ri) {
+        resolve_t *r = &resolves[ri];
+        render_path(buf1, sizeof(buf1), r->pi);
+        render_path(buf2, sizeof(buf2), r->pj);
+        report("resolve %d: [%s] [%s]\n", ri, buf1, buf2);
+    }
 }
 
 pathset_t all_paths(void) {
     return (pathset_t)((1 << npaths) - 1);
 }
+
+uint split_all(uint recover) {
+    uint count;
+    for (uint ri = recover; ri < nresolve; ++ri) {
+        resolve_t *rp = &resolves[ri];
+        int fdi = resolve_reader(ri);
+        int fdo = resolve_writer(ri);
+        count = split_all_for(fdi, fdo, rp->pi, rp->pj);
+        report("split_all_for(%u, %u) gives %u frags\n",
+                rp->pi, rp->pj, count);
+        close(fdo);
+        if (fdi)
+            close(fdi);
+    }
+    report("after split_all have %u frags\n", count);
+    return count;
+}
+
