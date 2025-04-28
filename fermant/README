@@ -158,3 +158,10 @@ have 977758 parts after split adil efgh
 5573 / 977758^CCommand terminated by signal 2
 46126.92user 20.48system 12:49:15elapsed 99%CPU (0avgtext+0avgdata 4915168maxresident)k
 0inputs+0outputs (0major+1228630minor)pagefaults 0swaps
+[...]
+path[0] = 
+path[1] = 48157381/239500800 (0.75s)
+path[2] = 6394379/29937600 (7449.38s)
+path[3] = 6394379/29937600 (16.33s)
+path[4] = 48157381/239500800 (238.14s)
+path[5] = 

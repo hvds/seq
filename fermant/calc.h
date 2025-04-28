@@ -10,7 +10,7 @@ extern mpq_t totalq;
 
 extern void init_calc(uint num_paths);
 extern void done_calc(void);
-extern void integrate(fid_t fi);
+extern void integrate_path(uint pi);
 extern void report_total();
 
 #endif /* CALC_H */

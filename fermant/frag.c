@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
 #include <assert.h>
 
 #include "frag.h"
@@ -11,6 +9,7 @@
 #include "num.h"
 #include "lincom.h"
 #include "limit.h"
+#include "source.h"
 #include "diag.h"
 
 extern inline void reset_frags(void);
@@ -32,9 +31,6 @@ crange_t FRC[2];
 frag_t *frags = NULL;
 uint nfrags = 0;
 uint sizefrags = 0;
-
-int record_mark = 0x7265636d;
-int file_mark = 0x66696c65;
 
 uint frag_dumpsize(void) {
     /* "frag 999(998) 0x18: [0, a+b]; [...]...\n" */
@@ -63,51 +59,6 @@ void frag_dump(fid_t fi) {
     char buf[frag_dumpsize()];
     frag_disp(buf, sizeof(buf), fi);
     fprintf(stderr, "%s\n", buf);
-}
-
-bool seen_frag0 = 0;
-bool read_frag(int fdi) {
-    fid_t fi = new_frag();
-    if (fdi == 0) {
-        if (seen_frag0)
-            return 0;
-        seen_frag0 = 1;
-        frag_p(fi)->ps = all_paths();
-        for (uint vi = 1; vi <= nv; ++vi) {
-            limitp_dup(range_low(frag_range(fi, vi)), LIM0);
-            limitp_dup(range_high(frag_range(fi, vi)), LIM1);
-        }
-        return 1;
-    } else {
-        char buf[frag_size() + sizeof(record_mark)];
-        ssize_t chars = read(fdi, buf, sizeof(buf));
-        if (chars == sizeof(buf)) {
-            if (memcmp(&buf[frag_size()], &record_mark, sizeof(record_mark)))
-                fail("bad record_mark, possible corruption\n");
-            memcpy(frag_p(fi), buf, frag_size());
-            return 1;
-        } else if (chars == sizeof(file_mark)
-            && memcmp(&buf[0], &file_mark, sizeof(file_mark)) == 0
-        ) {
-            return 0;
-        } else {
-            fail("read error: read %d of %d bytes (%s)\n",
-                    chars, frag_size() + sizeof(record_mark), strerror(errno));
-            exit(1);
-        }
-    }
-}
-
-void write_frag(int fdo, fid_t fi) {
-    ssize_t chars = write(fdo, frag_p(fi), frag_size());
-    if (chars != frag_size())
-        fail("write error, wrote %d bytes of %d to %d (%s)\n",
-                chars, frag_size(), fdo, strerror(errno));
-    chars = write(fdo, &record_mark, sizeof(record_mark));
-    if (chars != sizeof(record_mark))
-        fail("write error, wrote %d bytes of %d (%s)\n",
-                chars, sizeof(record_mark), strerror(errno));
-    return;
 }
 
 void done_frags(void) {
@@ -218,7 +169,7 @@ fid_t find_split(fid_t fi, int *cs, int q, uint vmax) {
 
 fid_t base_fi;
 
-void split_one(fid_t fi, int fdo, int *c, uint vmax, uint pi, uint pj) {
+void split_one(fid_t fi, int *c, uint vmax, uint pi, uint pj) {
     if (need_diag) {
         diag("split %u +%u", base_fi, nfrags);
         need_diag = 0;
@@ -230,20 +181,14 @@ void split_one(fid_t fi, int fdo, int *c, uint vmax, uint pi, uint pj) {
     int phigh = FRC[1].num;
     int qhigh = FRC[1].den;
     assert(plow * qhigh < qlow * phigh);
-    if (phigh <= 0) {
-        frag_ps_set(fi, frag_ps(fi) & ~(1 << pj));
-        write_frag(fdo, fi);
-        return;
-    }
-    if (plow >= 0) {
-        frag_ps_set(fi, frag_ps(fi) & ~(1 << pi));
-        write_frag(fdo, fi);
-        return;
-    }
+    if (phigh <= 0)
+        return write_frag(fi, 1 << pj);
+    if (plow >= 0)
+        return write_frag(fi, 1 << pi);
     /* pivot straddles zero, so find a split */
     fid_t fj = find_split(fi, c, 1, vmax);
-    split_one(fi, fdo, c, vmax, pi, pj);
-    split_one(fj, fdo, c, vmax, pi, pj);
+    split_one(fi, c, vmax, pi, pj);
+    split_one(fj, c, vmax, pi, pj);
 }
 
 static inline uint fls(uint x) {
@@ -251,7 +196,7 @@ static inline uint fls(uint x) {
     return 8 * sizeof(x) - c - 1;
 }
 
-uint split_all_for(int fdi, int fdo, uint pi, uint pj) {
+uint split_all_for(uint pi, uint pj) {
     int c[nv + 1];
     pathset_t ps = (1 << pi) | (1 << pj);
     path_t ppi = path_p(pi);
@@ -269,7 +214,7 @@ uint split_all_for(int fdi, int fdo, uint pi, uint pj) {
 
     uint count = 0;
     base_fi = 0;
-    while (read_frag(fdi)) {
+    while (read_frag(new_frag())) {
         fid_t fi = nfrags - 1;
         ++base_fi;
         if (need_diag) {
@@ -282,19 +227,15 @@ uint split_all_for(int fdi, int fdo, uint pi, uint pj) {
             fprintf(stderr, "try split %s\n", buf);
         }
         if ((frag_ps(fi) & ps) == ps) {
-            split_one(fi, fdo, &c[0], vmax, pi, pj);
+            split_one(fi, &c[0], vmax, pi, pj);
             count += nfrags;
         } else {
             if (debug_split)
                 fprintf(stderr, ".. does not match\n");
-            write_frag(fdo, fi);
+            write_frag(fi, 0);
             count += 1;
         }
         reset_frags();
     }
-    ssize_t chars = write(fdo, &file_mark, sizeof(file_mark));
-    if (chars != sizeof(file_mark))
-        fail("write error, wrote %d bytes of %d (%s)\n",
-                chars, sizeof(file_mark), strerror(errno));
     return count;
 }

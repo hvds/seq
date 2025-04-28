@@ -22,6 +22,7 @@ extern uint npaths;     /* the number of paths */
 extern path_t *paths;
 extern uint sizepaths;
 extern uint nresolve;   /* the number of resolutions */
+extern resolve_t *resolves;
 
 extern void init_paths(int strategy);
 extern void done_paths(void);

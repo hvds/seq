@@ -136,25 +136,6 @@ void init_post(void) {
 
 }
 
-void run(uint recover) {
-    uint num = split_all(recover);
-    int fdi = resolve_reader(nresolve);
-    uint count = 0;
-    while (read_frag(fdi)) {
-        if (need_diag) {
-            diag("int %u/%u", count, num);
-            need_diag = 0;
-        }
-        ++count;
-        integrate(nfrags - 1);
-        reset_frags();
-    }
-    if (fdi)
-        close(fdi);
-    diag("");
-    report_total();
-}
-
 typedef enum {
     IS_DEEPER = 0,
     IS_NEXTX,
@@ -181,6 +162,7 @@ void recurse(e_is jump_continue) {
 int main(int argc, char **argv, char **envp) {
     int i = 1;
     uint run_recover = 0;
+    int int_only = -1;
     prctl(PR_SET_NAME, argv[0]);
     while (i < argc && argv[i][0] == '-') {
         char *arg = argv[i++];
@@ -188,6 +170,8 @@ int main(int argc, char **argv, char **envp) {
             break;
         if (strncmp("-r", arg, 2) == 0)
             run_recover = strtoul(&arg[2], NULL, 10);
+        else if (strncmp("-i", arg, 2) == 0)
+            int_only = strtol(&arg[2], NULL, 10);
         else if (strncmp("-Ls", arg, 3) == 0)
             diag_delay = strtoul(&arg[3], NULL, 10);
         else
@@ -205,8 +189,15 @@ int main(int argc, char **argv, char **envp) {
 
     init_post();
 
-    run(run_recover);
-    keep_diag();
+    if (int_only >= 0)
+        integrate_path(int_only);
+    else {
+        split_all(run_recover);
+        for (uint pi = 0; pi < npaths; ++pi)
+            integrate_path(pi);
+    }
+    diag("");
+    report_total();
 
     double tz = utime();
     report("int(%u, %u) = %Qd: (%.2fs)\n", na, nb, totalq, seconds(tz));

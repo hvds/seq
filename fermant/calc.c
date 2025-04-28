@@ -5,6 +5,7 @@
 #include "int.h"
 #include "frag.h"
 #include "path.h"
+#include "source.h"
 #include "diag.h"
 
 typedef unsigned char pow_t;
@@ -730,4 +731,26 @@ void integrate(fid_t fi) {
         expr_dump(e, 0);
     }
     alloc_result(e, pi);
+}
+
+void integrate_path(uint pi) {
+    for (uint ri = 0; ri < nresolve; ++ri) {
+        if (resolves[ri].pi != pi && resolves[ri].pj != pi)
+            continue;
+        integrate_open(ri, pi);
+        uint count = 0;
+        while (1) {
+            reset_frags();
+            ++count;
+            fid_t fi = new_frag();
+            if (!read_frag(fi))
+                break;
+            if (need_diag) {
+                need_diag = 0;
+                diag("int(%i) %u: %u", pi, ri, count);
+            }
+            integrate(fi);
+        }
+        integrate_close(ri, pi);
+    }
 }

@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <strings.h>
-#include <unistd.h>
 
 #include "int.h"
 #include "path.h"
@@ -197,14 +196,11 @@ uint split_all(uint recover) {
     uint count;
     for (uint ri = recover; ri < nresolve; ++ri) {
         resolve_t *rp = &resolves[ri];
-        int fdi = resolve_reader(ri);
-        int fdo = resolve_writer(ri);
-        count = split_all_for(fdi, fdo, rp->pi, rp->pj);
+        resolve_open(ri);
+        count = split_all_for(rp->pi, rp->pj);
+        resolve_close(ri);
         report("split_all_for(%u, %u) gives %u frags\n",
                 rp->pi, rp->pj, count);
-        close(fdo);
-        if (fdi)
-            close(fdi);
     }
     report("after split_all have %u frags\n", count);
     return count;
