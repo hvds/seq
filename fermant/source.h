@@ -4,11 +4,15 @@
 #include "frag.h"
 #include "path.h"
 
-extern void resolve_open(uint ri);
+extern bool resolve_open(uint ri);
 extern void resolve_close(uint ri);
-extern void integrate_open(uint ri, uint pi);
+extern bool integrate_open(uint ri, uint pi);
 extern void integrate_close(uint ri, uint pi);
 extern bool read_frag(fid_t fi);
 extern void write_frag(fid_t fi, pathset_t ps);
+extern void resolve_checkpoint(void);
+extern void integrate_checkpoint(void);
+extern void set_resolve_cp(uint ri, off_t oi, off_t oor, off_t oop1, off_t oop2);
+extern void set_integrate_cp(uint ri, uint pi, off_t oi);
 
 #endif /* SOURCE_H */

@@ -7,6 +7,7 @@
 #include "frag.h"
 
 extern mpq_t totalq;
+extern mpq_t *path_total;   /* path_total[npaths] */
 
 extern void init_calc(uint num_paths);
 extern void done_calc(void);

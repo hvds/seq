@@ -703,7 +703,7 @@ static inline void alloc_result(exprid_t e, path_t pi) {
 
 void report_total(void) {
     for (uint i = 0; i < npaths; ++i) {
-        report("path[%d] = %Qd\n", i, path_total[i]);
+        report("000 path[%d] = %Qd\n", i, path_total[i]);
         mpq_add(totalq, totalq, path_total[i]);
     }
 }
@@ -737,7 +737,8 @@ void integrate_path(uint pi) {
     for (uint ri = 0; ri < nresolve; ++ri) {
         if (resolves[ri].pi != pi && resolves[ri].pj != pi)
             continue;
-        integrate_open(ri, pi);
+        if (!integrate_open(ri, pi))
+            continue;
         uint count = 0;
         while (1) {
             reset_frags();
@@ -750,6 +751,10 @@ void integrate_path(uint pi) {
                 diag("int(%i) %u: %u", pi, ri, count);
             }
             integrate(fi);
+            if (need_log) {
+                integrate_checkpoint();
+                need_log = 0;
+            }
         }
         integrate_close(ri, pi);
     }

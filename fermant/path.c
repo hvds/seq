@@ -161,7 +161,7 @@ void init_paths(int strategy) {
     char buf[nv * 2];
     for (uint pi = 0; pi < npaths; ++pi) {
         render_path(buf, sizeof(buf), pi);
-        report("path %d: %s (%0x)\n", pi, buf, paths[pi]);
+        report("000 path %d: %s (%0x)\n", pi, buf, paths[pi]);
     }
 
     sizeresolve = npaths * (npaths - 1) / 2;
@@ -184,7 +184,7 @@ void init_paths(int strategy) {
         resolve_t *r = &resolves[ri];
         render_path(buf1, sizeof(buf1), r->pi);
         render_path(buf2, sizeof(buf2), r->pj);
-        report("resolve %d: [%s] [%s]\n", ri, buf1, buf2);
+        report("000 resolve %d: [%s] [%s]\n", ri, buf1, buf2);
     }
 }
 
@@ -196,13 +196,13 @@ uint split_all(uint recover) {
     uint count;
     for (uint ri = recover; ri < nresolve; ++ri) {
         resolve_t *rp = &resolves[ri];
-        resolve_open(ri);
+        if (!resolve_open(ri))
+            continue;
         count = split_all_for(rp->pi, rp->pj);
         resolve_close(ri);
-        report("split_all_for(%u, %u) gives %u frags\n",
+        report("000 split_all_for(%u, %u) gives %u frags\n",
                 rp->pi, rp->pj, count);
     }
-    report("after split_all have %u frags\n", count);
     return count;
 }
 

@@ -9,9 +9,24 @@
 
 #include "int.h"
 #include "frag.h"
+#include "calc.h"
 
 int fdi, fdor, fdop1, fdop2;
 bool seen0;
+
+typedef struct {
+    bool valid;
+    uint rid;
+    off_t ofdi, ofdor, ofdop1, ofdop2;
+} resolve_cp_t;
+typedef struct {
+    bool valid;
+    uint rid, pid;
+    off_t ofdi;
+} integrate_cp_t;
+resolve_cp_t rcp;
+integrate_cp_t icp;
+uint rid, pid;
 
 int record_mark = 0x7265636d;
 int file_mark = 0x66696c65;
@@ -28,31 +43,63 @@ char *resolved_path(uint ri, uint pi) {
     return &path[0];
 }
 
-void resolve_open(uint ri) {
+int ropen(char *path, bool recover, off_t off) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0)
+        fail("Error opening %s for read: %s\n", path, strerror(errno));
+    if (recover) {
+        off_t got = lseek(fd, off, SEEK_SET);
+        if (got != off)
+            fail("Error recovering read at %ld (%ld) of %s: %s\n",
+                    (long)off, (long)got, path, strerror(errno));
+    }
+    return fd;
+}
+
+int wopen(char *path, bool recover, off_t off) {
+    int fd;
+    if (!recover || off == 0) {
+        fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd < 0)
+            fail("Error opening %s for write: %s\n", path, strerror(errno));
+        return fd;
+    }
+    fd = open(path, O_RDONLY);
+    off_t got = lseek(fd, off - sizeof(record_mark), SEEK_SET);
+    if (got != off - sizeof(record_mark))
+        fail("Error seeking to record mark in %s: %s\n", path, strerror(errno));
+    char buf[sizeof(record_mark)];
+    if (read(fd, buf, sizeof(record_mark)) != sizeof(record_mark))
+        fail("Error reading record mark in %s: %s\n", path, strerror(errno));
+    if (memcmp(buf, &record_mark, sizeof(record_mark)) != 0)
+        fail("Record mark mismatch in %s\n", path);
+    close(fd);
+    fd = open(path, O_WRONLY);
+    if (fd < 0)
+        fail("panic: could not reopen %s: %s\n", path, strerror(errno));
+    got = lseek(fd, off, SEEK_SET);
+    if (got != off)
+        fail("panic: could not re-seek to %s of %s: %s\n", path, strerror(errno));
+    return fd;
+}
+
+bool resolve_open(uint ri) {
+    if (icp.valid || (rcp.valid && ri != rcp.rid))
+        return 0;
+    rid = ri;
     if (ri == 0) {
         fdi = -1;
         seen0 = 0;
+        if (rcp.valid && rcp.ofdi > 0)
+            seen0 = 1;
     } else {
-        fdi = open(resolve_path(ri), O_RDONLY);
-        if (fdi < 0)
-            fail("Error opening %s for read: %s\n",
-                    resolve_path(ri), strerror(errno));
+        fdi = ropen(resolve_path(ri), rcp.valid, rcp.ofdi);
     }
-    fdor = open(resolve_path(ri + 1),
-            O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fdor < 0)
-        fail("Error opening %s for write: %s\n",
-                resolve_path(ri + 1), strerror(errno));
-    fdop1 = open(resolved_path(ri, resolves[ri].pi),
-            O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fdop1 < 0)
-        fail("Error opening %s for write: %s\n",
-                resolved_path(ri, resolves[ri].pi), strerror(errno));
-    fdop2 = open(resolved_path(ri, resolves[ri].pj),
-            O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fdop2 < 0)
-        fail("Error opening %s for write: %s\n",
-                resolved_path(ri, resolves[ri].pj), strerror(errno));
+    fdor = wopen(resolve_path(ri + 1), rcp.valid, rcp.ofdor);
+    fdop1 = wopen(resolved_path(ri, resolves[ri].pi), rcp.valid, rcp.ofdop1);
+    fdop2 = wopen(resolved_path(ri, resolves[ri].pj), rcp.valid, rcp.ofdop2);
+    rcp.valid = 0;
+    return 1;
 }
 
 void resolve_close(uint ri) {
@@ -77,11 +124,14 @@ void resolve_close(uint ri) {
     close(fdop2);
 }
 
-void integrate_open(uint ri, uint pi) {
-    fdi = open(resolved_path(ri, pi), O_RDONLY);
-    if (fdi < 0)
-        fail("Error opening %s for read: %s\n",
-                resolved_path(ri, pi), strerror(errno));
+bool integrate_open(uint ri, uint pi) {
+    if (icp.valid && (ri != icp.rid || pi != icp.pid))
+        return 0;
+    rid = ri;
+    pid = pi;
+    fdi = ropen(resolved_path(ri, pi), icp.valid, icp.ofdi);
+    icp.valid = 0;
+    return 1;
 }
 
 void integrate_close(uint ri, uint pi) {
@@ -142,3 +192,42 @@ void write_frag(fid_t fi, pathset_t ps) {
     return;
 }
 
+void resolve_checkpoint(void) {
+    report("305 resolve %u %ld %ld %ld %ld (%.2fs)\n", rid,
+        (long)lseek(fdi, 0, SEEK_CUR),
+        (long)lseek(fdor, 0, SEEK_CUR),
+        (long)lseek(fdop1, 0, SEEK_CUR),
+        (long)lseek(fdop2, 0, SEEK_CUR),
+        seconds((double)utime())
+    );
+}
+
+void integrate_checkpoint(void) {
+    char buf[4096];
+    uint off = 0;
+    for (uint i = 0; i < npaths; ++i)
+        off += gmp_snprintf(&buf[off], sizeof(buf) - off, " %Qd",
+                path_total[i]);
+    /* if we don't fit, mark it so we don't silently recover wrong values */
+    if (off >= sizeof(buf) - 1)
+        buf[0] = 'x';
+    report("305 integrate %u %u %ld%s (%.2fs)\n",
+            rid, pid, (long)lseek(fdi, 0, SEEK_CUR), buf,
+            seconds((double)utime()));
+}
+
+void set_resolve_cp(uint ri, off_t oi, off_t oor, off_t oop1, off_t oop2) {
+    rcp.rid = ri;
+    rcp.ofdi = oi;
+    rcp.ofdor = oor;
+    rcp.ofdop1 = oop1;
+    rcp.ofdop2 = oop2;
+    rcp.valid = 1;
+}
+
+void set_integrate_cp(uint ri, uint pi, off_t oi) {
+    icp.rid = ri;
+    icp.pid = pi;
+    icp.ofdi = oi;
+    icp.valid = 1;
+}

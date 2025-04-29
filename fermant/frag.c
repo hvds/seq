@@ -236,6 +236,10 @@ uint split_all_for(uint pi, uint pj) {
             count += 1;
         }
         reset_frags();
+        if (need_log) {
+            resolve_checkpoint();
+            need_log = 0;
+        }
     }
     return count;
 }
