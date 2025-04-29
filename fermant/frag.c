@@ -44,10 +44,10 @@ uint frag_disp(char *buf, uint bufsize, fid_t fi) {
     for (uint vi = 1; vi <= nv; ++vi) {
         pos += snprintf(&buf[pos], bufsize - pos, "[");
         pos += limitp_disp(&buf[pos], bufsize - pos,
-                range_low(frag_range(fi, vi - 1)));
+                range_low(frag_range(fi, vi)));
         pos += snprintf(&buf[pos], bufsize - pos, ", ");
         pos += limitp_disp(&buf[pos], bufsize - pos,
-                range_high(frag_range(fi, vi - 1)));
+                range_high(frag_range(fi, vi)));
         pos += snprintf(&buf[pos], bufsize - pos, "]");
         if (vi < nv)
             pos += snprintf(&buf[pos], bufsize - pos, "; ");
