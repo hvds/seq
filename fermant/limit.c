@@ -36,8 +36,8 @@ void done_limits(void) {
 
 uint limit_dumpsize(void) {
     /* "-123(lincom)/456\n" */
-    assert(sizeof(limitz_t) <= 2);
-    return 7 + lc_dumpsize() + 9;
+    assert(sizeof(limitz_t) <= 4);
+    return 11 + lc_dumpsize() + 13;
 }
 
 uint limitp_disp(char *buf, uint bufsize, limit_t *lp) {

@@ -8,8 +8,8 @@
 #include "source.h"
 #include "diag.h"
 
-typedef unsigned char pow_t;
-typedef unsigned char lcsize_t;
+/* keep this same size as lincomz_t, for alignment */
+typedef unsigned int pow_t;
 
 typedef struct {
     pow_t pow;
@@ -70,7 +70,7 @@ static inline lincom_t *calc_path_lc(uint pi) {
 }
 
 static inline uint term_size(void) {
-    return sizeof(pow_t) + sizeof(lcsize_t) + lc_size();
+    return sizeof(pow_t) + lc_size();
 }
 
 static inline pow_t term_pow(term_t *tp) {

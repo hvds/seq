@@ -7,7 +7,7 @@
 #include "int.h"
 #include "num.h"
 
-typedef signed short lincomz_t;
+typedef signed int lincomz_t;
 /* notionally:
     typedef struct {
         lincomz_t value[nv + 1];
