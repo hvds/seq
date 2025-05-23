@@ -23,6 +23,8 @@ extern inline frag_t *frag_p(fid_t f);
 extern inline void resize_frags(uint extra);
 extern inline fid_t new_frag(void);
 extern inline fid_t frag_dup(fid_t fi);
+extern inline fid_t frag_id(fid_t fi);
+extern inline fid_t frag_parent(fid_t fi);
 extern inline pathset_t frag_ps(fid_t fi);
 extern inline void frag_ps_set(fid_t fi, pathset_t ps);
 extern inline range_t *frag_range(fid_t f, uint vi);
@@ -37,16 +39,18 @@ crange_t FRC[2];
 frag_t *frags = NULL;
 uint nfrags = 0;
 uint sizefrags = 0;
+fid_t nextfragid = 0;
 
 uint frag_dumpsize(void) {
     /* "frag 999(998) 0x18: [0, a+b]; [...]...\n" */
     dassert(sizeof(fid_t) <= 4);
-    return 30 + (npaths + 3)/4 + (limit_dumpsize() * 2 + 6) * nv + 2;
+    return 5+22+25 + (npaths + 3)/4 + (limit_dumpsize() * 2 + 6) * nv + 2;
 }
 
 uint frag_disp(char *buf, uint bufsize, fid_t fi) {
     uint pos = 0;
-    pos += snprintf(&buf[pos], bufsize - pos, "frag 0x%x: ", frag_ps(fi));
+    pos += snprintf(&buf[pos], bufsize - pos, "frag %d(%d) 0x%x: ",
+            (int)frag_id(fi), (int)frag_parent(fi), frag_ps(fi));
     for (uint vi = 1; vi <= nv; ++vi) {
         pos += snprintf(&buf[pos], bufsize - pos, "[");
         pos += limitp_disp(&buf[pos], bufsize - pos,
@@ -165,7 +169,7 @@ fid_t find_split(fid_t fi, int *cs, int q, uint vmax) {
         limitp_disp(buf2, sizeof(buf2), range_high(frag_range(fi, vmax)));
         limitp_disp(buf3, sizeof(buf3), ln);
         fprintf(stderr, "split %c[%s, %s] at %s to %u, %u\n",
-                'a' + vmax - 1, buf1, buf2, buf3, fi, fn);
+                'a' + vmax - 1, buf1, buf2, buf3, frag_id(fi), frag_id(fn));
     }
 #endif
     dassert(limitp_cmp(ln, range_low(frag_range(fi, vmax)), vmax - 1) != 0);

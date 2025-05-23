@@ -167,14 +167,16 @@ void parse_checkpoint(char *s) {
     off_t fdi_off, fdor_off, fdop1_off, fdop2_off;
 
     if (s[0] == 'r') {
-        if (EOF == sscanf(s, "resolve %u %lu %lu %lu %lu (%lfs)%n",
-            &rid, &fdi_off, &fdor_off, &fdop1_off, &fdop2_off, &dtime, &extra)
-        )
+        if (EOF == sscanf(
+            s, "resolve %u %u %lu %lu %lu %lu (%lfs)%n",
+            &rid, &nextfragid, &fdi_off, &fdor_off, &fdop1_off, &fdop2_off,
+            &dtime, &extra
+        ))
             fail("error parsing 305 line '%s'", s);
         set_resolve_cp(rid, fdi_off, fdor_off, fdop1_off, fdop2_off);
     } else {
-        if (EOF == sscanf(s, "integrate %u %u %lu%n",
-            &rid, &pid, &fdi_off, &extra)
+        if (EOF == sscanf(s, "integrate %u %u %u %lu%n",
+            &rid, &pid, &nextfragid, &fdi_off, &extra)
         )
             fail("error parsing 305 line '%s'", s); 
         off += extra;

@@ -22,6 +22,8 @@ typedef struct {
 
 typedef uint fid_t;
 typedef struct {
+    fid_t id;
+    fid_t parent;
     pathset_t ps;   /* paths reachable */
     char r[0];      /* range_t r[nv] */
 } frag_t;
@@ -30,6 +32,7 @@ extern crange_t FRC[2];
 extern frag_t *frags;
 extern uint nfrags;
 extern uint sizefrags;
+extern fid_t nextfragid;
 
 extern void init_frags(void);
 extern void done_frags(void);
@@ -85,10 +88,12 @@ __inline fid_t new_frag(void) {
     return nfrags++;
 }
 
-__inline fid_t frag_dup(fid_t fi) {
-    fid_t fn = new_frag();
-    memcpy(frag_p(fn), frag_p(fi), frag_size());
-    return fn;
+__inline fid_t frag_id(fid_t fi) {
+    return frag_p(fi)->id;
+}
+
+__inline fid_t frag_parent(fid_t fi) {
+    return frag_p(fi)->parent;
 }
 
 __inline pathset_t frag_ps(fid_t fi) {
@@ -97,6 +102,14 @@ __inline pathset_t frag_ps(fid_t fi) {
 
 __inline void frag_ps_set(fid_t fi, pathset_t ps) {
     frag_p(fi)->ps = ps;
+}
+
+__inline fid_t frag_dup(fid_t fi) {
+    fid_t fn = new_frag();
+    memcpy(frag_p(fn), frag_p(fi), frag_size());
+    frag_p(fn)->parent = frag_id(fi);
+    frag_p(fn)->id = nextfragid++;
+    return fn;
 }
 
 __inline range_t *frag_range(fid_t fi, uint vi) {

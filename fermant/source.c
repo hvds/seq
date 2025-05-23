@@ -147,6 +147,8 @@ bool read_frag(fid_t fi) {
         if (seen0)
             return 0;
         seen0 = 1;
+        frag_p(fi)->id = nextfragid++;
+        frag_p(fi)->parent = (fid_t)-1;
         frag_p(fi)->ps = all_paths();
         for (uint vi = 1; vi <= nv; ++vi) {
             limitp_dup(range_low(frag_range(fi, vi)), LIM0);
@@ -212,7 +214,7 @@ void write_frag(fid_t fi, pathset_t ps) {
 }
 
 void resolve_checkpoint(void) {
-    report("305 resolve %u %ld %ld %ld %ld (%.2fs)\n", rid,
+    report("305 resolve %u %u %ld %ld %ld %ld (%.2fs)\n", rid, nextfragid,
         (long)lseek(fdi, 0, SEEK_CUR),
         (long)lseek(fdor, 0, SEEK_CUR),
         (long)lseek(fdop1, 0, SEEK_CUR),
@@ -230,8 +232,8 @@ void integrate_checkpoint(void) {
     /* if we don't fit, mark it so we don't silently recover wrong values */
     if (off >= sizeof(buf) - 1)
         buf[0] = 'x';
-    report("305 integrate %u %u %ld%s (%.2fs)\n",
-            rid, pid, (long)lseek(fdi, 0, SEEK_CUR), buf,
+    report("305 integrate %u %u %u %ld%s (%.2fs)\n",
+            rid, pid, nextfragid, (long)lseek(fdi, 0, SEEK_CUR), buf,
             seconds((double)utime()));
 }
 
