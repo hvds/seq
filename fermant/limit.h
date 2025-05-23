@@ -9,7 +9,7 @@
 #include "lincom.h"
 #include "num.h"
 
-typedef signed short limitz_t;
+typedef lincomz_t limitz_t;
 /* notionally:
     typedef struct {
         lincom_t lc;
