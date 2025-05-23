@@ -369,7 +369,17 @@ static inline uint expr_match(exprid_t ei, mulid_t mi, uint vmax) {
     return count;
 }
 
-static inline void expr_add(exprid_t ei, mpq_t c, mulid_t mi, uint vmax) {
+static inline void expr_renorm(exprid_t ei) {
+    for (uint off = 0; off < expr_count(ei); ++off)
+        if (mpq_sgn(*const_mpq(cmul_const(expr_cmul(ei, off)))) == 0) {
+            expr_remove(ei, off);
+            --off;
+        }
+}
+
+static inline void expr_add(
+    exprid_t ei, mpq_t c, mulid_t mi, uint vmax, bool denorm
+) {
     if (mpq_sgn(c) == 0 || mul_is_zero(mi, vmax))
         return;
 
@@ -377,6 +387,8 @@ static inline void expr_add(exprid_t ei, mpq_t c, mulid_t mi, uint vmax) {
     if (off < expr_count(ei)) {
         mpq_t *q = const_mpq(cmul_const(expr_cmul(ei, off)));
         mpq_add(*q, *q, c);
+        if (!denorm && mpq_sgn(*q) == 0)
+            expr_remove(ei, off);
     } else {
         expr_count_set(ei, off + 1);
         cmul_t *cmp = expr_cmul(ei, off);
@@ -551,7 +563,7 @@ result; then proceed as before moving powers from tk to ti.
     for (uint p = 0; p <= pj; ++p) {
         mpq_set_si(dd2q, icomb(pj, p), 1);
         mpq_mul(dd2q, dd2q, *const_mpq(ci));
-        expr_add(e0, dd2q, mi, vi);
+        expr_add(e0, dd2q, mi, vi, 1);
         if (p < pj) {
             term_pow_set(mul_term(mi, ti), term_pow(mul_term(mi, ti)) + 1);
             if (!is_const) {
@@ -594,6 +606,7 @@ void find_distrib(exprid_t e0, uint vi) {
             continue;
         }
     }
+    expr_renorm(e0);
 }
 
 /* each mul_t is directly integrable, we can even do it in place */
@@ -658,7 +671,7 @@ static inline void eval_lim(
     mpq_mul(*cq, *cq, *const_mpq(cmul_const(cmp)));
     if (dir < 0)
         mpq_neg(*cq, *cq);
-    expr_add(e, *cq, mdst, vi - 1);
+    expr_add(e, *cq, mdst, vi - 1, 0);
 }
 
 exprid_t inteval(exprid_t e0, range_t *rp, uint vi) {
