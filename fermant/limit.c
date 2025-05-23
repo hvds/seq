@@ -55,8 +55,17 @@ uint limitp_disp(char *buf, uint bufsize, limit_t *lp) {
     if (terms == 0) {
         pos += snprintf(&buf[pos], bufsize - pos, "0");
     } else if (terms == 1) {
-        p *= lc_get(lc, lc_maxvar(lc));
-        pos += snprintf(&buf[pos], bufsize - pos, "%d", p);
+        uint vi = lc_maxvar(lc);
+        if (vi == 0) {
+            p *= lc_get(lc, lc_maxvar(lc));
+            pos += snprintf(&buf[pos], bufsize - pos, "%d", p);
+        } else {
+            if (abs(p) != 1)
+                pos += snprintf(&buf[pos], bufsize - pos, "%d", p);
+            else if (p < 0)
+                pos += snprintf(&buf[pos], bufsize - pos, "-");
+            pos += snprintf(&buf[pos], bufsize - pos, "%c", 'a' - 1 + vi);
+        }
         if (q != 1)
             pos += snprintf(&buf[pos], bufsize - pos, "/%d", q);
     } else if (p == 1 && q == 1)
