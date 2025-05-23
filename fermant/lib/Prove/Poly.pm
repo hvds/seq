@@ -56,7 +56,7 @@ sub _packmi {
     return join '', map $_ . chr($mi->{$_}), sort keys %$mi;
 }
 
-# Initialize an object from a simply arrayref representing a linear
+# Initialize an object from a simple arrayref representing a linear
 # combination of the variables and 1.
 sub from_sc {
     my($class, $sc) = @_;
