@@ -734,8 +734,14 @@ exprid_t do_integrate(exprid_t e0, range_t *rp, uint vi) {
     return e1;
 }
 
-static inline void alloc_result(exprid_t e, path_t pi) {
+static inline void alloc_result(fid_t fi, exprid_t e, path_t pi) {
     mpq_t *c = expr_const(e);
+    if (mpq_sgn(*c) <= 0) {
+        keep_diag();
+        frag_dump(fi);
+        fail("integration yields %Qd\n", c);
+    }
+    assert(mpq_sgn(*c) > 0);
     mpq_add(path_total[pi], path_total[pi], *c);
 }
 
@@ -774,7 +780,7 @@ void integrate(fid_t fi) {
         expr_dump(e, 0);
     }
 #endif
-    alloc_result(e, pi);
+    alloc_result(fi, e, pi);
 }
 
 void integrate_path(uint pi) {
