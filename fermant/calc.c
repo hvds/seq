@@ -666,8 +666,7 @@ exprid_t inteval(exprid_t e0, range_t *rp, uint vi) {
     exprid_t e1 = (e0 + 1) % NUM_EXPRS;
     expr_count_set(e1, 0);
     mulid_t m1 = new_mul();
-    char vlc[lc_size()];
-    lincom_t *lc1 = (lincom_t *)&vlc[0];
+    LINCOM_ALLOC(lc1);
     for (uint i = 0; i < ecount; ++i) {
         cmul_t *cmp = expr_cmul(e0, i);
         mulid_t m0 = cmul_mul(cmp);
