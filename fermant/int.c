@@ -33,6 +33,8 @@ uint nv;
 int debug_split = 0;
 int debug_integrate = 0;
 int debug_suppress_write = 0;
+uint sync_count;    /* force sync every n frag_write() calls */
+bool sync_stderr = 0;
 
 /* set to utime at start of run, minus last timestamp of recovery file */
 double t0 = 0;
@@ -257,6 +259,7 @@ void init_post(void) {
             fail("%s: %s", rpath, strerror(errno));
         setlinebuf(rfp);
     }
+    sync_stderr = isatty(STDERR_FILENO) ? 0 : 1;
 
     diagt = diag_delay;
     if (rfp)
@@ -289,6 +292,8 @@ int main(int argc, char **argv, char **envp) {
             debug_integrate = 1;
         else if (strncmp("-dw", arg, 3) == 0)
             debug_suppress_write = 1;
+        else if (strncmp("-w", arg, 2) == 0)
+            sync_count = strtoul(&arg[2], NULL, 10);
         else
             fail("unknown option '%s'", arg);
     }

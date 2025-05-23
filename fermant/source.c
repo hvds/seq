@@ -14,6 +14,7 @@
 
 int fdi, fdor, fdop1, fdop2;
 bool seen0;
+uint write_count = 0;
 
 typedef struct {
     bool valid;
@@ -172,6 +173,11 @@ bool read_frag(fid_t fi) {
     }
 }
 
+void do_sync(int fd) {
+    if (fsync(fd) != 0)
+        fail("error syncing fd %d: %s", fd, strerror(errno));
+}
+
 static inline bool unique_set(pathset_t ps) {
     return ((ps & (ps - 1)) == 0) ? 1 : 0;
 }
@@ -193,6 +199,14 @@ void write_frag(fid_t fi, pathset_t ps) {
         if (chars != sizeof(record_mark))
             fail("write error, wrote %d bytes of %d (%s)\n",
                     chars, sizeof(record_mark), strerror(errno));
+        ++write_count;
+        if (sync_count && (write_count % sync_count) == 0) {
+            if (sync_stderr)
+                do_sync(STDERR_FILENO);
+            do_sync(fdor);
+            do_sync(fdop1);
+            do_sync(fdop2);
+        }
     }
     return;
 }
