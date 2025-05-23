@@ -192,9 +192,9 @@ pathset_t all_paths(void) {
     return (pathset_t)((1 << npaths) - 1);
 }
 
-uint split_all(uint recover) {
+uint split_all(void) {
     uint count;
-    for (uint ri = recover; ri < nresolve; ++ri) {
+    for (uint ri = 0; ri < nresolve; ++ri) {
         resolve_t *rp = &resolves[ri];
         if (!resolve_open(ri))
             continue;

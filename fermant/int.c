@@ -268,8 +268,6 @@ void init_post(void) {
 
 int main(int argc, char **argv, char **envp) {
     int i = 1;
-    uint run_recover = 0;
-    int int_only = -1;
     prctl(PR_SET_NAME, argv[0]);
     while (i < argc && argv[i][0] == '-') {
         char *arg = argv[i++];
@@ -280,12 +278,14 @@ int main(int argc, char **argv, char **envp) {
             strcpy(rpath, &arg[2]);
         } else if (arg[1] == 'R')
             skip_recover = 1;
-        else if (strncmp("-i", arg, 2) == 0)
-            int_only = strtol(&arg[2], NULL, 10);
         else if (strncmp("-Ls", arg, 3) == 0)
             diag_delay = strtoul(&arg[3], NULL, 10);
         else if (strncmp("-Lf", arg, 3) == 0)
             log_delay = strtoul(&arg[3], NULL, 10);
+        else if (strncmp("-ds", arg, 3) == 0)
+            debug_split = 1;
+        else if (strncmp("-di", arg, 3) == 0)
+            debug_integrate = 1;
         else
             fail("unknown option '%s'", arg);
     }
@@ -301,13 +301,9 @@ int main(int argc, char **argv, char **envp) {
 
     init_post();
 
-    if (int_only >= 0)
-        integrate_path(int_only);
-    else {
-        split_all(run_recover);
-        for (uint pi = 0; pi < npaths; ++pi)
-            integrate_path(pi);
-    }
+    split_all();
+    for (uint pi = 0; pi < npaths; ++pi)
+        integrate_path(pi);
     diag("");
     report_total();
 

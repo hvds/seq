@@ -30,7 +30,7 @@ extern uint render_path(char *buf, uint buflen, uint pi);
 /* takes (const path_t *) */
 extern int path_comparator(const void *a, const void *b);
 extern pathset_t all_paths(void);
-extern uint split_all(uint recover);
+extern uint split_all(void);
 
 __inline path_t path_p(uint pi) {
     return paths[pi];
