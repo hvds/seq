@@ -27,6 +27,12 @@ extern inline pathset_t frag_ps(fid_t fi);
 extern inline void frag_ps_set(fid_t fi, pathset_t ps);
 extern inline range_t *frag_range(fid_t f, uint vi);
 
+#ifdef DEBUG
+#   define dassert(x) assert(x)
+#else
+#   define dassert(x)
+#endif
+
 crange_t FRC[2];
 frag_t *frags = NULL;
 uint nfrags = 0;
@@ -34,7 +40,7 @@ uint sizefrags = 0;
 
 uint frag_dumpsize(void) {
     /* "frag 999(998) 0x18: [0, a+b]; [...]...\n" */
-    assert(sizeof(fid_t) <= 4);
+    dassert(sizeof(fid_t) <= 4);
     return 30 + (npaths + 3)/4 + (limit_dumpsize() * 2 + 6) * nv + 2;
 }
 
@@ -72,7 +78,7 @@ void init_frags(void) {
 
 int denorm_addmul(fid_t fi, int *c, int q, uint vmax, int dir) {
     int cmax = c[vmax];
-    assert(cmax != 0);
+    dassert(cmax != 0);
     limit_t *lmax = ((dir < 0) ^ (cmax < 0))
         ? range_low(frag_range(fi, vmax))
         : range_high(frag_range(fi, vmax));
@@ -126,7 +132,7 @@ void find_range(fid_t fi, int *c, int q, int vmax) {
 fid_t find_split(fid_t fi, int *cs, int q, uint vmax) {
     while (vmax && cs[vmax] == 0)
         --vmax;
-    assert(vmax > 0);
+    dassert(vmax > 0);
 
     int c[vmax];
 
@@ -151,6 +157,7 @@ fid_t find_split(fid_t fi, int *cs, int q, uint vmax) {
     limitp_set_norm(ln, cs, -cs[vmax], vmax - 1);
 
     fid_t fn = frag_dup(fi);
+#ifdef DEBUG
     if (debug_split) {
         char buf1[limit_dumpsize()], buf2[limit_dumpsize()],
                 buf3[limit_dumpsize()];
@@ -160,8 +167,9 @@ fid_t find_split(fid_t fi, int *cs, int q, uint vmax) {
         fprintf(stderr, "split %c[%s, %s] at %s to %u, %u\n",
                 'a' + vmax - 1, buf1, buf2, buf3, fi, fn);
     }
-    assert(limitp_cmp(ln, range_low(frag_range(fi, vmax)), vmax - 1) != 0);
-    assert(limitp_cmp(ln, range_high(frag_range(fi, vmax)), vmax - 1) != 0);
+#endif
+    dassert(limitp_cmp(ln, range_low(frag_range(fi, vmax)), vmax - 1) != 0);
+    dassert(limitp_cmp(ln, range_high(frag_range(fi, vmax)), vmax - 1) != 0);
     range_low_set(frag_range(fi, vmax), ln);
     range_high_set(frag_range(fn, vmax), ln);
     return fn;
@@ -180,7 +188,7 @@ void split_one(fid_t fi, int *c, uint vmax, uint pi, uint pj) {
     int qlow = FRC[0].den;
     int phigh = FRC[1].num;
     int qhigh = FRC[1].den;
-    assert(plow * qhigh < qlow * phigh);
+    dassert(plow * qhigh < qlow * phigh);
     if (phigh <= 0)
         return write_frag(fi, 1 << pj);
     if (plow >= 0)
@@ -221,17 +229,21 @@ uint split_all_for(uint pi, uint pj) {
             diag("split %u", base_fi);
             need_diag = 0;
         }
+#ifdef DEBUG
         if (debug_split) {
             char buf[frag_dumpsize()];
             frag_disp(buf, sizeof(buf), fi);
             fprintf(stderr, "try split %s\n", buf);
         }
+#endif
         if ((frag_ps(fi) & ps) == ps) {
             split_one(fi, &c[0], vmax, pi, pj);
             count += nfrags;
         } else {
+#ifdef DEBUG
             if (debug_split)
                 fprintf(stderr, ".. does not match\n");
+#endif
             write_frag(fi, 0);
             count += 1;
         }

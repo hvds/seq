@@ -8,6 +8,12 @@
 #include "source.h"
 #include "diag.h"
 
+#ifdef DEBUG
+#   define dassert(x) assert(x)
+#else
+#   define dassert(x)
+#endif
+
 /* keep this same size as lincomz_t, for alignment */
 typedef unsigned int pow_t;
 
@@ -186,12 +192,14 @@ static inline void mul_remove(mulid_t mi, uint off) {
 
 /* must be called only with non-const lc */
 static inline uint mul_mul_lc(mulid_t mi, lincom_t *lc, uint vmax, pow_t p) {
+#ifdef DEBUG
     for (uint vi = 1; vi <= vmax; ++vi)
         if (lc_get(lc, vi) != 0)
             goto non_const;
-    assert(0);
+    dassert(0);
     
   non_const:
+#endif
     for (uint ti = 0; ti < mul_count(mi); ++ti) {
         term_t *tp = mul_term(mi, ti);
         if (lc_cmp(term_lc(tp), lc, vmax) != 0)
@@ -338,9 +346,9 @@ static inline mulid_t expr_mul(exprid_t ei, uint off) {
 
 static inline mpq_t *expr_const(exprid_t ei) {
     if (expr_count(ei)) {
-        assert(expr_count(ei) == 1);
+        dassert(expr_count(ei) == 1);
         mpq_set(constq, *const_mpq(cmul_const(expr_cmul(ei, 0))));
-        assert(mul_count(expr_mul(ei, 0)) == 0);
+        dassert(mul_count(expr_mul(ei, 0)) == 0);
     } else {
         mpq_set_ui(constq, 0, 1);
     }
@@ -674,7 +682,7 @@ exprid_t inteval(exprid_t e0, range_t *rp, uint vi) {
         /* there must be exactly one term dependent on vi */
         /* FIXME: we could cache this when we integrate (or combine
          * inteval with integrate) */
-        assert(seen < mcount);
+        dassert(seen < mcount);
 
         term_t *t0 = mul_term(m0, seen);
         lincom_t *lc0 = term_lc(t0);
@@ -691,20 +699,26 @@ exprid_t inteval(exprid_t e0, range_t *rp, uint vi) {
 
 exprid_t do_integrate(exprid_t e0, range_t *rp, uint vi) {
     find_distrib(e0, vi);
+#ifdef DEBUG
     if (debug_integrate) {
         fprintf(stderr, "  distrib %c to ", 'a' + vi - 1);
         expr_dump(e0, vi);
     }
+#endif
     safe_integrate(e0, vi);
+#ifdef DEBUG
     if (debug_integrate) {
         fprintf(stderr, "  integrate %c to ", 'a' + vi - 1);
         expr_dump(e0, vi);
     }
+#endif
     exprid_t e1 = inteval(e0, rp, vi);
+#ifdef DEBUG
     if (debug_integrate) {
         fprintf(stderr, "  inteval %c to ", 'a' + vi - 1);
         expr_dump(e1, vi - 1);
     }
+#endif
     return e1;
 }
 
@@ -727,21 +741,27 @@ void integrate(fid_t fi) {
     path_t pi = pathset_first(ps);
 
     char buf[frag_dumpsize()];
+#ifdef DEBUG
     if (debug_integrate) {
         frag_disp(buf, sizeof(buf), fi);
         fprintf(stderr, "integrate %s\n", buf);
     }
+#endif
 
     exprid_t e = init_expr(pi);
     for (uint vi = nv; vi > 0; --vi) {
+#ifdef DEBUG
         if (debug_integrate)
             expr_dump(e, vi);
+#endif
         e = do_integrate(e, frag_range(fi, vi), vi);
     }
+#ifdef DEBUG
     if (debug_integrate) {
         fprintf(stderr, "result ");
         expr_dump(e, 0);
     }
+#endif
     alloc_result(e, pi);
 }
 

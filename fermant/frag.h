@@ -100,7 +100,9 @@ __inline void frag_ps_set(fid_t fi, pathset_t ps) {
 }
 
 __inline range_t *frag_range(fid_t fi, uint vi) {
+#ifdef DEBUG
     assert(vi > 0);
+#endif
     return (range_t *)add_p(frag_p(fi),
             sizeof(frag_t) + (vi - 1) * range_size());
 }
