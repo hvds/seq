@@ -31,11 +31,17 @@ __inline void lc_set(lincom_t *lc, uint var, lincomz_t v) {
     ((lincomz_t *)lc)[var] = v;
 }
 
-__inline int lc_is_const(lincom_t *lc, uint vmax) {
+__inline bool lc_is_const(lincom_t *lc, uint vmax) {
     for (uint vi = 1; vi <= vmax; ++vi)
         if (lc_get(lc, vi))
             return 0;
     return 1;
+}
+
+__inline bool lc_is_zero(lincom_t *lc, uint vmax) {
+    if (lc_get(lc, 0) != 0)
+        return 0;
+    return lc_is_const(lc, vmax);
 }
 
 __inline int lc_cmp(lincom_t *lca, lincom_t *lcb, uint vmax) {

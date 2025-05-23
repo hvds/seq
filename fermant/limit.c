@@ -16,6 +16,7 @@ extern inline limitz_t limitp_num(limit_t *lp);
 extern inline limitz_t limitp_den(limit_t *lp);
 extern inline limitz_t limitp_num_set(limit_t *lp, limitz_t v);
 extern inline limitz_t limitp_den_set(limit_t *lp, limitz_t v);
+extern inline bool limitp_is_zero(limit_t *lp, uint vmax);
 extern inline int limitp_cmp(limit_t *la, limit_t *lb, uint vmax);
 extern inline void limitp_dup(limit_t *ld, limit_t *ls);
 extern inline void limitp_set_norm(limit_t *lp, int *c, int q, uint vmax);

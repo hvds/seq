@@ -57,6 +57,12 @@ __inline limitz_t limitp_den_set(limit_t *lp, limitz_t v) {
     lzp[1] = v;
 }
 
+__inline bool limitp_is_zero(limit_t *lp, uint vmax) {
+    if (limitp_num(lp) == 0)
+        return 1;
+    return lc_is_zero(limitp_lc(lp), vmax);
+}
+
 __inline int limitp_cmp(limit_t *la, limit_t *lb, uint vmax) {
     int cmp = limitp_num(la) * limitp_den(lb) - limitp_num(lb) * limitp_den(la);
     return cmp ? cmp : lc_cmp(limitp_lc(la), limitp_lc(lb), vmax);

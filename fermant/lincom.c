@@ -7,7 +7,8 @@
 extern inline uint lc_size(void);
 extern inline lincomz_t lc_get(lincom_t *lc, uint var);
 extern inline void lc_set(lincom_t *lc, uint var, lincomz_t v);
-extern inline int lc_is_const(lincom_t *lc, uint vmax);
+extern inline bool lc_is_const(lincom_t *lc, uint vmax);
+extern inline bool lc_is_zero(lincom_t *lc, uint vmax);
 extern inline int lc_cmp(lincom_t *lca, lincom_t *lcb, uint vmax);
 extern inline void lc_copy(lincom_t *lcdst, lincom_t *lcsrc);
 extern inline uint lc_maxvar(lincom_t *lc);

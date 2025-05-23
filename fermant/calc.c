@@ -90,6 +90,10 @@ static inline void term_copy(term_t *tdst, term_t *tsrc) {
     lc_copy(term_lc(tdst), term_lc(tsrc));
 }
 
+static inline bool term_is_zero(term_t *tp, uint vmax) {
+    return lc_is_zero(term_lc(tp), vmax);
+}
+
 static inline int term_cmp(term_t *ta, term_t *tb, uint vmax) {
     if (ta->pow != tb->pow)
         return (int)ta->pow - (int)tb->pow;
@@ -153,6 +157,14 @@ static inline term_t *mul_term(mulid_t mi, uint off) {
 
 static inline lincom_t *mul_lc(mulid_t mi, uint off) {
     return term_lc(mul_term(mi, off));
+}
+
+static inline bool mul_is_zero(mulid_t mi, uint vmax) {
+    uint count = mul_count(mi);
+    for (uint i = 0; i < count; ++i)
+        if (term_is_zero(mul_term(mi, i), vmax))
+            return 1;
+    return 0;
 }
 
 static inline void mul_count_set(mulid_t mi, uint count) {
@@ -350,7 +362,7 @@ static inline uint expr_match(exprid_t ei, mulid_t mi, uint vmax) {
 }
 
 static inline void expr_add(exprid_t ei, mpq_t c, mulid_t mi, uint vmax) {
-    if (mpq_sgn(c) == 0)
+    if (mpq_sgn(c) == 0 || mul_is_zero(mi, vmax))
         return;
 
     uint off = expr_match(ei, mi, vmax);
