@@ -33,6 +33,8 @@ uint lc_disp(char *buf, uint bufsize, lincom_t *lc, uint vmax) {
         if (vi)
             pos += snprintf(buf + pos, bufsize - pos, "%c", 'a' - 1 + vi);
     }
+    if (pos == 0)
+        buf[pos] = 0;
     return pos;
 }
 
