@@ -59,6 +59,8 @@ int ropen(char *path, bool recover, off_t off) {
 
 int wopen(char *path, bool recover, off_t off) {
     int fd;
+    if (debug_suppress_write)
+        return -1;
     if (!recover || off == 0) {
         fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (fd < 0)
@@ -182,14 +184,16 @@ void write_frag(fid_t fi, pathset_t ps) {
         if (unique_set(fps))
             fdo = (fps < ps) ? fdop1 : fdop2;
     }
-    ssize_t chars = write(fdo, frag_p(fi), frag_size());
-    if (chars != frag_size())
-        fail("write error, wrote %d bytes of %d to %d (%s)\n",
-                chars, frag_size(), fdo, strerror(errno));
-    chars = write(fdo, &record_mark, sizeof(record_mark));
-    if (chars != sizeof(record_mark))
-        fail("write error, wrote %d bytes of %d (%s)\n",
-                chars, sizeof(record_mark), strerror(errno));
+    if (!debug_suppress_write) {
+        ssize_t chars = write(fdo, frag_p(fi), frag_size());
+        if (chars != frag_size())
+            fail("write error, wrote %d bytes of %d to %d (%s)\n",
+                    chars, frag_size(), fdo, strerror(errno));
+        chars = write(fdo, &record_mark, sizeof(record_mark));
+        if (chars != sizeof(record_mark))
+            fail("write error, wrote %d bytes of %d (%s)\n",
+                    chars, sizeof(record_mark), strerror(errno));
+    }
     return;
 }
 

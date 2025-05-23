@@ -12,6 +12,7 @@ extern uint na, nb; /* we are calculating g(na, nb) */
 extern uint nv;     /* ... which is an integration over nv variables */
 extern int debug_split;
 extern int debug_integrate;
+extern int debug_suppress_write;
 extern volatile bool need_diag, need_log;
 extern FILE *rfp;
 extern struct rusage rusage_buf;

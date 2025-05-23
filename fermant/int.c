@@ -32,6 +32,7 @@ uint nv;
 
 int debug_split = 0;
 int debug_integrate = 0;
+int debug_suppress_write = 0;
 
 /* set to utime at start of run, minus last timestamp of recovery file */
 double t0 = 0;
@@ -286,6 +287,8 @@ int main(int argc, char **argv, char **envp) {
             debug_split = 1;
         else if (strncmp("-di", arg, 3) == 0)
             debug_integrate = 1;
+        else if (strncmp("-dw", arg, 3) == 0)
+            debug_suppress_write = 1;
         else
             fail("unknown option '%s'", arg);
     }
