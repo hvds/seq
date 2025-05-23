@@ -15,4 +15,9 @@ extern void integrate_checkpoint(void);
 extern void set_resolve_cp(uint ri, off_t oi, off_t oor, off_t oop1, off_t oop2);
 extern void set_integrate_cp(uint ri, uint pi, off_t oi);
 
+extern void mmfrag_init(void);
+extern void mmfrag_done(void);
+extern uint mmfrag_open(bool resolved, uint ri, uint pi);
+extern frag_t *mmfrag_get(uint rec);
+
 #endif /* SOURCE_H */

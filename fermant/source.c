@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 
 #include "int.h"
 #include "frag.h"
@@ -230,4 +231,60 @@ void set_integrate_cp(uint ri, uint pi, off_t oi) {
     icp.pid = pi;
     icp.ofdi = oi;
     icp.valid = 1;
+}
+
+long page_size; /* expecting 4096 */
+#define TARGET_SIZE (64L * 1024L * 1024L)
+void *mmfrag = NULL;
+struct stat statbuf;
+off_t chunk_size, file_size, indent, map_size;
+uint records, this_record;
+
+void mmfrag_init(void) {
+    page_size = sysconf(_SC_PAGE_SIZE);
+    if (TARGET_SIZE % page_size)
+        fail("target size %lu is not a multiple of page size %ld\n",
+                TARGET_SIZE, page_size);
+    chunk_size = frag_size() + sizeof(record_mark);
+    fdi = -1;
+    mmfrag = NULL;
+}
+
+void mmfrag_done(void) {
+    if (mmfrag)
+        munmap(mmfrag, map_size);
+    if (fdi >= 0)
+        close(fdi);
+}
+
+uint mmfrag_open(bool resolved, uint ri, uint pi) {
+    if (fdi >= 0)
+        close(fdi);
+    rid = ri;
+    pid = pi;
+    char *path = resolved ? resolved_path(rid, pid) : resolve_path(rid);
+    fdi = ropen(path, 0, 0);
+    if (fstat(fdi, &statbuf) != 0)
+        fail("could not stat %s: %s\n", path, strerror(errno));
+    file_size = statbuf.st_size - sizeof(file_mark);
+    return file_size / chunk_size;
+}
+
+frag_t *mmfrag_get(uint rec) {
+    off_t off = (off_t)rec * chunk_size;
+    if (mmfrag && (off >= indent) && (off + chunk_size < indent + map_size))
+        return (frag_t *)add_p(mmfrag, off - indent);
+    if (mmfrag)
+        munmap(mmfrag, map_size);
+    indent = off - (off % page_size);
+    map_size = file_size - indent;
+    if (map_size > TARGET_SIZE)
+        map_size = TARGET_SIZE;
+    /* I assume that if there's any difference at all, the kernel can do
+     * less work for MAP_SHARED on a read-only extent than for MAP_PRIVATE */
+    mmfrag = mmap(NULL, map_size, PROT_READ, MAP_SHARED, fdi, indent);
+    if (mmfrag == (void *)-1)
+        fail("mmap error for size %ld from %ld for file(%u, %u): %s\n",
+                map_size, indent, rid, pid, strerror(errno));
+    return (frag_t *)add_p(mmfrag, off - indent);
 }
