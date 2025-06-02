@@ -1,0 +1,185 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+
+=head1 A problem on moving stones from K. Knop
+
+Starting with n stones in position 0, a move consists of taking k stones
+from position m and moving them to position m+k or position m-k.
+a(n) is the least number of moves required to move the n stones to position 1.
+
+In general, a(x+y) <= a(x)+a(y), a(x+1) <= a(x)+1 so a(n) <= n.
+
+Max Alekseyev finds a(0..43) as:
+*  0,  1,  2,  3,  4,  5,  5,  6,  7,  7,
+*  6,  7,  7,  8,  7,  7,  8,  9,  8,  8,
+*  9,  8,  8,  9,  8,  9,  8,  9,  9, 10,
+*  9,  9, 10,  9,  9,  9, 10, 10,  9, 10,
+*  9, 10,  9, 10
+= sum 334
+
+A particular pattern of moves tells us that a(k(km+1)+c) <= 2k+m+f(abs(c),k),
+where f(c,k) = A263765(c) when k >= g(c). Using only those patterns, we find:
+   0,  1,  2,  3,  4,  5,  5,  6,  7,  7,
+   6,  7,  7,  8,  7,  8,  8,  9,  8,  9,
+   9,  8,  9, 10, 10,  9, 10, 11, 11, 10,
+   9, 10, 11, 11, 10, 11, 10, 11, 11, 10,
+  11, 12, 12, 11, 12, 11, 12, 12, 11, 12,
+  13, 12, 11, 12, 12, 12, 12, 12, 13, 13,
+  13, 12, 13, 14, 13, 13, 13, 13, 12, 13,
+  13, 13, 13, 14, 15, 14, 14, 13, 14, 14,
+  13, 14, 15, 14, 13, 14, 14, 15, 14, 14,
+  15, 15, 15, 14, 15, 15, 14, 15, 15, 15,
+  14
+= sum 364, 1124
+.. which first fails to find optimal solutions at n in {15,19,22,23,24...}.
+
+A second pattern gives a(k(km-1)+c) <= 2k+m-1+f(abs(c),k-1); including
+that improves us to:
+   0,  1,  2,  3,  4,  5,  5,  6,  7,  7,
+   6,  7,  7,  8,  7,  7,  8,  9,  8,  8,
+   9,  8,  9,  9,  8,  9, 10, 10,  9, 10,
+   9, 10, 10,  9, 10, 11, 10, 10, 11, 10,
+  11, 11, 10, 11, 10, 11, 11, 12, 11, 12,
+  12, 11, 11, 11, 12, 12, 12, 12, 13, 12,
+  11, 12, 12, 13, 12, 13, 13, 13, 12, 12,
+  12, 13, 13, 13, 13, 13, 12, 13, 13, 13,
+  13, 14, 14, 14, 13, 13, 13, 14, 14, 14,
+  14, 14, 13, 14, 14, 13, 14, 15, 15, 14,
+  14
+= sum 349, 1075
+.. with first failures at n in {22,26,27,31,34...}.
+
+Known optimal solutions that beat these patterns are:
+a(22)=8: 0:+12, 0:+6, 6:+6, 0:+4, 4:+4, 8:+4, 12:-11, 12:-11;
+a(26)=8: 0:+13, 0:+13, 13:-12, 13:-8, 5:-4, 5:-4, 13:-6, 7:-6;
+WFL missing 31, 33, 34, 35, 37, 38, 40, 42
+a(33)=B3,4,0: +12 +12 +9 +3 +3 +3 -11 -11 -11
+a(37)=B3,4,4: +14 +14 +9 +3 +3 +3 -13 -13 -2 -11
+
+Our type-A pattern k(km+1)+c involves moves as follows:
+- define the target t=km+1, and a multiset M dependent on c
+- move k batches of t+m_i from 0 (k moves)
+- move k batches of t+m_i-1 back to 1 (k moves)
+- coalesce the remaining k loose stones onto t (f(c,k) moves)
+- move these k stones to 1 (m moves)
+
+Our type-B pattern k(km-1)+c involves moves as follows:
+- define the target t=km, with the same multiset M as for type A
+- move k-1 batches of t+m_i from 0 (k-1 moves)
+- move k-1 batches of t+m_i-1 back to 1 (k-1 moves)
+- move the remaining batch of (m-1)k from 0 to t (m moves)
+- coalesce the remaining t-1 loose stones onto t (f(c,k-1) moves)
+- move these t-1 stones to 1 (1 move)
+
+=cut
+
+my $limit = 100;
+my $c = undef;
+my @best = init($limit);
+disp(\@best);
+while (1) {
+    $c = next_c($c);
+    find_better($c, \@best);
+    disp(\@best, $c);
+}
+exit 0;
+
+sub find_better {
+    my($c, $best) = @_;
+    my $tried = 0;
+    for (my $k = 1; 1; ++$k) {
+        last if $k * ($k + 1) + $c > $limit;
+        # type 1: k(km+1)+c
+        for (my $m = 1; 1; ++$m) {
+            my $n = $k * ($k * $m + 1) + $c;
+            last if $n > $limit;
+            next if $n < 0;
+            ++$tried;
+            my $fck = fck($c, $k) // next;
+            test($best, $n, $k * 2 + $m + $fck, 0, "A $k $m $c");
+        }
+        # type 2: k(mk-1)+c
+        for (my $m = 1; 1; ++$m) {
+            my $n = $k * ($k * $m - 1) + $c;
+            last if $n > $limit;
+            next if $n < 0;
+            ++$tried;
+            my $fck = fck($c, $k - 1) // next;
+            test($best, $n, $k * 2 + $m - 1 + $fck, 0, "B $k $m $c");
+        }
+    }
+    die "Nothing to try at c=$c\n" unless $tried;
+    return;
+}
+
+sub test {
+    my($best, $n, $fn, $improve, $legend) = @_;
+    my $ofn = $best->[$n][0];
+    if ($fn > $ofn) {
+        return 0;
+    } elsif ($fn < $ofn) {
+        warn "$n <= $fn improved by $legend\n";
+        $best->[$n] = [ $fn, $legend ];
+        recalc($best, $n);
+        return 1;
+    } elsif (!$improve) {
+        warn "$n <= $fn also at $legend\n";
+        push @{ $best->[$n] }, $legend;
+    }
+    return 0;
+}
+
+sub recalc {
+    my($best, $a) = @_;
+    my $fa = $best->[$a][0];
+    for my $n ($a + 1 .. $limit) {
+        my $b = $n - $a;
+        my $fb = $best->[$b][0];
+        next unless test($best, $n, $fa + $fb, 1, "$a + $b");
+        recalc($best, $n);
+    }
+    return;
+}
+
+sub next_c {
+    my($prev) = @_;
+    return !defined($prev) ? 0
+        : ($prev <= 0) ? abs($prev) + 1
+        : -$prev;
+}
+
+sub disp {
+    my($best, $c) = @_;
+    my $legend = defined($c) ? sprintf("c =%3d", $c) : " init ";
+    my $vals = join '', map sprintf(" %2d,", $_->[0]), @$best;
+    print "$legend: $vals\n";
+}
+
+sub init {
+    my($lim) = @_;
+    return [ 0 ], map [$_, "1+f@{[$_-1]}"], 1 .. $lim;
+}
+
+{
+    # Let X, Y be multisets of positive integers such that
+    # \sum{x_i^2} - \sum{y_i^2} = n. Then f(n) = min(|X| + |Y|), and
+    # g(n) = min(max(x_i): |X| + |Y| = f(n)).
+    my @f; BEGIN { @f = (
+        0, 1, 2, 2, 1, 2, 3, 2, 2, 1,
+        2, 2, 2, 2, 3, 2, 1, 2, 2, 2,
+        2, 2, 3, 2, 2, 1,
+    ) }
+    my @g; BEGIN { @g = (
+        0, 1, 1, 2, 2, 2, 2, 4, 3, 3,
+        3, 6, 4, 3, 3, 4, 4, 4, 3, 10,
+        4, 5, 5, 12, 5, 5,
+    ) }
+    sub fck {
+        my($c, $k) = @_;
+        $c = -$c if $c < 0;
+die "c=$c out of bounds" if $c > $#f;
+        return undef if $k < $g[$c];
+        return $f[$c];
+    }
+}
