@@ -72,9 +72,27 @@ Our type-B pattern k(km-1)+c involves moves as follows:
 - coalesce the remaining t-1 loose stones onto t (f(c,k-1) moves)
 - move these t-1 stones to 1 (1 move)
 
+  0   1  44  60  68  71  84 113
+113   0   0   0   0   0   0   0
+  0   0   0   0   0   0   0 113  #1 +113
+  0   0   0   0   0   0  29  84  #2 -29
+  0   0   0   0   0  42  29  42  #3 -42
+  0   0   0   0   0  84  29   0  #4 -42
+  0   0   0   0   0  97  16   0  #5 -13
+  0   0   0   0  16  97   0   0  #6 -16
+  0   0  27   0  16  70   0   0  #7 -27
+  0  70  27   0  16   0   0   0  #8 -70
+  0  70  27   8   8   0   0   0  #9 -8
+  0  70  27  16   0   0   0   0  #10 -8
+  0  70  43   0   0   0   0   0  #11 -16
+  0 113   0   0   0   0   0   0  #12 -43
+112.113 = 12656
+70^2 + 43^2 + 2.42^2 + 29^2 + 27^2 + 2.16^2 + 13^2 + 2.8^2
+= 4900 + 1849 + 3528 + 841 + 729 + 512 + 169 + 128 = 12656
+
 =cut
 
-my $limit = 100;
+my $limit = 113;
 my $c = undef;
 my @best = init($limit);
 disp(\@best);
@@ -153,7 +171,7 @@ sub disp {
     my($best, $c) = @_;
     my $legend = defined($c) ? sprintf("c =%3d", $c) : " init ";
     my $vals = join '', map sprintf(" %2d,", $_->[0]), @$best;
-    print "$legend: $vals\n";
+    warn "$legend: $vals\n";
 }
 
 sub init {
@@ -165,21 +183,96 @@ sub init {
     # Let X, Y be multisets of positive integers such that
     # \sum{x_i^2} - \sum{y_i^2} = n. Then f(n) = min(|X| + |Y|), and
     # g(n) = min(max(x_i): |X| + |Y| = f(n)).
-    my @f; BEGIN { @f = (
-        0, 1, 2, 2, 1, 2, 3, 2, 2, 1,
-        2, 2, 2, 2, 3, 2, 1, 2, 2, 2,
-        2, 2, 3, 2, 2, 1,
-    ) }
-    my @g; BEGIN { @g = (
-        0, 1, 1, 2, 2, 2, 2, 4, 3, 3,
-        3, 6, 4, 3, 3, 4, 4, 4, 3, 10,
-        4, 5, 5, 12, 5, 5,
-    ) }
+    my(@f, @g);
+    sub nextf {
+        my($c, $max, $lim) = @_;
+        return $c ? undef : 0 if $max == 0;
+        $lim //= $c;
+        return +($c > $lim) ? undef : $c if $max == 1;
+        my $known = $f[$c][$max];
+        return +($known <= $lim) ? $known : undef if defined $known;
+        my $sq = $max * $max;
+        my $top = int($c / $sq);
+        return undef if $top > $lim;
+        my $next = $max - 1;
+        my $nextsq = $next * $next;
+        my $best = $lim + 1;
+        for my $m (reverse 0 .. $top) {
+            my $d = $c - $m * $sq;
+            last if $d / $nextsq > $lim - $m;
+            my $e = (nextf($d, $next, $lim - $m) // next) + $m;
+            $best = $e if $best > $e;
+        }
+        for my $m ($top + 1 .. $lim) {
+            my $d = $m * $sq - $c;
+            last if $d / $nextsq > $lim - $m;
+            my $e = (nextf($d, $next, $lim - $m) // next) + $m;
+            $best = $e if $best > $e;
+        }
+        return undef if $best > $lim;
+        return $f[$c][$max] = $best;
+    }
+    sub firstf {
+        my($c) = @_;
+        return $f[$c][0] //= do {
+            my($f, $g);
+            do { ($f, $g) = (0, 0); goto done } if $c == 0;
+            my $q = int(sqrt $c);
+            # perfect square
+            do { ($f, $g) = (1, $q); goto done } if $c == $q * $q;
+            my $q2 = sqrt($c / 2);
+            $q2 = ($q2 == int($q2)) ? $q2 : (int($q2) + 1);
+            for my $qt ($q2 .. $q) {
+                my $ct = $c - $qt * $qt;
+                my $qu = int(sqrt $ct);
+                # sum of two squares
+                do { ($f, $g) = (2, $qt); goto done }
+                        if $qu * $qu == $ct && $qu <= $qt;
+            }
+            my $pow4 = 0;
+            my $non2 = $c;
+            while (($non2 & 3) == 0) {
+                ++$pow4;
+                $non2 >>= 2;
+            }
+            if ($non2 & 1) {
+                # worst case [ 2^pow4 (non2+1)/2 ]^2 - [2^pow4 (non2-1)/2 ]^2
+                my $qmin = $q / (1 << $pow4);
+                $qmin = ($qmin == int($qmin)) ? $qmin : (int($qmin) + 1);
+                my $qmax = ($non2 + 1) >> 1;
+                for my $qt ($qmin .. $qmax) {
+                    my $ct = $qt * $qt - $non2;
+                    next if $ct < 0;
+                    my $qu = int(sqrt $ct);
+                    # difference of two squares
+                    do { ($f, $g) = (2, $qt); goto done } if $qu * $qu == $ct;
+                }
+            }
+            # need three squares
+            my $q3 = sqrt($c / 3);
+            $q3 = ($q == int($q3)) ? $q3 : (int($q3) + 1);
+            for my $qt ($q3 .. $q) {
+                next unless defined nextf($c - $qt * $qt, $qt, 2);
+                ($f, $g) = (3, $qt);
+                goto done;
+            }
+            for (my $qt = $q + 1; 1; ++$qt) {
+                next unless defined nextf($qt * $qt - $c, $qt, 2);
+                ($f, $g) = (3, $qt);
+                goto done;
+            }
+          done:
+            $g[$c] = $g;
+            $f;
+        };
+    }
     sub fck {
         my($c, $k) = @_;
-        $c = -$c if $c < 0;
-die "c=$c out of bounds" if $c > $#f;
-        return undef if $k < $g[$c];
-        return $f[$c];
+        return +($c == 0) ? 0 : undef if $k == 0;
+        $c = abs($c);
+        return $f[$c][$k] // do {
+            firstf($c) unless defined $g[$c];
+            ($k >= $g[$c]) ? $f[$c][0] : nextf($c, $k);
+        };
     }
 }
