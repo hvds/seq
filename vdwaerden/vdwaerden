@@ -1,0 +1,65 @@
+#!/opt/maths/bin/perl
+use warnings;
+use strict;
+
+=head1 van der Waerden
+
+Define c(n,k,r) as TRUE iff there exists a way to partition the integers
+1 .. n into m sets, such that no set includes k numbers in arithmetic
+progression. Then the van der Waerden number W(r,k) = min(n: ~c(n,k,r-1)).
+
+For k = 2 it is easy: c(n,2,m) = c(n <= m), since each of the sets must
+be at most size 1.
+
+Known values and limits on first unknowns:
+- W(2,3) = 9; W(3,3) = 27; W(4,3) = 76; W(5,3) > 170;
+- W(2,4) = 35; W(3,4) = 293; W(4,4) > 1048;
+- W(2,5) = 178; W(3,5) > 2173;
+- W(2,6) = 1132; W(3,6) > 11191;
+- W(2,7) > 3703.
+
+If we define f(n,k) as the size of the largest subset of { 1 .. n }
+containing no AP of length k, then we have:
+  sum_{i=0}^{r-1}{ f(n,k) } < n => W(r,k) <= n
+.. and maybe we can find f(n,k) more easily.
+
+=cut
+
+my $k = 3;  # assume fixed for now, algorithm changes needed to increase
+my $r = 4;  # find example partitions for each n, until none is possible
+findpart(1, $k, $r);
+exit 0;
+
+sub disppart {
+    my($n, $k, $r, $s) = @_;
+    print "$n: [@{[ join ', ', @$s ]}]\n";
+}
+
+{
+    my(@seen, @suppress);
+    sub findpart {
+        my($n, $k, $r) = @_;
+        @seen = @suppress = ();
+        my $lim = try_r(1, $n, $r);   # k=3 assumed
+        print "no solution found at n = $lim\n";
+        return;
+    }
+    sub try_r {
+        my($next, $lim, $r) = @_;
+        if ($next > $lim) {
+            disppart($lim, $k, $r, [
+                map join('-', sort { $a <=> $b } keys %$_), @seen
+            ]);
+            ++$lim;
+        }
+        for my $seti (0 .. $r - 1) {
+            next if $suppress[$seti]{$next};
+            my $base = $next + $next;
+            my @prop = map $base - $_, keys %{ $seen[$seti] };
+            local $seen[$seti]{$next} = 1;
+            local @{ $suppress[$seti] }{@prop} = (1) x @prop if @prop;
+            $lim = try_r($next + 1, $lim, $r);
+        }
+        return $lim;
+    }
+}

@@ -1,0 +1,104 @@
+#!/opt/maths/bin/perl
+use warnings;
+use strict;
+
+=head1 van der Waerden
+
+If we define f(n,k) as the size of the largest subset of { 1 .. n }
+containing no AP of length k, then we have:
+  sum_{i=0}^{r-1}{ f(n,k) } < n => W(r,k) <= n
+.. and maybe we can find f(n,k) more easily.
+
+=cut
+findmax();
+exit 0;
+
+sub disp {
+    my($cp, $n, $ok, $iter) = @_;
+    my $s = sprintf "%.2f", (times)[0];
+    if ($ok) {
+        warn "$n ($iter ${s}s): [@{ $cp->{s} }[0 .. $cp->{i}-1]]\n";
+    } else {
+        warn "$n ($iter ${s}s): no improvement\n";
+    }
+}
+
+sub findmax {
+    my $n = 1;
+    my $max = 0;
+    my $iter = 0;
+    my $cp;
+    # context
+    my @s = (0);
+    my $block = '';     # empty bit vector
+    my @stack = ('');
+    my $i = 0;
+    my $save_cp = sub {
+        $cp = {
+            's' => [@s],
+            block => $block,
+            stack => [@stack],
+            i => $i,
+            n => $n,    # restore only at this value
+        };
+    };
+    my $restore_cp = sub {
+        if ($n == $cp->{n}) {
+            @s = @{ $cp->{s} };
+            $block = $cp->{block};
+            @stack = @{ $cp->{stack} };
+            $i = $cp->{i};
+        } else {
+            @s = (0);
+            $block = '';
+            @stack = ('');
+            $i = 0;
+        }
+    };
+  TRY_NEXT:
+    while ($i >= 0) {
+#warn "for n=$n max=$max i=$i\n";
+        ++$iter;
+        $block = $stack[$i];
+        my $cur = ++$s[$i];
+        if ($cur > $n) {
+            # unwind stack
+            --$i;
+            pop @s;
+            pop @stack;
+            next;
+        }
+        next if vec($block, $cur, 1);
+
+        # ok to continue with this subset
+#warn "at n=$n [@s[0..$i-1]] append $cur\n";
+
+        # block the third element of any new 2-element APs
+        my $cur2 = $cur + $cur;
+        vec($block, $cur2 - $s[$_], 1) = 1 for 0 .. $i - 1;
+
+        # and prep to add another element
+        if ($i < $max) {
+            ++$i;
+            $s[$i] = $cur;
+            $stack[$i] = $block;
+            next;
+        } else {
+            # have solution
+            ++$i;
+            $s[$i] = $cur;
+            $stack[$i] = $block;
+            $save_cp->();
+            disp($cp, $n, 1, $iter);
+            ++$n;
+            ++$max;
+            $iter = 0;
+        }
+    }
+    # no solution at n
+    $restore_cp->();
+    disp($cp, $n, 0, $iter);
+    ++$n;
+    $iter = 0;
+    goto TRY_NEXT;
+}
