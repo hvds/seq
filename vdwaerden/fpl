@@ -10,6 +10,8 @@ containing no AP of length k, then we have:
 .. and maybe we can find f(n,k) more easily.
 
 =cut
+
+my @f = (0, 1);     # known values of f(n,3)
 findmax();
 exit 0;
 
@@ -61,7 +63,7 @@ sub findmax {
         ++$iter;
         $block = $stack[$i];
         my $cur = ++$s[$i];
-        if ($cur > $n) {
+        if ($cur > $n || $i + $f[$n - $cur + 1] <= $max) {
             # unwind stack
             --$i;
             pop @s;
@@ -90,14 +92,16 @@ sub findmax {
             $stack[$i] = $block;
             $save_cp->();
             disp($cp, $n, 1, $iter);
-            ++$n;
             ++$max;
+            $f[$n] = $max;
+            ++$n;
             $iter = 0;
         }
     }
     # no solution at n
     $restore_cp->();
     disp($cp, $n, 0, $iter);
+    $f[$n] = $max;
     ++$n;
     $iter = 0;
     goto TRY_NEXT;
