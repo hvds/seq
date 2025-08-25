@@ -25,14 +25,14 @@ sub disp {
 
 sub findmax {
     my $n = 1;
-    my $max = 0;
+    my $max = 1;
     my $iter = 0;
     my $cp;
     # context
-    my @s = (0);
+    my @s = (1, 1);
     my $block = '';     # empty bit vector
-    my @stack = ('');
-    my $i = 0;
+    my @stack = ('', '');
+    my $i = 1;
     my $save_cp = sub {
         $cp = {
             's' => [@s],
@@ -43,20 +43,20 @@ sub findmax {
         };
     };
     my $restore_cp = sub {
-        if ($n == $cp->{n}) {
+        if ($cp && $n == $cp->{n}) {
             @s = @{ $cp->{s} };
             $block = $cp->{block};
             @stack = @{ $cp->{stack} };
             $i = $cp->{i};
         } else {
-            @s = (0);
+            @s = (1, 1);
             $block = '';
-            @stack = ('');
-            $i = 0;
+            @stack = ('', '');
+            $i = 1;
         }
     };
   TRY_NEXT:
-    while ($i >= 0) {
+    while ($i > 0) {
 #warn "for n=$n max=$max i=$i\n";
         ++$iter;
         $block = $stack[$i];
