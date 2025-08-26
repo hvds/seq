@@ -58,7 +58,11 @@ sub findmax {
 
         # block the third element of any new 2-element APs
         my $cur2 = $cur + $cur;
-        vec($block, $cur2 - $s[$_], 1) = 1 for 0 .. $i - 1;
+        for (0 .. $i - 1) {
+            my $targ = $cur2 - $s[$_];
+            next TRY_NEXT if $targ == $n;
+            vec($block, $targ, 1) = 1;
+        }
 
         # and prep to add another element
         if ($i < $max) {

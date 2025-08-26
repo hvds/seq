@@ -12,7 +12,7 @@
 #include <sys/resource.h>
 
 /* we may search for f(n): n <= MAXN */
-#define MAXN 1023
+#define MAXN 1022
 typedef unsigned short int n_t;
 static_assert(MAXN < (1 << (sizeof(n_t) * 8)), "n_t too small for MAXN");
 
@@ -40,11 +40,12 @@ static inline double utime(void) {
             + (double)rusage_buf.ru_utime.tv_usec / 1000000;
 }
 
-/* block_t is a bit vector representing n_t blocked by current subset */
-/* TODO: there may be value in making the size adaptive, it can be smaller
+/* block_t is a bit vector representing n_t blocked by current subset; we
+ * need to allow room up to MAXN + 1. */
+/* TODO: there may be value in making the size adaptive - it can be smaller
  * for lower n, so we can move fewer bytes around.
  */
-#define SIZEB ((MAXN + 7) >> 3)
+#define SIZEB (((MAXN + 1) + 7) >> 3)
 typedef struct block_s {
     char b[SIZEB];
 } block_t;
@@ -115,8 +116,25 @@ void findmax(void) {
         /* block the third element of any new 2-element APs */
         copy_block(bcur, bprev);
         scratch_t cur2 = (scratch_t)cur + cur;
-        for (f_t s_j = 0; s_j < s_i; ++s_j)
-            set_blocked(bcur, cur2 - s[s_j]);
+        bool fail = false;
+        for (f_t s_j = s_i; s_j > 0;) {
+            --s_j;
+            scratch_t targ = cur2 - s[s_j];
+            if (targ >= (scratch_t)n) {
+                if (targ == (scratch_t)n) {
+                    /* if subset cannot contain n, it cannot be a new max */
+                    fail = true;
+                } else if (targ == (scratch_t)n + 1) {
+                    /* mark this (in case of continuation) */
+                    set_blocked(bcur, (n_t)targ);
+                }
+                /* any further values are beyond bounds */
+                break;
+            }
+            set_blocked(bcur, (n_t)targ);
+        }
+        if (fail)
+            continue;
 
         /* advance for next element */
         ++s_i;

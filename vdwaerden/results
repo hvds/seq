@@ -5,128 +5,141 @@ f(n,3) (C code):
 4 (3 0.00s): [1 2 4]
 5 (1 0.00s): [1 2 4 5]
 6 (5 0.00s): no improvement
-7 (19 0.00s): no improvement
-8 (39 0.00s): no improvement
-9 (13 0.00s): [1 2 4 8 9]
-10 (25 0.00s): no improvement
+7 (8 0.00s): no improvement
+8 (24 0.00s): no improvement
+9 (8 0.00s): [1 2 4 8 9]
+10 (14 0.00s): no improvement
 11 (10 0.00s): [1 2 4 5 10 11]
-12 (17 0.00s): no improvement
+12 (10 0.00s): no improvement
 13 (12 0.00s): [1 2 4 5 10 11 13]
 14 (1 0.00s): [1 2 4 5 10 11 13 14]
 15 (9 0.00s): no improvement
 16 (21 0.00s): no improvement
 17 (43 0.00s): no improvement
-18 (295 0.00s): no improvement
-19 (734 0.00s): no improvement
-20 (680 0.00s): [1 2 6 7 9 14 15 18 20]
-21 (86 0.00s): no improvement
-22 (1371 0.00s): no improvement
-23 (3026 0.00s): no improvement
-24 (1853 0.00s): [1 2 5 7 11 16 18 19 23 24]
-25 (254 0.00s): no improvement
-26 (1680 0.00s): [1 2 5 7 11 16 18 19 23 24 26]
-27 (30 0.00s): no improvement
-28 (1935 0.00s): no improvement
-29 (5357 0.00s): no improvement
-30 (7804 0.00s): [1 3 4 8 9 11 20 22 23 27 28 30]
-31 (358 0.00s): no improvement
-32 (842 0.00s): [1 2 4 8 9 11 19 22 23 26 28 31 32]
-33 (110 0.00s): no improvement
-34 (1253 0.00s): no improvement
-35 (5185 0.00s): no improvement
-36 (2158 0.00s): [1 2 4 8 9 13 21 23 26 27 30 32 35 36]
-37 (634 0.00s): no improvement
-38 (4690 0.00s): no improvement
-39 (14985 0.00s): no improvement
+18 (150 0.00s): no improvement
+19 (266 0.00s): no improvement
+20 (186 0.00s): [1 2 6 7 9 14 15 18 20]
+21 (58 0.00s): no improvement
+22 (666 0.00s): no improvement
+23 (1099 0.00s): no improvement
+24 (487 0.00s): [1 2 5 7 11 16 18 19 23 24]
+25 (121 0.00s): no improvement
+26 (610 0.00s): [1 2 5 7 11 16 18 19 23 24 26]
+27 (16 0.00s): no improvement
+28 (1008 0.00s): no improvement
+29 (2114 0.00s): no improvement
+30 (2798 0.00s): [1 3 4 8 9 11 20 22 23 27 28 30]
+31 (167 0.00s): no improvement
+32 (496 0.00s): [1 2 4 8 9 11 19 22 23 26 28 31 32]
+33 (74 0.00s): no improvement
+34 (1011 0.00s): no improvement
+35 (3173 0.00s): no improvement
+36 (1056 0.00s): [1 2 4 8 9 13 21 23 26 27 30 32 35 36]
+37 (481 0.00s): no improvement
+38 (3277 0.00s): no improvement
+39 (7998 0.00s): no improvement
 40 (39 0.00s): [1 2 4 5 10 11 13 14 28 29 31 32 37 38 40]
 41 (1 0.00s): [1 2 4 5 10 11 13 14 28 29 31 32 37 38 40 41]
 42 (150 0.00s): no improvement
-43 (746 0.00s): no improvement
-44 (2299 0.00s): no improvement
-45 (9991 0.00s): no improvement
-46 (26317 0.00s): no improvement
-47 (93419 0.00s): no improvement
-48 (210522 0.00s): no improvement
-49 (531946 0.01s): no improvement
-50 (1082398 0.02s): no improvement
-51 (88654 0.02s): [1 2 4 5 10 13 14 17 31 35 37 38 40 46 47 50 51]
-52 (198672 0.02s): no improvement
-53 (883742 0.02s): no improvement
-54 (514636 0.03s): [1 2 5 6 12 14 15 17 21 31 38 39 42 43 49 51 52 54]
-55 (43767 0.03s): no improvement
-56 (576608 0.03s): no improvement
-57 (1709078 0.05s): no improvement
-58 (964362 0.05s): [1 2 5 6 12 14 15 17 21 31 38 39 42 43 49 51 52 54 58]
-59 (98168 0.05s): no improvement
-60 (1176792 0.06s): no improvement
-61 (2990395 0.08s): no improvement
-62 (6423676 0.13s): no improvement
-63 (3787196 0.16s): [1 2 5 7 11 16 18 19 24 26 38 39 42 44 48 53 55 56 61 63]
-64 (292247 0.16s): no improvement
-65 (4079367 0.19s): no improvement
-66 (9487677 0.25s): no improvement
-67 (20456099 0.40s): no improvement
-68 (39509315 0.68s): no improvement
-69 (77300841 1.22s): no improvement
-70 (137470337 2.19s): no improvement
-71 (49082549 2.53s): [1 2 5 7 10 17 20 22 26 31 41 46 48 49 53 54 63 64 68 69 71]
-72 (9657933 2.60s): no improvement
-73 (74820893 3.12s): no improvement
-74 (64472058 3.57s): [1 2 7 9 10 14 20 22 23 25 29 46 50 52 53 55 61 65 66 68 73 74]
-75 (591925 3.58s): no improvement
-76 (39681935 3.85s): no improvement
-77 (95534066 4.52s): no improvement
-78 (203936800 5.95s): no improvement
-79 (397510680 8.73s): no improvement
-80 (736714030 13.88s): no improvement
-81 (1346826572 23.33s): no improvement
-82 (139790291 24.27s): [1 2 4 8 9 11 19 22 23 26 28 31 49 57 59 62 63 66 68 71 78 81 82]
-83 (155038687 25.36s): no improvement
-84 (404499422 28.18s): [1 3 4 8 9 16 18 21 22 25 30 37 48 55 60 63 64 67 69 76 77 81 82 84]
-85 (10511746 28.25s): no improvement
-86 (114019939 29.03s): no improvement
-87 (322199491 31.26s): no improvement
-88 (737271049 36.36s): no improvement
-89 (1522613039 46.97s): no improvement
-90 (2990400384 67.80s): no improvement
-91 (5535154434 106.41s): no improvement
-92 (2478281444 123.49s): [1 2 6 8 9 13 19 21 22 27 28 39 58 62 64 67 68 71 73 81 83 86 87 90 92]
-93 (191970678 124.85s): no improvement
-94 (2285871404 140.63s): no improvement
-95 (19513301 140.75s): [1 2 4 5 10 11 22 23 25 26 31 32 55 56 64 65 67 68 76 77 82 83 91 92 94 95]
-96 (244650454 142.40s): no improvement
-97 (948956830 148.86s): no improvement
-98 (2333737793 164.80s): no improvement
-99 (5246105449 200.93s): no improvement
-100 (6016844103 242.24s): [1 3 6 7 10 12 20 22 25 26 29 31 35 62 66 68 71 72 75 77 85 87 90 91 94 96 100]
-101 (126170237 243.10s): no improvement
-102 (1780002999 255.28s): no improvement
-103 (4233878736 284.31s): no improvement
-104 (8829966723 345.02s): [1 5 7 10 11 14 16 24 26 29 30 33 35 39 66 70 72 75 76 79 81 89 91 94 95 98 100 104]
-105 (11736834 345.10s): no improvement
-106 (1213479186 353.37s): no improvement
-107 (3076279127 374.45s): no improvement
-108 (7181056505 425.65s): no improvement
-109 (15152456546 534.88s): no improvement
-110 (30397402431 753.24s): no improvement
-111 (9054511466 817.90s): [1 2 5 6 13 15 19 26 27 30 31 38 42 44 66 68 72 77 80 81 84 89 93 95 99 104 107 108 111]
-112 (1312881799 827.22s): no improvement
-113 (8319086460 886.56s): no improvement
-114 (2759491811 906.30s): [1 2 4 9 12 13 18 19 28 30 31 33 40 45 46 69 70 75 82 84 85 87 96 97 102 103 106 111 113 114]
-115 (229318871 907.89s): no improvement
-116 (2027932369 922.04s): no improvement
-117 (5695955414 962.81s): no improvement
-118 (13644725888 1059.73s): no improvement
-119 (29363492734 1268.01s): no improvement
-120 (61195305309 1700.64s): no improvement
-121 (120 1700.64s): [1 2 4 5 10 11 13 14 28 29 31 32 37 38 40 41 82 83 85 86 91 92 94 95 109 110 112 113 118 119 121]
-122 (1 1700.64s): [1 2 4 5 10 11 13 14 28 29 31 32 37 38 40 41 82 83 85 86 91 92 94 95 109 110 112 113 118 119 121 122]
-123 (66339540 1701.11s): no improvement
-124 (296539799 1703.17s): no improvement
-125 (1021520358 1710.26s): no improvement
-126 (3114607345 1732.23s): no improvement
-127 (8434428143 1791.34s): no improvement
-128 (19610406770 1927.79s): no improvement
-129 (43683878655 2230.72s): no improvement
-130 (89828569447 2847.81s): no improvement
+43 (684 0.00s): no improvement
+44 (2101 0.00s): no improvement
+45 (7227 0.00s): no improvement
+46 (17504 0.00s): no improvement
+47 (45072 0.00s): no improvement
+48 (99593 0.00s): no improvement
+49 (204994 0.00s): no improvement
+50 (421953 0.01s): no improvement
+51 (9164 0.01s): [1 2 4 5 10 13 14 17 31 35 37 38 40 46 47 50 51]
+52 (83838 0.01s): no improvement
+53 (286709 0.01s): no improvement
+54 (108771 0.01s): [1 2 5 6 12 14 15 17 21 31 38 39 42 43 49 51 52 54]
+55 (18084 0.01s): no improvement
+56 (209248 0.02s): no improvement
+57 (545015 0.02s): no improvement
+58 (242234 0.02s): [1 2 5 6 12 14 15 17 21 31 38 39 42 43 49 51 52 54 58]
+59 (47010 0.02s): no improvement
+60 (428134 0.03s): no improvement
+61 (961237 0.03s): no improvement
+62 (2183625 0.05s): no improvement
+63 (978830 0.06s): [1 2 5 7 11 16 18 19 24 26 38 39 42 44 48 53 55 56 61 63]
+64 (147665 0.06s): no improvement
+65 (1293014 0.07s): no improvement
+66 (3054540 0.10s): no improvement
+67 (6210856 0.15s): no improvement
+68 (12638606 0.26s): no improvement
+69 (21004383 0.44s): no improvement
+70 (45306282 0.81s): no improvement
+71 (13678973 0.91s): [1 2 5 7 10 17 20 22 26 31 41 46 48 49 53 54 63 64 68 69 71]
+72 (3268505 0.94s): no improvement
+73 (21580353 1.12s): no improvement
+74 (17562928 1.26s): [1 2 7 9 10 14 20 22 23 25 29 46 50 52 53 55 61 65 66 68 73 74]
+75 (196889 1.26s): no improvement
+76 (13069252 1.36s): no improvement
+77 (27764006 1.59s): no improvement
+78 (63790428 2.10s): no improvement
+79 (113875650 3.00s): no improvement
+80 (223504043 4.77s): no improvement
+81 (353132322 7.56s): no improvement
+82 (35633390 7.82s): [1 2 4 8 9 11 19 22 23 26 28 31 49 57 59 62 63 66 68 71 78 81 82]
+83 (53454065 8.24s): no improvement
+84 (117045556 9.14s): [1 3 4 8 9 16 18 21 22 25 30 37 48 55 60 63 64 67 69 76 77 81 82 84]
+85 (4220932 9.18s): no improvement
+86 (40628741 9.49s): no improvement
+87 (109024505 10.33s): no improvement
+88 (260242314 12.31s): no improvement
+89 (476113634 16.00s): no improvement
+90 (953677632 23.28s): no improvement
+91 (1741640466 36.42s): no improvement
+92 (743090593 41.86s): [1 2 6 8 9 13 19 21 22 27 28 39 58 62 64 67 68 71 73 81 83 86 87 90 92]
+93 (63074430 42.36s): no improvement
+94 (820891987 48.48s): no improvement
+95 (6847020 48.52s): [1 2 4 5 10 11 22 23 25 26 31 32 55 56 64 65 67 68 76 77 82 83 91 92 94 95]
+96 (88246409 49.18s): no improvement
+97 (347472795 51.80s): no improvement
+98 (844921594 58.06s): no improvement
+99 (1782110350 71.25s): no improvement
+100 (2155937874 86.88s): [1 3 6 7 10 12 20 22 25 26 29 31 35 62 66 68 71 72 75 77 85 87 90 91 94 96 100]
+101 (39667155 87.18s): no improvement
+102 (630821990 91.83s): no improvement
+103 (1444507169 102.37s): no improvement
+104 (2987681980 124.21s): [1 5 7 10 11 14 16 24 26 29 30 33 35 39 66 70 72 75 76 79 81 89 91 94 95 98 100 104]
+105 (3788214 124.24s): no improvement
+106 (455438964 127.54s): no improvement
+107 (1010885766 134.91s): no improvement
+108 (2390067563 152.30s): no improvement
+109 (4569794916 185.34s): no improvement
+110 (9594360232 254.18s): no improvement
+111 (2731456473 273.56s): [1 2 5 6 13 15 19 26 27 30 31 38 42 44 66 68 72 77 80 81 84 89 93 95 99 104 107 108 111]
+112 (469875177 276.95s): no improvement
+113 (2503476653 294.95s): no improvement
+114 (708184614 299.93s): [1 2 4 9 12 13 18 19 28 30 31 33 40 45 46 69 70 75 82 84 85 87 96 97 102 103 106 111 113 114]
+115 (80293425 300.51s): no improvement
+116 (668903863 305.31s): no improvement
+117 (1696610850 317.52s): no improvement
+118 (4651397813 350.56s): no improvement
+119 (8783464367 412.91s): no improvement
+120 (18196923805 541.75s): no improvement
+121 (120 541.75s): [1 2 4 5 10 11 13 14 28 29 31 32 37 38 40 41 82 83 85 86 91 92 94 95 109 110 112 113 118 119 121]
+122 (1 541.75s): [1 2 4 5 10 11 13 14 28 29 31 32 37 38 40 41 82 83 85 86 91 92 94 95 109 110 112 113 118 119 121 122]
+123 (26740628 541.94s): no improvement
+124 (114914932 542.78s): no improvement
+125 (368079360 545.43s): no improvement
+126 (1059918478 553.02s): no improvement
+127 (2843926227 573.12s): no improvement
+128 (6405630667 618.39s): no improvement
+129 (13132511864 711.96s): no improvement
+130 (29439388830 924.32s): no improvement
+131 (54506511413 1308.90s): no improvement
+132 (105018736045 2048.64s): no improvement
+133 (201650819280 3415.46s): no improvement
+134 (362397200432 5868.35s): no improvement
+135 (636848524795 10238.98s): no improvement
+136 (1214449943196 18546.70s): no improvement
+137 (32015868444 18764.08s): [1 2 4 5 11 12 14 15 30 32 33 35 39 41 42 44 75 90 91 93 94 99 100 102 103 119 121 122 124 130 132 133 137]
+138 (83598742925 19342.65s): no improvement
+139 (313284169209 21435.59s): no improvement
+140 (651835426609 25944.71s): no improvement
+141 (1175990571141 33927.23s): no improvement
+142 (2424259700189 49971.27s): no improvement
+143 (3971455224921 75931.71s): no improvement
 
