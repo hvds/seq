@@ -29,34 +29,15 @@ sub findmax {
     my $n = 1;
     my $max = 1;
     my $iter = 0;
-    my $cp;
     # context
-    my @s = (1, 1);
-    my $block = '';     # empty bit vector
-    my @stack = ('', '');
-    my $i = 1;
-    my $save_cp = sub {
-        $cp = {
-            's' => [@s],
-            block => $block,
-            stack => [@stack],
-            i => $i,
-            n => $n,    # restore only at this value
-        };
+    my(@s, @stack, $block, $i);
+    my $reset = sub {
+        @s = (1, 1);
+        $block = '';        # empty bit-vector
+        @stack = ('', '');
+        $i = 1;
     };
-    my $restore_cp = sub {
-        if ($cp && $n == $cp->{n}) {
-            @s = @{ $cp->{s} };
-            $block = $cp->{block};
-            @stack = @{ $cp->{stack} };
-            $i = $cp->{i};
-        } else {
-            @s = (1, 1);
-            $block = '';
-            @stack = ('', '');
-            $i = 1;
-        }
-    };
+    $reset->();
   TRY_NEXT:
     while ($i > 0) {
 #warn "for n=$n max=$max i=$i\n";
@@ -90,8 +71,10 @@ sub findmax {
             ++$i;
             $s[$i] = $cur;
             $stack[$i] = $block;
-            $save_cp->();
-            disp($cp, $n, 1, $iter);
+            disp({
+                s => \@s,
+                i => $i,
+            }, $n, 1, $iter);
             ++$max;
             $f[$n] = $max;
             ++$n;
@@ -99,8 +82,11 @@ sub findmax {
         }
     }
     # no solution at n
-    $restore_cp->();
-    disp($cp, $n, 0, $iter);
+    $reset->();
+    disp({
+        s => \@s,
+        i => $i,
+    }, $n, 0, $iter);
     $f[$n] = $max;
     ++$n;
     $iter = 0;
