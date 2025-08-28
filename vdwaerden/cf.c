@@ -90,11 +90,20 @@ void disp_result(bool ok) {
     printf("\n");
 }
 
+#define ULBITS (8 * sizeof(unsigned long))
+
 static inline n_t bits_avail(block_t *bp, n_t after) {
-    n_t sum = 0;
-    for (n_t i = after + 1; i <= n; ++i)
-        if (!is_blocked(bp, i))
-            ++sum;
+    if (after >= n)
+        return 0;
+    n_t sum = 1;    /* n is always allowed */
+    for (n_t i = (after + 1) & ~(ULBITS - 1); i < n; i += ULBITS) {
+        unsigned long word = *(unsigned long *)(&bp->b[i >> 3]);
+        if (i <= after)
+            word |= ((1UL << (after + 1 - i)) - 1);
+        if (i + ULBITS > n)
+            word |= ~((1UL << (n - i)) - 1);
+        sum += ULBITS - __builtin_popcountl(word);
+    }
     return sum;
 }
 
@@ -155,6 +164,9 @@ void findmax(void) {
             f3[n] = max;
             ++n;
             iter = 0;
+            /* preserve invariant "n is never blocked" */
+            while (s_i > 0 && is_blocked(&blocks[s_i - 1], n))
+                --s_i;
         }
         continue;
       derecurse:
