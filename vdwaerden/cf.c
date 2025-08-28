@@ -56,15 +56,15 @@ static inline void copy_block(block_t *dest, block_t *src) {
 }
 
 static inline bool is_blocked(block_t *bp, n_t val) {
-    n_t off = (val >> 3);
-    n_t bit = val & 7;
-    return (bp->b[off] & (1 << bit)) ? true : false;
+    n_t off = val >> 3;
+    n_t bit = 1 << (val & 7);
+    return (bp->b[off] & bit) ? true : false;
 }
 
 static inline void set_blocked(block_t *bp, n_t val) {
-    n_t off = (val >> 3);
-    n_t bit = val & 7;
-    bp->b[off] |= (1 << bit);
+    n_t off = val >> 3;
+    n_t bit = 1 << (val & 7);
+    bp->b[off] |= bit;
 }
 
 void reset_data(void) {
@@ -90,6 +90,14 @@ void disp_result(bool ok) {
     printf("\n");
 }
 
+static inline n_t bits_avail(block_t *bp, n_t after) {
+    n_t sum = 0;
+    for (n_t i = after + 1; i <= n; ++i)
+        if (!is_blocked(bp, i))
+            ++sum;
+    return sum;
+}
+
 void findmax(void) {
     n = 2;
     f3[0] = 0;
@@ -101,19 +109,17 @@ void findmax(void) {
     while (s_i > 0) {
         ++iter;
         n_t cur = ++s[s_i];
-        if (cur > n || s_i + f3[n - cur + 1] <= max) {
-            /* fail at this level, derecurse */
-            --s_i;
-            continue;
-        }
+        if (cur > n || s_i + f3[n - cur + 1] <= max)
+            goto derecurse;
+
         block_t *bprev = &blocks[s_i - 1];
-        block_t *bcur = &blocks[s_i];
         if (is_blocked(bprev, cur))
             continue;
 
         /* ok to continue with this subset */
 
         /* block the third element of any new 2-element APs */
+        block_t *bcur = &blocks[s_i];
         copy_block(bcur, bprev);
         scratch_t cur2 = (scratch_t)cur + cur;
         bool fail = false;
@@ -135,6 +141,8 @@ void findmax(void) {
         }
         if (fail)
             continue;
+        if (s_i + 1 + bits_avail(bcur, cur) <= max)
+            continue;
 
         /* advance for next element */
         ++s_i;
@@ -148,6 +156,9 @@ void findmax(void) {
             ++n;
             iter = 0;
         }
+        continue;
+      derecurse:
+        --s_i;
     }
     /* no solution: f(n) = f(n-1) */
     disp_result(0);
