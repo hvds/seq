@@ -1,0 +1,19 @@
+#!/opt/maths/bin/perl
+use warnings;
+use strict;
+
+my $f = 1;
+my $bad = 0;
+while (<>) {
+    my($n, $iter, $t, $which) = /^(\d+) \((\d+) ([\d.]+)s\): ([n\[])/
+            or next;
+    if ($which eq 'n') {
+        # 'no improvement'
+        ++$bad
+    } else {
+        ++$f;
+        $bad = 0;
+    }
+    printf "%s (%s:%s) %.3f %.3f\n",
+            $n, $f, $bad, $iter ** (1/$n), $iter ** (1/$f);
+}
