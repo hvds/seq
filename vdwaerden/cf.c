@@ -11,17 +11,22 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+typedef unsigned int uint;
+typedef unsigned long ulong;
+typedef unsigned short ushort;
+typedef unsigned char uchar;
+
 /* we may search for f(n): n <= MAXN */
 #define MAXN 1022
-typedef unsigned short int n_t;
+typedef ushort n_t;
 static_assert(MAXN < (1 << (sizeof(n_t) * 8)), "n_t too small for MAXN");
 
-typedef unsigned int scratch_t;
+typedef uint scratch_t;
 static_assert(MAXN <= (UINT_MAX >> 1), "scratch_t too small for 2 * MAXN");
 
 /* we may search for f(n): f(n) <= MAXF */
 #define MAXF 255
-typedef unsigned char f_t;
+typedef uchar f_t;
 static_assert(MAXF < (1 << (sizeof(f_t) * 8)), "f_t too small for MAXF");
 
 n_t n;              /* current target n */
@@ -30,7 +35,7 @@ f_t max;            /* cardinality of largest subset found so far */
 f_t f3[MAXN + 1];   /* known values of f() */
 n_t s[MAXF + 1];    /* the integers in the current subset */
 f_t s_i;            /* offset in s[] being worked on */
-unsigned long iter; /* number of iterations, for debugging/stats only */
+ulong iter;         /* number of iterations, for debugging/stats only */
 
 double t0 = 0;      /* base for timing calculations */
 struct rusage rusage_buf;
@@ -47,7 +52,7 @@ static inline double utime(void) {
  */
 #define SIZEB (((MAXN + 1) + 7) >> 3)
 typedef struct block_s {
-    char b[SIZEB];
+    uchar b[SIZEB];
 } block_t;
 block_t blocks[MAXF + 1];
 
@@ -97,7 +102,7 @@ static inline n_t bits_avail(block_t *bp, n_t after) {
         return 0;
     n_t sum = 1;    /* n is always allowed */
     for (n_t i = (after + 1) & ~(ULBITS - 1); i < n; i += ULBITS) {
-        unsigned long word = *(unsigned long *)(&bp->b[i >> 3]);
+        ulong word = *(ulong *)(&bp->b[i >> 3]);
         if (i <= after)
             word |= ((1UL << (after + 1 - i)) - 1);
         if (i + ULBITS > n)
