@@ -4,6 +4,7 @@
 #include <assert.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <stdbool.h>
@@ -30,6 +31,7 @@ typedef uchar f_t;
 static_assert(MAXF < (1 << (sizeof(f_t) * 8)), "f_t too small for MAXF");
 
 n_t n;              /* current target n */
+n_t debug_n = 0;    /* show debug info when n == debug_n */
 f_t max;            /* cardinality of largest subset found so far */
                     /* NB f(n) must be either max or max+1 */
 f_t f3[MAXN + 1];   /* known values of f() */
@@ -155,8 +157,20 @@ void findmax(void) {
         }
         if (fail)
             continue;
-        if (s_i + 1 + bits_avail(bcur, cur) <= max)
+        if (s_i + 1 + bits_avail(bcur, cur) <= max) {
+#ifdef DEBUG
+            if (n == debug_n) {
+                printf("[");
+                for (uint dsi = 0; dsi <= s_i; ++dsi) {
+                    if (dsi)
+                        printf(" ");
+                    printf("%d", s[dsi]);
+                }
+                printf("] avail = %d\n", bits_avail(bcur, cur));
+            }
+#endif
             continue;
+        }
 
         /* advance for next element */
         ++s_i;
@@ -187,6 +201,19 @@ void findmax(void) {
 }
 
 int main(int argc, char **argv) {
+    int i = 1;
+    while (i < argc && argv[i][0] == '-') {
+        char *arg = argv[i++];
+        if (arg[1] == '-')
+            break;
+        else if (arg[1] == 'd') {
+            debug_n = (n_t)strtoul(&arg[2], NULL, 10);
+        } else {
+            printf("unknown option '%s'", arg);
+            exit(1);
+        }
+    }
+    setlinebuf(stdout);
     findmax();
     return 0;
 }

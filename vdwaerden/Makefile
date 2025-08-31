@@ -1,5 +1,6 @@
 CFILES = cf.c
 HFILES =
+DEFINES =
 
 GCC_MAJOR := $(shell gcc -dumpversion)
 ifeq "${GCC_MAJOR}" "7"
@@ -7,10 +8,11 @@ ifeq "${GCC_MAJOR}" "7"
 endif
 CC_OPT = -O6 -fgcse-sm -fgcse-las -fgcse-after-reload -fivopts -ftracer -funroll-loops -fvariable-expansion-in-unroller -freorder-blocks-and-partition -funswitch-loops ${CC_EXTRA_OPT}
 dcf: CC_OPT = -O0
+dcf: defines += -DDEBUG
 
 default: dcf cf
 
 all: dcf cf
 
 cf dcf: Makefile ${CFILES} ${HFILES}
-	gcc -o $@ -g ${CC_OPT} ${CFILES}
+	gcc -o $@ -g ${CC_OPT} ${CFILES} ${DEFINES}

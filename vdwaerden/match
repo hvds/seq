@@ -1,0 +1,54 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+
+my $source = 'results';
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    $source = 'git', next if $arg eq '-g';
+    die "unknown option '$arg'";
+}
+my @known = read_results($source);
+warn "known @{[ 0+@known ]}\n";
+my $last = 0;
+local $| = 1;
+while (<>) {
+    chomp;
+    if (my($n, $iter, $text) = /^(\d+) \((\d+) [\d.]+s\): (.*)$/) {
+        $last = $n;
+        if ($n > @known) {
+            print "New $_\n";
+        } elsif ($text ne $known[$n][1]) {
+            print "Bad $_\nExpect $known[$n][1]\n";
+            exit 1;
+        } elsif ($iter != $known[$n][0]) {
+            print +(($iter < $known[$n][0]) ? "Better" : "Worse"), " $_\n";
+        } else {
+            print "$_\n";
+        }
+    } elsif (my($subs, $avail) = /^\[(.*?)\] avail = (\d+)$/) {
+        die "No debug data for $last + 1 at $_\n" unless $known[$last + 1];
+        next unless $known[$last + 1][1] =~ /^\[$subs\b/;
+        print "Debug match $_\n";
+    } else {
+        print "?? $_\n";
+    }
+}
+
+sub read_results {
+    my($source) = @_;
+    my $f;
+    if ($source eq 'results') {
+        open $f, '<', './results' or die "./results: $!";
+    } elsif ($source eq 'git') {
+        open $f, 'git show HEAD:./results |' or die "git show: $!";
+    } else {
+        die "unknown source: $source";
+    }
+    my $lastn = -1;
+    return (undef, undef, map {
+        chomp;
+        /^\d+ \((\d+) [\d.]+s\): (.*)$/ ? [ $1, $2 ] : ()
+    } <$f>);
+}
