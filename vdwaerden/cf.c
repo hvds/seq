@@ -58,6 +58,107 @@ typedef struct block_s {
 } block_t;
 block_t blocks[MAXF + 1];
 
+/* Given a block_t telling us which values are available from cur+1 to n,
+ * we want to know the cardinality of the largest 3AP-free subset of those
+ * values that includes n. We will make a 16-bit lookup table of two values:
+ * one that requires the inclusion of the (virtual) msb, and one that gives
+ * a free choice. We can then stitch together a total using the latter for
+ * the last 17 bits, and the former for any remaining segments.
+ */
+#define LOOKUP_BITS 16
+#define LOOKUP_SIZE (1 << LOOKUP_BITS)
+#define LOOKUP_MASK ((1 << LOOKUP_BITS) - 1)
+f_t lookup_sub[LOOKUP_SIZE];        /* free choice */
+f_t lookup_sub_force[LOOKUP_SIZE];  /* 17th bit forced */
+
+static inline uint lsb(uint x) {
+    /* assume x != 0 */
+    return __builtin_ffs(x) - 1;
+}
+
+#define UINT_HIGHBIT (8 * sizeof(uint) - 1)
+static inline uint msb(uint x) {
+    /* assume x != 0 */
+    return UINT_HIGHBIT - __builtin_clz(x);
+}
+
+static inline uint reverse_16(uint x) {
+    x = ((x >> 8) & 0x00ff) | ((x << 8) & 0xff00);
+    x = ((x >> 4) & 0x0f0f) | ((x << 4) & 0xf0f0);
+    x = ((x >> 2) & 0x3333) | ((x << 2) & 0xcccc);
+    return ((x >> 1) & 0x5555) | ((x << 1) & 0xaaaa);
+}
+    
+bool better_sub(uint avail, uint have, f_t need) {
+    while (1) {
+        if (lookup_sub[avail] < need)
+            return false;
+        uint bi = msb(avail);
+        uint b = 1 << bi;
+        uint have2 = have | b;
+        uint avail2 = avail ^ b;
+        f_t need2 = need - 1;
+        for (uint j = 1; j <= bi && j + j + bi < UINT_HIGHBIT; ++j)
+            if (have2 & (1 << (bi + j)))
+                avail2 &= ~(1 << (bi - j));
+        if (need2 <= 1) {
+            if (avail2 >= need2)
+                return true;
+            goto skip2;
+        }
+        if (avail2 == 0)
+            goto skip2;
+        if (better_sub(avail2, have2, need2))
+            return true;
+      skip2:
+        avail ^= b;
+    }
+}
+    
+void init_lookup_sub(void) {
+    lookup_sub[0] = 0;
+    lookup_sub_force[0] = 1;
+    for (uint i = 1; i < LOOKUP_SIZE; ++i) {
+        /* free choice */
+        int bits = __builtin_popcount(i);
+        if (bits <= 2) {
+            lookup_sub[i] = bits;
+        } else if ((i & 1) == 0) {
+            lookup_sub[i] = lookup_sub[i >> 1];
+        } else {
+            uint b = 1 << msb(i);
+            uint j = i ^ b;
+            f_t prev = lookup_sub[j];
+            lookup_sub[i] = better_sub(j, b, prev)
+                    ? prev + 1 : prev;
+        }
+
+        /* force 1 << LOOKUP_BITS */
+        if (bits <= 1) {
+            lookup_sub_force[i] = bits + 1;
+        } else {
+            uint b = 1 << msb(i);
+            uint j = i ^ b;
+            f_t prev = lookup_sub_force[j];
+            lookup_sub_force[i] = better_sub(i, 1 << LOOKUP_BITS, prev)
+                    ? prev + 1 : prev;
+        }
+    }
+
+    /* our actual data has bits set for _disallowed_ values, so invert */
+    for (uint i = 0; i < LOOKUP_SIZE; ++i) {
+        uint j = (~i) & LOOKUP_MASK;
+        if (i < j) {
+            f_t temp = lookup_sub[i];
+            lookup_sub[i] = lookup_sub[j];
+            lookup_sub[j] = temp;
+            temp = lookup_sub_force[i];
+            lookup_sub_force[i] = lookup_sub_force[j];
+            lookup_sub_force[j] = temp;
+        }
+    }
+}
+
 static inline void copy_block(block_t *dest, block_t *src) {
     memcpy(dest, src, sizeof(block_t));
 }
@@ -97,19 +198,43 @@ void disp_result(bool ok) {
     printf("\n");
 }
 
-#define ULBITS (8 * sizeof(unsigned long))
+/* Extract the specified range of 16 bits from the given pointer.
+ * The result is shifted such that the end bit is bit 15 of the result.
+ * Bits with negative indices are permitted, and set to 1.
+ */
+static inline uint extract_16(uchar *cp, signed int start_bit) {
+    uint word = 0;
+    for (uint i = 0; i < 3; ++i) {
+        signed int target = start_bit + (i << 3);
+        if (target >= 0)
+            word |= cp[target >> 3] << (i << 3);
+    }
+    word >>= ((uint)start_bit) & 7;
+    if (start_bit < 0)
+        word |= (1 << -start_bit) - 1;
+    return word & LOOKUP_MASK;
+}
 
+/* eg after = 12, n = 57 we want:
+ *   w1 = (41..47 >> 25) | (48..56 << 7)  (force)
+ *   w2 = (25..31 >> 25) | (32..40 << 7)
+ *   w3 =                  (13..24 << 7)
+ * eg after = 12, n = 26 we want:
+ *   w1 =                  (13..25 << 6)  (force)
+ */
 static inline n_t bits_avail(block_t *bp, n_t after) {
-    if (after >= n)
-        return 0;
-    n_t sum = 1;    /* n is always allowed */
-    for (n_t i = (after + 1) & ~(ULBITS - 1); i < n; i += ULBITS) {
-        ulong word = *(ulong *)(&bp->b[i >> 3]);
-        if (i <= after)
-            word |= ((1UL << (after + 1 - i)) - 1);
-        if (i + ULBITS > n)
-            word |= ~((1UL << (n - i)) - 1);
-        sum += ULBITS - __builtin_popcountl(word);
+    signed int from = (signed int)after + 1;
+    if (from >= (signed int)n)
+        return (from == (signed int)n) ? 1 : 0;
+    n_t sum = 0;
+    bool force = true;
+    for (signed int i = (signed int)n; i > from; ) {
+        i -= LOOKUP_BITS;
+        uint word = extract_16(&bp->b[0], i);
+        if (i < from)
+            word |= (1 << (from - i)) - 1;
+        sum += (force) ? lookup_sub_force[word] : lookup_sub[word];
+        force = false;
     }
     return sum;
 }
@@ -214,6 +339,7 @@ int main(int argc, char **argv) {
         }
     }
     setlinebuf(stdout);
+    init_lookup_sub();
     findmax();
     return 0;
 }
