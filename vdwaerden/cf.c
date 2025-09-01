@@ -65,11 +65,12 @@ block_t blocks[MAXF + 1];
  * a free choice. We can then stitch together a total using the latter for
  * the last 17 bits, and the former for any remaining segments.
  */
-#define LOOKUP_BITS 16
+#define LOOKUP_BYTES 3
+#define LOOKUP_BITS (LOOKUP_BYTES << 3)
 #define LOOKUP_SIZE (1 << LOOKUP_BITS)
 #define LOOKUP_MASK ((1 << LOOKUP_BITS) - 1)
 f_t lookup_sub[LOOKUP_SIZE];        /* free choice */
-f_t lookup_sub_force[LOOKUP_SIZE];  /* 17th bit forced */
+f_t lookup_sub_force[LOOKUP_SIZE];  /* (LOOKUP_BITS+1)th bit forced */
 
 static inline uint lsb(uint x) {
     /* assume x != 0 */
@@ -82,13 +83,6 @@ static inline uint msb(uint x) {
     return UINT_HIGHBIT - __builtin_clz(x);
 }
 
-static inline uint reverse_16(uint x) {
-    x = ((x >> 8) & 0x00ff) | ((x << 8) & 0xff00);
-    x = ((x >> 4) & 0x0f0f) | ((x << 4) & 0xf0f0);
-    x = ((x >> 2) & 0x3333) | ((x << 2) & 0xcccc);
-    return ((x >> 1) & 0x5555) | ((x << 1) & 0xaaaa);
-}
-    
 bool better_sub(uint avail, uint have, f_t need) {
     while (1) {
         if (lookup_sub[avail] < need)
@@ -198,13 +192,13 @@ void disp_result(bool ok) {
     printf("\n");
 }
 
-/* Extract the specified range of 16 bits from the given pointer.
- * The result is shifted such that the end bit is bit 15 of the result.
- * Bits with negative indices are permitted, and set to 1.
+/* Extract the specified range of LOOKUP_BITS bits from the given pointer.
+ * The result is shifted such that the end bit is bit (LOOKUP_BITS-1) of
+ * the result. Bits with negative indices are permitted, and set to 1.
  */
-static inline uint extract_16(uchar *cp, signed int start_bit) {
+static inline uint extract_LUB(uchar *cp, signed int start_bit) {
     uint word = 0;
-    for (uint i = 0; i < 3; ++i) {
+    for (uint i = 0; i <= LOOKUP_BYTES; ++i) {
         signed int target = start_bit + (i << 3);
         if (target >= 0)
             word |= cp[target >> 3] << (i << 3);
@@ -230,7 +224,7 @@ static inline n_t bits_avail(block_t *bp, n_t after) {
     bool force = true;
     for (signed int i = (signed int)n; i > from; ) {
         i -= LOOKUP_BITS;
-        uint word = extract_16(&bp->b[0], i);
+        uint word = extract_LUB(&bp->b[0], i);
         if (i < from)
             word |= (1 << (from - i)) - 1;
         sum += (force) ? lookup_sub_force[word] : lookup_sub[word];
@@ -340,6 +334,7 @@ int main(int argc, char **argv) {
     }
     setlinebuf(stdout);
     init_lookup_sub();
+    t0 = utime();
     findmax();
     return 0;
 }

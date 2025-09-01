@@ -8,7 +8,8 @@ pruning power:
   1.214 1.203 1.214         (reimplement in C)
   1.195 1.189 1.204 1.225   (n must not be blocked)
   1.186 1.177 1.193 1.212   (prune when not enough unblocked)
-  1.175 1.169 1.188 1.206   (prune by chunks)
+  1.175 1.169 1.188 1.206   (prune by 16-bit chunks)
+  1.170 1.166 1.185         (prune by 24-bit chunks)
 ]
 
 2 (1 0.01s): [1 2]
