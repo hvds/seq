@@ -1,4 +1,25 @@
-f(n,3) (C code):
+Let f(n) represent the cardinality of the largest non-averaging subset
+of { 1 .. n }, then the main table below shows 'n (i t): s' where i is
+the number of iterations required, t is the time taken, and s is either
+the lexically first example of a maximal non-averaging subset, or "no
+improvement" if f(n) = f(n-1).
+
+The pruning power table shows i^{1/n} at selected n.
+
+Let g(n) represent the number of distinct non-averaging subsets of { 1 .. n },
+and h(n) represent the number of such subsets that include both 1 and n, such
+that g(n) = 1 + \sum_1^n{ (n+1-i)h(n) }. Then g(n) is A051013 and h(n) goes:
+
+ 1-10: 1 1 1 3 4 7 8 16 22 46
+11-20: 56 97 150 231 289 527 704 1049 1389 2216
+21-30: 3087 4837 6165 9446 13641 19547 25902 42595 55550 79255
+31-40: 111219 157846 215802 326100 422163 584055 867363 1162775 1537749 2316263
+41-  : 3033048 4130533 5609819 7739344
+
+.. with timings for 10k going (0.00s, 0.00s, 2.54s, 2071.11s).
+
+This yields new values of A051013() from 41:
+41-  : 38894644 54026402 74767979 103248900
 
 pruning power:
 [ 55    101   130   143
