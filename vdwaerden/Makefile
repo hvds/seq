@@ -1,5 +1,5 @@
 CFILES = cf.c
-HFILES =
+HFILES = cf.h
 DEFINES =
 
 GCC_MAJOR := $(shell gcc -dumpversion)

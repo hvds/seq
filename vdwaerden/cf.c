@@ -12,10 +12,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
-typedef unsigned int uint;
-typedef unsigned long ulong;
-typedef unsigned short ushort;
-typedef unsigned char uchar;
+#include "cf.h"
 
 /* we may search for f(n): n <= MAXN */
 #define MAXN 1022
@@ -72,22 +69,11 @@ block_t blocks[MAXF + 1];
 f_t lookup_sub[LOOKUP_SIZE];        /* free choice */
 f_t lookup_sub_force[LOOKUP_SIZE];  /* (LOOKUP_BITS+1)th bit forced */
 
-static inline uint lsb(uint x) {
-    /* assume x != 0 */
-    return __builtin_ffs(x) - 1;
-}
-
-#define UINT_HIGHBIT (8 * sizeof(uint) - 1)
-static inline uint msb(uint x) {
-    /* assume x != 0 */
-    return UINT_HIGHBIT - __builtin_clz(x);
-}
-
 bool better_sub(uint avail, uint have, f_t need) {
     while (1) {
         if (lookup_sub[avail] < need)
             return false;
-        uint bi = msb(avail);
+        uint bi = msb32(avail);
         uint b = 1 << bi;
         uint have2 = have | b;
         uint avail2 = avail ^ b;
@@ -120,7 +106,7 @@ void init_lookup_sub(void) {
         } else if ((i & 1) == 0) {
             lookup_sub[i] = lookup_sub[i >> 1];
         } else {
-            uint b = 1 << msb(i);
+            uint b = 1 << msb32(i);
             uint j = i ^ b;
             f_t prev = lookup_sub[j];
             lookup_sub[i] = better_sub(j, b, prev)
@@ -131,7 +117,7 @@ void init_lookup_sub(void) {
         if (bits <= 1) {
             lookup_sub_force[i] = bits + 1;
         } else {
-            uint b = 1 << msb(i);
+            uint b = 1 << msb32(i);
             uint j = i ^ b;
             f_t prev = lookup_sub_force[j];
             lookup_sub_force[i] = better_sub(i, 1 << LOOKUP_BITS, prev)
