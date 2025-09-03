@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -9,8 +10,9 @@
 #define MAX_ALLSUB 64
 
 typedef struct allsub_s {
-    /* just store counts for now */
-    uint count;
+    ullong *sets;
+    size_t sets_size;
+    size_t sets_count;
 } allsub_t;
 
 bool inited = false;
@@ -26,9 +28,22 @@ static inline double utime(void) {
             + (double)rusage_buf.ru_utime.tv_usec / 1000000;
 }
 
+void sets_realloc(allsub_t *asp) {
+    size_t new_size = asp->sets_size ? (asp->sets_size * 3 / 2) : 256;
+    asp->sets = realloc(asp->sets, new_size * sizeof(ullong));
+    asp->sets_size = new_size;
+}
+
+static inline void store(uint n, ullong val) {
+    allsub_t *asp = &allsub[n];
+    if (asp->sets_count >= asp->sets_size)
+        sets_realloc(asp);
+    asp->sets[asp->sets_count++] = val;
+}
+
 void init_allsub(void) {
     memset(allsub, 0, sizeof(allsub));
-    allsub[0].count = 1;
+    store(0, 0);
     for (uint i = 0; i <= MAX_ALLSUB >> 1; ++i)
         pat[i] = (1ULL << i) | (1ULL << ((i << 1) + 1));
     for (uint i = 0; i <= MAX_ALLSUB; ++i)
@@ -36,45 +51,55 @@ void init_allsub(void) {
     inited = true;
 }
 
-static inline void store(uint n, ullong val) {
-    ++allsub[n].count;
-}
-
 /* Find all non-balanced subsets of {1 .. n} that include both 1 and n.
  * Supports 1 <= n <= 64, if there is enough memory; could in principle
  * be extended to n <= 66.
  */
 void find_allsub(uint n) {
-    if (!inited)
-        init_allsub();
-    ullong max = (n < 2) ? 0 : ((1ULL << (n - 2)) - 1);
-    ullong mask = 1ULL | (1ULL << (n - 1));
-    for (ullong i = 0; i <= max; ++i) {
-        ullong val = (i << 1) | mask;
-        while (val) {
-            uint bi = lsb64(val);
-            val >>= bi + 1;
-            if (val == 0)
-                break;
-            uint bj = msb64(val);
-            uint count = pat_count[bj];
-            for (uint ji = 0; ji < count; ++ji)
-                if ((val & pat[ji]) == pat[ji])
-                    goto fail;
+    store(n, 0);
+    if (n <= 2)
+        return;
+    ullong midmask = (n & 1) ? (1ULL << ((n - 3) >> 1)) : 0;
+    for (uint n2 = 1; n2 <= n - 2; ++n2) {
+        uint rot = n - 1 - n2;
+        ullong incmask = 1ULL | (1ULL << (n2 - 1));
+        allsub_t *asp = &allsub[n2];
+        for (size_t i = 0; i < asp->sets_count; ++i) {
+            ullong v0 = (asp->sets[i] << 1) | incmask;
+            for (uint j = 0; j < rot; ++j) {
+                ullong v = v0 << j;
+                if (v & midmask)
+                    goto fail_v;
+                ullong w = v;
+                while (w) {
+                    uint bi = lsb64(w);
+                    uint bj = (bi << 1) + 1;
+                    if (bj <= n - 2 && (w & (1ULL << bj)))
+                        goto fail_v;
+                    if (((bi ^ n) & 1) == 0) {
+                        bj = bi + ((n - 2 - bi) >> 1);
+                        if (w & (1ULL << bj))
+                            goto fail_v;
+                    }
+                    w ^= (1ULL << bi);
+                }
+                store(n, v);
+              fail_v:
+                ;
+            }
         }
-        store(n, i);
-      fail:
-        ;
     }
 }
 
 int main(int argc, char **argv) {
+    init_allsub();
     for (uint n = 1; n <= MAX_ALLSUB; ++n) {
         find_allsub(n);
-        uint f = 1;
+        ullong f = 1;
         for (uint i = 1; i <= n; ++i)
-            f += allsub[i].count * (n + 1 - i);
-        printf("%u %u %u (%.2fs)\n", n, f, allsub[n].count, utime());
+            f += (ullong)allsub[i].sets_count * (n + 1 - i);
+        printf("%u %llu %llu (%.2fs)\n",
+                n, f, (ullong)allsub[n].sets_count, utime());
     }
     return 0;
 }
