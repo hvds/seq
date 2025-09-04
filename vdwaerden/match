@@ -3,6 +3,7 @@ use strict;
 use warnings;
 
 my $source = 'results';
+my $filename = 'results-A065825';
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
@@ -40,9 +41,9 @@ sub read_results {
     my($source) = @_;
     my $f;
     if ($source eq 'results') {
-        open $f, '<', './results' or die "./results: $!";
+        open $f, '<', "./$filename" or die "$filename: $!";
     } elsif ($source eq 'git') {
-        open $f, 'git show HEAD:./results |' or die "git show: $!";
+        open $f, "git show HEAD:./$filename |" or die "git show: $!";
     } else {
         die "unknown source: $source";
     }
