@@ -78,7 +78,7 @@ bool better_sub(uint avail, uint have, f_t need) {
         uint have2 = have | b;
         uint avail2 = avail ^ b;
         f_t need2 = need - 1;
-        for (uint j = 1; j <= bi && j + j + bi < UINT_HIGHBIT; ++j)
+        for (uint j = 1; bi + j <= UINT32_HIGHBIT && bi >= j; ++j)
             if (have2 & (1 << (bi + j)))
                 avail2 &= ~(1 << (bi - j));
         if (need2 <= 1) {
