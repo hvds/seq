@@ -16,15 +16,15 @@
 
 /* we may search for f(n): n <= MAXN */
 #define MAXN 1022
-typedef ushort n_t;
+typedef uint16_t n_t;
 static_assert(MAXN < (1 << (sizeof(n_t) * 8)), "n_t too small for MAXN");
 
-typedef uint scratch_t;
-static_assert(MAXN <= (UINT_MAX >> 1), "scratch_t too small for 2 * MAXN");
+typedef uint32_t scratch_t;
+static_assert(MAXN <= (UINT32_MAX >> 1), "scratch_t too small for 2 * MAXN");
 
 /* we may search for f(n): f(n) <= MAXF */
 #define MAXF 255
-typedef uchar f_t;
+typedef uint8_t f_t;
 static_assert(MAXF < (1 << (sizeof(f_t) * 8)), "f_t too small for MAXF");
 
 n_t n;              /* current target n */
@@ -51,7 +51,7 @@ static inline double utime(void) {
  */
 #define SIZEB (((MAXN + 1) + 7) >> 3)
 typedef struct block_s {
-    uchar b[SIZEB];
+    uint8_t b[SIZEB];
 } block_t;
 block_t blocks[MAXF + 1];
 
@@ -69,16 +69,16 @@ block_t blocks[MAXF + 1];
 f_t lookup_sub[LOOKUP_SIZE];        /* free choice */
 f_t lookup_sub_force[LOOKUP_SIZE];  /* (LOOKUP_BITS+1)th bit forced */
 
-bool better_sub(uint avail, uint have, f_t need) {
+bool better_sub(uint32_t avail, uint32_t have, f_t need) {
     while (1) {
         if (lookup_sub[avail] < need)
             return false;
         uint bi = msb32(avail);
-        uint b = 1 << bi;
-        uint have2 = have | b;
-        uint avail2 = avail ^ b;
+        uint32_t b = 1 << bi;
+        uint32_t have2 = have | b;
+        uint32_t avail2 = avail ^ b;
         f_t need2 = need - 1;
-        for (uint j = 1; bi + j <= UINT32_HIGHBIT && bi >= j; ++j)
+        for (uint32_t j = 1; bi + j <= UINT32_HIGHBIT && bi >= j; ++j)
             if (have2 & (1 << (bi + j)))
                 avail2 &= ~(1 << (bi - j));
         if (need2 <= 1) {
@@ -98,7 +98,7 @@ bool better_sub(uint avail, uint have, f_t need) {
 void init_lookup_sub(void) {
     lookup_sub[0] = 0;
     lookup_sub_force[0] = 1;
-    for (uint i = 1; i < LOOKUP_SIZE; ++i) {
+    for (uint32_t i = 1; i < LOOKUP_SIZE; ++i) {
         /* free choice */
         int bits = __builtin_popcount(i);
         if (bits <= 2) {
@@ -106,8 +106,8 @@ void init_lookup_sub(void) {
         } else if ((i & 1) == 0) {
             lookup_sub[i] = lookup_sub[i >> 1];
         } else {
-            uint b = 1 << msb32(i);
-            uint j = i ^ b;
+            uint32_t b = 1 << msb32(i);
+            uint32_t j = i ^ b;
             f_t prev = lookup_sub[j];
             lookup_sub[i] = better_sub(j, b, prev)
                     ? prev + 1 : prev;
@@ -117,8 +117,8 @@ void init_lookup_sub(void) {
         if (bits <= 1) {
             lookup_sub_force[i] = bits + 1;
         } else {
-            uint b = 1 << msb32(i);
-            uint j = i ^ b;
+            uint32_t b = 1 << msb32(i);
+            uint32_t j = i ^ b;
             f_t prev = lookup_sub_force[j];
             lookup_sub_force[i] = better_sub(i, 1 << LOOKUP_BITS, prev)
                     ? prev + 1 : prev;
@@ -126,8 +126,8 @@ void init_lookup_sub(void) {
     }
 
     /* our actual data has bits set for _disallowed_ values, so invert */
-    for (uint i = 0; i < LOOKUP_SIZE; ++i) {
-        uint j = (~i) & LOOKUP_MASK;
+    for (uint32_t i = 0; i < LOOKUP_SIZE; ++i) {
+        uint32_t j = (~i) & LOOKUP_MASK;
         if (i < j) {
             f_t temp = lookup_sub[i];
             lookup_sub[i] = lookup_sub[j];
@@ -182,12 +182,12 @@ void disp_result(bool ok) {
  * The result is shifted such that the end bit is bit (LOOKUP_BITS-1) of
  * the result. Bits with negative indices are permitted, and set to 1.
  */
-static inline uint extract_LUB(uchar *cp, signed int start_bit) {
-    uint word = 0;
+static inline uint32_t extract_LUB(uint8_t *cp, signed int start_bit) {
+    uint32_t word = 0;
     for (uint i = 0; i <= LOOKUP_BYTES; ++i) {
         signed int target = start_bit + (i << 3);
         if (target >= 0)
-            word |= cp[target >> 3] << (i << 3);
+            word |= (uint32_t)cp[target >> 3] << (i << 3);
     }
     word >>= ((uint)start_bit) & 7;
     if (start_bit < 0)
@@ -210,7 +210,7 @@ static inline n_t bits_avail(block_t *bp, n_t after) {
     bool force = true;
     for (signed int i = (signed int)n; i > from; ) {
         i -= LOOKUP_BITS;
-        uint word = extract_LUB(&bp->b[0], i);
+        uint32_t word = extract_LUB(&bp->b[0], i);
         if (i < from)
             word |= (1 << (from - i)) - 1;
         sum += (force) ? lookup_sub_force[word] : lookup_sub[word];
