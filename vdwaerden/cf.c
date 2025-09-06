@@ -69,6 +69,31 @@ block_t blocks[MAXF + 1];
 f_t lookup_sub[LOOKUP_SIZE];        /* free choice */
 f_t lookup_sub_force[LOOKUP_SIZE];  /* (LOOKUP_BITS+1)th bit forced */
 
+uint8_t drev8[1 << 8];
+
+void init_rev(void) {
+    memset(drev8, 0, sizeof(drev8));
+    for (uint bi = 0; bi < 8; ++bi) {
+        uint b = 1 << bi;
+        uint br = 1 << (7 - bi);
+        for (uint j = 0; j < (1 << 8); ++j)
+            if (j & b)
+                drev8[j] |= br;
+    }
+}
+
+static inline uint8_t rev8(uint8_t x) {
+    return drev8[x];
+}
+
+static inline uint16_t rev16(uint16_t x) {
+    return (rev8(x & 0xff) << 8) | rev8(x >> 8);
+}
+
+static inline uint32_t rev32(uint32_t x) {
+    return (rev16(x & 0xffff) << 16) | rev16(x >> 16);
+}
+
 bool better_sub(uint32_t avail, uint32_t have, f_t need) {
     while (1) {
         if (lookup_sub[avail] < need)
@@ -78,9 +103,9 @@ bool better_sub(uint32_t avail, uint32_t have, f_t need) {
         uint32_t have2 = have | b;
         uint32_t avail2 = avail ^ b;
         f_t need2 = need - 1;
-        for (uint32_t j = 1; bi + j <= UINT32_HIGHBIT && bi >= j; ++j)
-            if (have2 & (1 << (bi + j)))
-                avail2 &= ~(1 << (bi - j));
+        uint32_t exclude = rev32(have >> (bi + 1))
+                >> (UINT32_HIGHBIT - (bi - 1));
+        avail2 &= ~exclude;
         if (need2 <= 1) {
             if (avail2 >= need2)
                 return true;
@@ -319,6 +344,7 @@ int main(int argc, char **argv) {
         }
     }
     setlinebuf(stdout);
+    init_rev();
     init_lookup_sub();
     t0 = utime();
     findmax();
