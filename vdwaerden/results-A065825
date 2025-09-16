@@ -10,6 +10,8 @@ pruning power:
 [ 55    101   130   143
   1.525                     (first pass)
   1.487                     (fix s_1 = 1)
+ > 1.322 1.277               (new chunk 16-bit)
+ > 1.281 1.240               (new chunk 8-bit)
   1.214 1.203               (prune using f() values)
   1.214 1.203 1.214         (reimplement in C)
   1.195 1.189 1.204 1.225   (n must not be blocked)

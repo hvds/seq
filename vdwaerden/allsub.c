@@ -13,7 +13,7 @@
 #   define set_lsb lsb32
 #endif
 
-bool inited = false;
+signed int inited = -1;
 /* allsub[i] represents a resizable array of sets_t, representing the
  * subsets S_i of {2 .. n-1} for which S_i U { 1, n } is nonaveraging.
  * Each subset is stored as a bitvector in which bit 0 represents 2.
@@ -46,14 +46,13 @@ static inline void store(uint n, sets_t val) {
 
 /* mandatory initialization */
 void init_allsub(void) {
-    if (!inited) {
+    if (inited < 0) {
         memset(allsub, 0, sizeof(allsub));
-        store(0, 0);
         for (uint i = 0; i <= MAX_ALLSUB >> 1; ++i)
             pat[i] = (ONE << i) | (ONE << ((i << 1) + 1));
         for (uint i = 0; i <= MAX_ALLSUB; ++i)
             pat_count[i] = (i + 1) >> 1;
-        inited = true;
+        inited = 0;
     }
 }
 
@@ -62,9 +61,17 @@ void init_allsub(void) {
  * excluding 1 and n.
  */
 void find_allsub(uint n) {
+    while (inited < (signed int)n) {
+        if (inited < 0)
+            init_allsub();
+        find_allsub(inited);
+    }
+    if (inited > (signed int)n)
+        return;
+
     store(n, 0);
     if (n <= 2)
-        return;
+        goto find_done;
 
     /* When n is odd, there is an element halfway between 1 and n which
      * must always be disallowed.
@@ -112,6 +119,61 @@ void find_allsub(uint n) {
             }
         }
     }
+  find_done:
     /* give back any spare memory */
     sets_realloc(&allsub[n], allsub[n].sets_count);
+    inited = n + 1;
+    return;
+}
+
+sets_t count_allsub(uint n) {
+    find_allsub(n);
+    sets_t count = 1;
+    for (uint i = 1; i <= n; ++i)
+        count += (sets_t)allsub[i].sets_count * (n + 1 - i);
+    return count;
+}
+
+/* when iterating over subsets for n, the next item to generate will be
+ * allsub[i].sets[j] << shift
+ */
+typedef struct allsub_iter_s {
+    uint n;
+    uint i;
+    sets_t j;
+    uint shift;
+} allsub_iter_t;
+
+allsub_iter_t *init_iter(uint n) {
+    allsub_iter_t *aip = malloc(sizeof(allsub_iter_t));
+    aip->n = n;
+    aip->i = 1;
+    aip->j = 0;
+    aip->shift = 0;
+    return aip;
+}
+
+void done_iter(allsub_iter_t *aip) {
+    free(aip);
+}
+
+sets_t do_iter(allsub_iter_t *aip) {
+    sets_t val = allsub[aip->i].sets[aip->j] << 1;
+    if (aip->i)
+        val |= ONE | (ONE << (aip->i - 1));
+    val <<= aip->shift;
+    ++aip->shift;
+    if (aip->shift + aip->i > aip->n) {
+        aip->shift = 0;
+        ++aip->j;
+        if (aip->j >= allsub[aip->i].sets_count) {
+            aip->j = 0;
+            ++aip->i;
+            if (aip->i > aip->n) {
+                /* return 0 next as final element */
+                aip->i = 0;
+            }
+        }
+    }
+    return val;
 }

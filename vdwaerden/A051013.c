@@ -37,9 +37,7 @@ int main(int argc, char **argv) {
     init_allsub();
     for (uint n = 1; n <= MAX_ALLSUB; ++n) {
         find_allsub(n);
-        sets_t f = 1;
-        for (uint i = 1; i <= n; ++i)
-            f += (sets_t)allsub[i].sets_count * (n + 1 - i);
+        sets_t f = count_allsub(n);
         printf("%u %llu %llu (%.2fs)\n",
                 n, (ullong)f, (ullong)allsub[n].sets_count, utime());
     }

@@ -13,9 +13,10 @@
 #include <sys/resource.h>
 
 #include "cf.h"
+#include "allsub.h"
 
 /* we may search for f(n): n <= MAXN */
-#define MAXN 1022
+#define MAXN 254
 typedef uint16_t n_t;
 static_assert(MAXN < (1 << (sizeof(n_t) * 8)), "n_t too small for MAXN");
 
@@ -32,8 +33,6 @@ n_t debug_n = 0;    /* show debug info when n == debug_n */
 f_t max;            /* cardinality of largest subset found so far */
                     /* NB f(n) must be either max or max+1 */
 f_t f3[MAXN + 1];   /* known values of f() */
-n_t s[MAXF + 1];    /* the integers in the current subset */
-f_t s_i;            /* offset in s[] being worked on */
 ulong iter;         /* number of iterations, for debugging/stats only */
 
 double t0 = 0;      /* base for timing calculations */
@@ -44,32 +43,47 @@ static inline double utime(void) {
             + (double)rusage_buf.ru_utime.tv_usec / 1000000;
 }
 
-/* block_t is a bit vector representing n_t blocked by current subset; we
- * need to allow room up to MAXN + 1. */
-/* TODO: there may be value in making the size adaptive - it can be smaller
- * for lower n, so we can move fewer bytes around.
- */
-#define SIZEB (((MAXN + 1) + 7) >> 3)
-typedef struct block_s {
-    uint8_t b[SIZEB];
-} block_t;
-block_t blocks[MAXF + 1];
+uint8_t drev8[1 << 8];
 
-/* Given a block_t telling us which values are available from cur+1 to n,
- * we want to know the cardinality of the largest 3AP-free subset of those
- * values that includes n. We will make a 16-bit lookup table of two values:
- * one that requires the inclusion of the (virtual) msb, and one that gives
- * a free choice. We can then stitch together a total using the latter for
- * the last 17 bits, and the former for any remaining segments.
- */
-#define LOOKUP_BYTES 3
+#define CHUNK_BYTES 2
+#define CHUNK_BITS (CHUNK_BYTES << 3)
+#define CHUNK_MASK ((1 << CHUNK_BITS) - 1)
+#if CHUNK_BYTES == 1
+    typedef uint8_t chunk_t;
+#   define revchunk(x) rev8(x)
+#elif CHUNK_BYTES == 2
+    typedef uint16_t chunk_t;
+#   define revchunk(x) rev16(x)
+#elif (CHUNK_BYTES == 3) | (CHUNK_BYTES == 4)
+    typedef uint32_t chunk_t;
+#   define revchunk(x) rev32(x)
+#else
+#   error "invalid CHUNK_BYTES"
+#endif
+
+typedef struct chunkset_s {
+    size_t count;
+    chunk_t *cp;
+} chunkset_t;
+chunkset_t chunks[CHUNK_BITS + 1];
+chunkset_t chunks_bottom[CHUNK_BITS + 1];
+chunkset_t chunks_top[CHUNK_BITS + 1];
+
+typedef struct stack_s {
+    chunkset_t *csp;
+    size_t chunk_off;
+    uint bitcount;
+    chunk_t exclude[MAXN / (sizeof(chunk_t) << 3) + 1];
+} stack_t;
+stack_t stack[MAXN / CHUNK_BITS + 1];
+signed int spi;
+
+#define LOOKUP_BYTES CHUNK_BYTES
 #define LOOKUP_BITS (LOOKUP_BYTES << 3)
 #define LOOKUP_SIZE (1 << LOOKUP_BITS)
 #define LOOKUP_MASK ((1 << LOOKUP_BITS) - 1)
 f_t lookup_sub[LOOKUP_SIZE];        /* free choice */
 f_t lookup_sub_force[LOOKUP_SIZE];  /* (LOOKUP_BITS+1)th bit forced */
-
-uint8_t drev8[1 << 8];
 
 void init_rev(void) {
     memset(drev8, 0, sizeof(drev8));
@@ -90,8 +104,80 @@ static inline uint16_t rev16(uint16_t x) {
     return (rev8(x & 0xff) << 8) | rev8(x >> 8);
 }
 
+static inline uint32_t rev24(uint32_t x) {
+    return (rev8(x & 0xff) << 16) | (rev8((x >> 8) & 0xff) << 8)
+            | rev8(x >> 16);
+}
+
 static inline uint32_t rev32(uint32_t x) {
     return (rev16(x & 0xffff) << 16) | rev16(x >> 16);
+}
+
+int cmp_lexical(const void *va, const void *vb) {
+    chunk_t ra = revchunk(*(chunk_t *)va);
+    chunk_t rb = revchunk(*(chunk_t *)vb);
+    return (ra < rb) ? 1 : -1;
+}
+
+void init_chunks(void) {
+    for (uint i = 0; i <= CHUNK_BITS; ++i) {
+        size_t count = (size_t)count_allsub(i);
+        chunks[i].count = count;
+        chunks[i].cp = malloc(count * sizeof(chunk_t));
+        /* chunks with bottom bit set all come lexically before those
+         * without, so we share the array just with a lower count.
+         */
+        chunks_bottom[i].cp = chunks[i].cp;
+        /* By symmetry, there are as many with bottom bit as with top bit
+         * set, and by definition count(n with top bit set) is
+         * count(n) - count(n - 1).
+         */
+        if (i) {
+            size_t new = count - chunks[i - 1].count;
+            chunks_bottom[i].count = new;
+            chunks_top[i].count = new;
+            chunks_top[i].cp = malloc(new * sizeof(chunk_t));
+        }
+    }
+    size_t ci[CHUNK_BITS + 1], cti[CHUNK_BITS + 1];
+    memset(ci, 0, sizeof(ci));
+    memset(cti, 0, sizeof(cti));
+
+    allsub_iter_t *aip = init_iter(CHUNK_BITS);
+    chunkset_t *csp = &chunks[CHUNK_BITS];
+    while (1) {
+        chunk_t val = (chunk_t)do_iter(aip);
+        csp->cp[ ci[CHUNK_BITS]++ ] = val;
+        if (val == 0)
+            break;
+    }
+    done_iter(aip);
+
+    /* sort once, then fill all the derived sets in sorted order */
+    qsort(csp->cp, csp->count, sizeof(chunk_t), cmp_lexical);
+
+    for (size_t off = 0; off < csp->count; ++off) {
+        chunk_t val = csp->cp[off];
+        uint bi = val ? msb32((uint)val) + 1 : 0;
+        for (uint i = bi; i < CHUNK_BITS; ++i)
+            chunks[i].cp[ ci[i]++ ] = val;
+        if (bi)
+            chunks_top[bi].cp[ cti[bi]++ ] = val;
+    }
+
+    /* sanity check */
+    for (uint i = 0; i <= CHUNK_BITS; ++i) {
+        if (ci[i] != chunks[i].count) {
+            fprintf(stderr, "for size %u found %llu expecting %llu\n",
+                    i, (ullong)ci[i], (ullong)chunks[i].count);
+            exit(1);
+        }
+        if (cti[i] != chunks_top[i].count) {
+            fprintf(stderr, "for top size %u found %llu expecting %llu\n",
+                    i, (ullong)cti[i], (ullong)chunks_top[i].count);
+            exit(1);
+        }
+    }
 }
 
 bool better_sub(uint32_t avail, uint32_t have, f_t need) {
@@ -164,84 +250,149 @@ void init_lookup_sub(void) {
     }
 }
 
-static inline void copy_block(block_t *dest, block_t *src) {
-    memcpy(dest, src, sizeof(block_t));
+static inline void cross_product(
+    chunk_t *result, signed int off, chunk_t left, chunk_t right
+) {
+    ullong rleft = (ullong)revchunk(left);
+    while (right) {
+        uint bi = lsb32((uint32_t)right);
+        right ^= 1 << bi;
+        uint shift = (bi << 1) + 1;
+        if (off >= 0)
+            result[off] |= (chunk_t)(
+                (rleft << shift) & CHUNK_MASK
+            );
+        if (off + 1 >= 0)
+            if (shift > CHUNK_BITS)
+                result[off + 1] |= (chunk_t)(
+                    (rleft << (shift - CHUNK_BITS)) & CHUNK_MASK
+                );
+            else
+                result[off + 1] |= (chunk_t)(
+                    (rleft >> (CHUNK_BITS - shift)) & CHUNK_MASK
+                );
+        if (off + 2 >= 0)
+            result[off + 2] |= (chunk_t)(
+                (rleft >> ((CHUNK_BITS << 1) - shift)) & CHUNK_MASK
+            );
+    }
+    return;
 }
 
-static inline bool is_blocked(block_t *bp, n_t val) {
-    n_t off = val >> 3;
-    n_t bit = 1 << (val & 7);
-    return (bp->b[off] & bit) ? true : false;
+static inline void self_product(
+    chunk_t *result, signed int off, chunk_t right
+) {
+    ullong rleft = (ullong)revchunk(right);
+    while (right) {
+        uint bi = lsb32((uint32_t)right);
+        right ^= 1 << bi;
+        uint shift = (bi << 1) + 1;
+        uint revi = CHUNK_BITS - bi;
+        ullong masked = rleft & ~((1ULL << revi) - 1);
+#if 0
+        if (off >= 0)
+            result[off] |= (chunk_t)(
+                (masked << shift) & CHUNK_MASK
+            );
+#endif
+        if (off >= 0)
+            if (shift > CHUNK_BITS)
+                result[off] |= (chunk_t)(
+                    (masked << (shift - CHUNK_BITS)) & CHUNK_MASK
+                );
+            else
+                result[off] |= (chunk_t)(
+                    (masked >> (CHUNK_BITS - shift)) & CHUNK_MASK
+                );
+        if (off + 1 >= 0)
+            result[off + 1] |= (chunk_t)(
+                (masked >> ((CHUNK_BITS << 1) - shift)) & CHUNK_MASK
+            );
+    }
+    return;
 }
 
-static inline void set_blocked(block_t *bp, n_t val) {
-    n_t off = val >> 3;
-    n_t bit = 1 << (val & 7);
-    bp->b[off] |= bit;
+void reset_data(uint n) {
+    uint final = (n - 1) / CHUNK_BITS;
+    /* will overwrite below if this chunk is also final */
+    stack[0].csp = &chunks_bottom[CHUNK_BITS];
+    for (uint i = 1; i < final; ++i)
+        stack[i].csp = &chunks[CHUNK_BITS];
+
+    /* For n <= chunk bits, we set stack[0] to fix bottom bit rather than
+     * top bit to save a test in the main loop. It does not seem worth an
+     * extra chunks_bottom_top array just to save a few iterations for
+     * small n.
+     */
+    uint fragchunk = ((n - 1) % CHUNK_BITS) + 1;
+    stack[final].csp = (final == 0)
+            ? &chunks_bottom[fragchunk] : &chunks_top[fragchunk];
+
+    stack[0].chunk_off = 0;
+    stack[0].bitcount = 0;
+    bzero(&stack[0].exclude, sizeof(stack[0].exclude));
+    spi = 0;
 }
 
-void reset_data(void) {
-    s[0] = 1;   /* always fixed */
-    s[1] = 1;   /* ready to increment to 2 */
-    bzero(&blocks[0], sizeof(block_t) * 2);
-    s_i = 1;
+char bufstack[4096];
+char *show_stack(uint sp) {
+    uint off = 0;
+    for (uint si = 0; si <= sp; ++si) {
+        stack_t *sp = &stack[si];
+        chunkset_t *csp = sp->csp;
+        chunk_t val = csp->cp[ sp->chunk_off ];
+        while (val) {
+            uint bi = lsb32((uint32_t)val);
+            val ^= (1 << bi);
+            if (off)
+                off += snprintf(&bufstack[off], sizeof(bufstack) - off, " ");
+            off += snprintf(&bufstack[off], sizeof(bufstack) - off,
+                    "%u", si * CHUNK_BITS + bi + 1);
+        }
+    }
+    return &bufstack[0];
+}
+
+char bufshort[4096];
+char *show_short(uint sp) {
+    uint off = 0;
+    for (uint si = 0; si <= sp; ++si) {
+        stack_t *sp = &stack[si];
+        chunkset_t *csp = sp->csp;
+        chunk_t val = csp->cp[ sp->chunk_off ];
+        if (off)
+            off += snprintf(&bufshort[off], sizeof(bufshort) - off, " ");
+        off += snprintf(&bufshort[off], sizeof(bufshort) - off,
+                "%0*x", CHUNK_BITS / 4, val);
+    }
+    return &bufshort[0];
+}
+
+char bufexcl[4096];
+char *show_excl(uint sp) {
+    uint off = 0;
+    chunk_t *excl = &(stack[sp].exclude[0]);
+    uint lim = (n - 1) / CHUNK_BITS;
+    for (uint ci = 0; ci <= lim; ++ci) {
+        chunk_t c = excl[ci];
+        if (off)
+            off += snprintf(&bufexcl[off], sizeof(bufexcl) - off, " ");
+        off += snprintf(&bufexcl[off], sizeof(bufexcl) - off, 
+                "%0*x", CHUNK_BITS / 4, c);
+    }
+    return &bufexcl[0];
 }
 
 void disp_result(bool ok) {
     printf("%u (%lu %.2fs): ", n, iter, utime() - t0);
-    if (ok) {
-        printf("[");
-        for (f_t s_j = 0; s_j < s_i; ++s_j) {
-            if (s_j)
-                printf(" ");
-            printf("%u", s[s_j]);
-        }
-        printf("]");
-    } else {
-        printf("no improvement");
-    }
-    printf("\n");
+    if (ok)
+        printf("[%s]\n", show_stack((n - 1) / CHUNK_BITS));
+    else
+        printf("no improvement\n");
 }
 
-/* Extract the specified range of LOOKUP_BITS bits from the given pointer.
- * The result is shifted such that the end bit is bit (LOOKUP_BITS-1) of
- * the result. Bits with negative indices are permitted, and set to 1.
- */
-static inline uint32_t extract_LUB(uint8_t *cp, signed int start_bit) {
-    uint32_t word = 0;
-    for (uint i = 0; i <= LOOKUP_BYTES; ++i) {
-        signed int target = start_bit + (i << 3);
-        if (target >= 0)
-            word |= (uint32_t)cp[target >> 3] << (i << 3);
-    }
-    word >>= ((uint)start_bit) & 7;
-    if (start_bit < 0)
-        word |= (1 << -start_bit) - 1;
-    return word & LOOKUP_MASK;
-}
-
-/* eg after = 12, n = 57 we want:
- *   w1 = (41..47 >> 25) | (48..56 << 7)  (force)
- *   w2 = (25..31 >> 25) | (32..40 << 7)
- *   w3 =                  (13..24 << 7)
- * eg after = 12, n = 26 we want:
- *   w1 =                  (13..25 << 6)  (force)
- */
-static inline n_t bits_avail(block_t *bp, n_t after) {
-    signed int from = (signed int)after + 1;
-    if (from >= (signed int)n)
-        return (from == (signed int)n) ? 1 : 0;
-    n_t sum = 0;
-    bool force = true;
-    for (signed int i = (signed int)n; i > from; ) {
-        i -= LOOKUP_BITS;
-        uint32_t word = extract_LUB(&bp->b[0], i);
-        if (i < from)
-            word |= (1 << (from - i)) - 1;
-        sum += (force) ? lookup_sub_force[word] : lookup_sub[word];
-        force = false;
-    }
-    return sum;
+static inline n_t bits_avail(chunk_t v) {
+    return lookup_sub[v];
 }
 
 void findmax(void) {
@@ -249,84 +400,125 @@ void findmax(void) {
     f3[0] = 0;
     f3[1] = 1;
     max = 1;
-    iter = 0;
-    reset_data();
   TRY_NEXT:
-    while (s_i > 0) {
-        ++iter;
-        n_t cur = ++s[s_i];
-        if (cur > n || s_i + f3[n - cur + 1] <= max)
-            goto derecurse;
-
-        block_t *bprev = &blocks[s_i - 1];
-        if (is_blocked(bprev, cur))
-            continue;
-
-        /* ok to continue with this subset */
-
-        /* block the third element of any new 2-element APs */
-        block_t *bcur = &blocks[s_i];
-        copy_block(bcur, bprev);
-        scratch_t cur2 = (scratch_t)cur + cur;
-        bool fail = false;
-        for (f_t s_j = s_i; s_j > 0;) {
-            --s_j;
-            scratch_t targ = cur2 - s[s_j];
-            if (targ >= (scratch_t)n) {
-                if (targ == (scratch_t)n) {
-                    /* if subset cannot contain n, it cannot be a new max */
-                    fail = true;
-                } else if (targ == (scratch_t)n + 1) {
-                    /* mark this (in case of continuation) */
-                    set_blocked(bcur, (n_t)targ);
-                }
-                /* any further values are beyond bounds */
-                break;
-            }
-            set_blocked(bcur, (n_t)targ);
-        }
-        if (fail)
-            continue;
-        if (s_i + 1 + bits_avail(bcur, cur) <= max) {
 #ifdef DEBUG
-            if (n == debug_n) {
-                printf("[");
-                for (uint dsi = 0; dsi <= s_i; ++dsi) {
-                    if (dsi)
-                        printf(" ");
-                    printf("%d", s[dsi]);
-                }
-                printf("] avail = %d\n", bits_avail(bcur, cur));
-            }
+    if (debug_n && n > debug_n)
+        return;
 #endif
-            continue;
-        }
+    iter = 0;
+    reset_data(n);
+    uint final = (n - 1) / CHUNK_BITS;
+    uint finalbit = (n - 1) % CHUNK_BITS;
+    uint finalmask = (uint)((1ULL << (finalbit + 1)) - 1);
 
-        /* advance for next element */
-        ++s_i;
-        s[s_i] = cur;   /* ready to increment */
+    while (spi >= 0) {
+        ++iter;
+        stack_t *sp = &stack[spi];
+        chunkset_t *csp = sp->csp;
+        size_t chunk_off = sp->chunk_off;
 
-        if (s_i > max) {
-            /* we have a solution: f(n) = f(n-1) + 1 */
+        if (chunk_off >= csp->count)
+            goto derecurse;
+        chunk_t val = csp->cp[chunk_off];
+#ifdef DEBUG
+        if (debug_n && n == debug_n)
+            fprintf(stderr, "> <%s> [%s] {%s}\n",
+                    show_short(spi), show_stack(spi), show_excl(spi));
+#endif
+
+        if (val & sp->exclude[spi])
+            goto next_iter;
+
+        uint bitcount = sp->bitcount + __builtin_popcount((uint32_t)val);
+        if (spi == final) {
+            if (bitcount <= max)
+                goto next_iter;
+            /* now check if val x v[spi-1] disallows a bit in val */
+/* FIXME:
+ * self_product finds the one-chunk-wide set of bits excluded by pairs of bits
+ * in the source. Here we want to check whether the reverse would exclude
+ * a bit that appears in the previous chunk.
+ */
+            if (spi > 0) {
+                stack_t *relsp = &stack[spi - 1];
+                chunkset_t *relcsp = relsp->csp;
+                chunk_t exclude[3];
+                exclude[0] = sp->exclude[spi];
+                cross_product(exclude, 0, relcsp->cp[relsp->chunk_off], val);
+                if (val & exclude[0])
+                    goto next_iter;
+            }
+            /* we have a solution */
             disp_result(1);
             ++max;
             f3[n] = max;
             ++n;
-            iter = 0;
-            /* preserve invariant "n is never blocked" */
-            while (s_i > 0 && is_blocked(&blocks[s_i - 1], n))
-                --s_i;
+            /* FIXME: don't try to continue from where we are, for now */
+            goto TRY_NEXT;
         }
+
+        if (bitcount + f3[n - (spi + 1) * CHUNK_BITS] <= max)
+            goto next_iter;
+
+        /* ok to continue with this subset */
+
+        /* block the third element of any new 2-element APs */
+        stack_t *nextsp = &stack[spi + 1];
+        chunkset_t *nextcsp = nextsp->csp;
+        chunk_t *exclude = nextsp->exclude;
+/* FIXME:
+ * copy only up to n;
+ * stop loop when low bit would exceed n;
+ * ensure we have room for 3 chunks
+ */
+        memcpy(exclude, &sp->exclude, sizeof(sp->exclude));
+        for (uint rel = 0; rel <= spi; ++rel) {
+            stack_t *relsp = &stack[spi - rel];
+            chunkset_t *relcsp = relsp->csp;
+/* FIXME:
+ * self_product finds the one-chunk-wide set of bits excluded by pairs of bits
+ * in the source, so it should just be a lookup.
+ */
+            if (rel == 0)
+                self_product(exclude, (signed int)spi, val);
+            else
+                cross_product(exclude, (signed int)spi + rel - 1,
+                        relcsp->cp[relsp->chunk_off], val);
+        }
+        if (val & exclude[spi])
+            goto next_iter;
+        exclude[final] &= finalmask;
+        if (exclude[final] & (1 << finalbit))
+            goto next_iter;
+
+        uint maxrest = 0;
+        for (uint i = spi + 1; i <= final; ++i) {
+            chunk_t v = exclude[i];
+            if (i == final)
+                v |= ~finalmask;
+            maxrest += bits_avail(v);
+        }
+
+        if (bitcount + maxrest <= max)
+            goto next_iter;
+
+        /* advance for next element */
+        ++spi;
+        nextsp->chunk_off = 0;
+        nextsp->bitcount = bitcount;
         continue;
+
       derecurse:
-        --s_i;
+        --spi;
+        sp = &stack[spi];
+      next_iter:
+        ++sp->chunk_off;
+        continue;
     }
     /* no solution: f(n) = f(n-1) */
     disp_result(0);
-    reset_data();
     f3[n] = max;
     ++n;
-    iter = 0;
     goto TRY_NEXT;
 }
 
@@ -346,6 +538,7 @@ int main(int argc, char **argv) {
     setlinebuf(stdout);
     init_rev();
     init_lookup_sub();
+    init_chunks();
     t0 = utime();
     findmax();
     return 0;
