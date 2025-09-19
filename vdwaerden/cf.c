@@ -45,7 +45,7 @@ static inline double utime(void) {
 
 uint8_t drev8[1 << 8];
 
-#define CHUNK_BYTES 2
+#define CHUNK_BYTES 1
 #define CHUNK_BITS (CHUNK_BYTES << 3)
 #define CHUNK_MASK ((1 << CHUNK_BITS) - 1)
 #if CHUNK_BYTES == 1
@@ -68,6 +68,9 @@ typedef struct chunkset_s {
 chunkset_t chunks[CHUNK_BITS + 1];
 chunkset_t chunks_bottom[CHUNK_BITS + 1];
 chunkset_t chunks_top[CHUNK_BITS + 1];
+chunk_t self_prod[1 << CHUNK_BITS];
+chunk_t self_prod_reverse[1 << CHUNK_BITS];
+chunk_t cross_prod[3 * (1 << (CHUNK_BITS * 2))];
 
 typedef struct stack_s {
     chunkset_t *csp;
@@ -117,6 +120,48 @@ int cmp_lexical(const void *va, const void *vb) {
     chunk_t ra = revchunk(*(chunk_t *)va);
     chunk_t rb = revchunk(*(chunk_t *)vb);
     return (ra < rb) ? 1 : -1;
+}
+
+static inline void cross_product(
+    chunk_t *result, chunk_t left, chunk_t right
+) {
+    ullong rleft = (ullong)revchunk(left);
+    while (right) {
+        uint bi = lsb32((uint32_t)right);
+        right ^= 1 << bi;
+        uint shift = (bi << 1) + 1;
+        result[0] |= (chunk_t)(
+            (rleft << shift) & CHUNK_MASK
+        );
+        if (shift > CHUNK_BITS)
+            result[1] |= (chunk_t)(
+                (rleft << (shift - CHUNK_BITS)) & CHUNK_MASK
+            );
+        else
+            result[1] |= (chunk_t)(
+                (rleft >> (CHUNK_BITS - shift)) & CHUNK_MASK
+            );
+        result[2] |= (chunk_t)(
+            (rleft >> ((CHUNK_BITS << 1) - shift)) & CHUNK_MASK
+        );
+    }
+    return;
+}
+
+static inline chunk_t self_product(chunk_t right) {
+    ullong rleft = (ullong)revchunk(right);
+    chunk_t result = 0;
+    while (right) {
+        uint bi = lsb32((uint32_t)right);
+        right ^= 1 << bi;
+        uint shift = (bi << 1) + 1;
+        uint revi = CHUNK_BITS - bi;
+        ullong masked = rleft & ~((1ULL << revi) - 1);
+        result |= (chunk_t)(
+            (masked >> ((CHUNK_BITS << 1) - shift)) & CHUNK_MASK
+        );
+    }
+    return result;
 }
 
 void init_chunks(void) {
@@ -178,6 +223,17 @@ void init_chunks(void) {
             exit(1);
         }
     }
+
+    static_assert(sizeof(uint) > sizeof(chunk_t), "our loop must end");
+    for (uint i = 0; i <= (1 << CHUNK_BITS); ++i) {
+        self_prod[i] = self_product((chunk_t)i);
+        for (uint j = 0; j <= (1 << CHUNK_BITS); ++j) {
+            chunk_t *cp = &cross_prod[3 * ((i << CHUNK_BITS) + j)];
+            cross_product(cp, (chunk_t)i, (chunk_t)j);
+        }
+    }
+    for (uint i = 0; i <= (1 << CHUNK_BITS); ++i)
+        self_prod_reverse[i] = revchunk(self_prod[revchunk((chunk_t)i)]);
 }
 
 bool better_sub(uint32_t avail, uint32_t have, f_t need) {
@@ -248,68 +304,6 @@ void init_lookup_sub(void) {
             lookup_sub_force[j] = temp;
         }
     }
-}
-
-static inline void cross_product(
-    chunk_t *result, signed int off, chunk_t left, chunk_t right
-) {
-    ullong rleft = (ullong)revchunk(left);
-    while (right) {
-        uint bi = lsb32((uint32_t)right);
-        right ^= 1 << bi;
-        uint shift = (bi << 1) + 1;
-        if (off >= 0)
-            result[off] |= (chunk_t)(
-                (rleft << shift) & CHUNK_MASK
-            );
-        if (off + 1 >= 0)
-            if (shift > CHUNK_BITS)
-                result[off + 1] |= (chunk_t)(
-                    (rleft << (shift - CHUNK_BITS)) & CHUNK_MASK
-                );
-            else
-                result[off + 1] |= (chunk_t)(
-                    (rleft >> (CHUNK_BITS - shift)) & CHUNK_MASK
-                );
-        if (off + 2 >= 0)
-            result[off + 2] |= (chunk_t)(
-                (rleft >> ((CHUNK_BITS << 1) - shift)) & CHUNK_MASK
-            );
-    }
-    return;
-}
-
-static inline void self_product(
-    chunk_t *result, signed int off, chunk_t right
-) {
-    ullong rleft = (ullong)revchunk(right);
-    while (right) {
-        uint bi = lsb32((uint32_t)right);
-        right ^= 1 << bi;
-        uint shift = (bi << 1) + 1;
-        uint revi = CHUNK_BITS - bi;
-        ullong masked = rleft & ~((1ULL << revi) - 1);
-#if 0
-        if (off >= 0)
-            result[off] |= (chunk_t)(
-                (masked << shift) & CHUNK_MASK
-            );
-#endif
-        if (off >= 0)
-            if (shift > CHUNK_BITS)
-                result[off] |= (chunk_t)(
-                    (masked << (shift - CHUNK_BITS)) & CHUNK_MASK
-                );
-            else
-                result[off] |= (chunk_t)(
-                    (masked >> (CHUNK_BITS - shift)) & CHUNK_MASK
-                );
-        if (off + 1 >= 0)
-            result[off + 1] |= (chunk_t)(
-                (masked >> ((CHUNK_BITS << 1) - shift)) & CHUNK_MASK
-            );
-    }
-    return;
 }
 
 void reset_data(uint n) {
@@ -433,19 +427,14 @@ void findmax(void) {
         if (spi == final) {
             if (bitcount <= max)
                 goto next_iter;
-            /* now check if val x v[spi-1] disallows a bit in val */
-/* FIXME:
- * self_product finds the one-chunk-wide set of bits excluded by pairs of bits
- * in the source. Here we want to check whether the reverse would exclude
- * a bit that appears in the previous chunk.
- */
             if (spi > 0) {
-                stack_t *relsp = &stack[spi - 1];
-                chunkset_t *relcsp = relsp->csp;
-                chunk_t exclude[3];
-                exclude[0] = sp->exclude[spi];
-                cross_product(exclude, 0, relcsp->cp[relsp->chunk_off], val);
-                if (val & exclude[0])
+                /* Our exclude mask told us if any preceding pair of bits
+                 * disallowed a bit in val, now check if a pair of bits in
+                 * val conflicts with a single bit preceding.
+                 */
+                stack_t *prev = &stack[spi - 1];
+                chunk_t mask = self_prod_reverse[val];
+                if (mask & prev->csp->cp[prev->chunk_off])
                     goto next_iter;
             }
             /* we have a solution */
@@ -472,22 +461,20 @@ void findmax(void) {
  * ensure we have room for 3 chunks
  */
         memcpy(exclude, &sp->exclude, sizeof(sp->exclude));
-        for (uint rel = 0; rel <= spi; ++rel) {
+        exclude[spi + 1] |= self_prod[val];
+        for (uint rel = 1; rel <= spi; ++rel) {
             stack_t *relsp = &stack[spi - rel];
             chunkset_t *relcsp = relsp->csp;
-/* FIXME:
- * self_product finds the one-chunk-wide set of bits excluded by pairs of bits
- * in the source, so it should just be a lookup.
- */
-            if (rel == 0)
-                self_product(exclude, (signed int)spi, val);
-            else
-                cross_product(exclude, (signed int)spi + rel - 1,
-                        relcsp->cp[relsp->chunk_off], val);
+            chunk_t *mask = &cross_prod[
+                3 * ((relcsp->cp[relsp->chunk_off] << CHUNK_BITS) + val)
+            ];
+            for (uint off = 0; off < 3; ++off)
+                exclude[spi + rel - 1 + off] |= mask[off];
         }
         if (val & exclude[spi])
             goto next_iter;
         exclude[final] &= finalmask;
+        /* better solution is not possible unless it include both 1 and n */
         if (exclude[final] & (1 << finalbit))
             goto next_iter;
 
