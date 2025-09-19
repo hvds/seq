@@ -406,6 +406,11 @@ void findmax(void) {
 
         if (val & sp->exclude[spi])
             goto next_iter;
+        /* In the first extent we want to force 1 in the set; lexical
+         * ordering ensures those are grouped at the start.
+         */
+        if (spi == 0 && !(val & 1))
+            goto derecurse;
 
         uint bitcount = sp->bitcount + __builtin_popcount((uint32_t)val);
         if (spi == final) {
