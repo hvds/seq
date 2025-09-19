@@ -86,7 +86,6 @@ signed int spi;
 #define LOOKUP_SIZE (1 << LOOKUP_BITS)
 #define LOOKUP_MASK ((1 << LOOKUP_BITS) - 1)
 f_t lookup_sub[LOOKUP_SIZE];        /* free choice */
-f_t lookup_sub_force[LOOKUP_SIZE];  /* (LOOKUP_BITS+1)th bit forced */
 
 void init_rev(void) {
     memset(drev8, 0, sizeof(drev8));
@@ -264,7 +263,6 @@ bool better_sub(uint32_t avail, uint32_t have, f_t need) {
     
 void init_lookup_sub(void) {
     lookup_sub[0] = 0;
-    lookup_sub_force[0] = 1;
     for (uint32_t i = 1; i < LOOKUP_SIZE; ++i) {
         /* free choice */
         int bits = __builtin_popcount(i);
@@ -279,17 +277,6 @@ void init_lookup_sub(void) {
             lookup_sub[i] = better_sub(j, b, prev)
                     ? prev + 1 : prev;
         }
-
-        /* force 1 << LOOKUP_BITS */
-        if (bits <= 1) {
-            lookup_sub_force[i] = bits + 1;
-        } else {
-            uint32_t b = 1 << msb32(i);
-            uint32_t j = i ^ b;
-            f_t prev = lookup_sub_force[j];
-            lookup_sub_force[i] = better_sub(i, 1 << LOOKUP_BITS, prev)
-                    ? prev + 1 : prev;
-        }
     }
 
     /* our actual data has bits set for _disallowed_ values, so invert */
@@ -299,9 +286,6 @@ void init_lookup_sub(void) {
             f_t temp = lookup_sub[i];
             lookup_sub[i] = lookup_sub[j];
             lookup_sub[j] = temp;
-            temp = lookup_sub_force[i];
-            lookup_sub_force[i] = lookup_sub_force[j];
-            lookup_sub_force[j] = temp;
         }
     }
 }
