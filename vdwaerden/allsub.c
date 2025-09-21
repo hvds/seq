@@ -145,6 +145,7 @@ typedef struct allsub_iter_s {
 } allsub_iter_t;
 
 allsub_iter_t *init_iter(uint n) {
+    find_allsub(n);
     allsub_iter_t *aip = malloc(sizeof(allsub_iter_t));
     aip->n = n;
     aip->i = 1;

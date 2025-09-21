@@ -61,20 +61,37 @@ uint8_t drev8[1 << 8];
 #   error "invalid CHUNK_BYTES"
 #endif
 
-typedef struct chunkset_s {
-    size_t count;
-    chunk_t *cp;
-} chunkset_t;
-chunkset_t chunks[CHUNK_BITS + 1];
-chunkset_t chunks_bottom[CHUNK_BITS + 1];
-chunkset_t chunks_top[CHUNK_BITS + 1];
+static_assert(CHUNK_BYTES == 1, "required for MAX_CHUNK_SET");
+#define MAX_CHUNK_SET 4
+
+chunk_t *allchunks;
+size_t allchunks_size;
+size_t allchunks_i;
+typedef struct sized_extent_s {
+    size_t start;
+    size_t end;
+} sized_extent_t;
+typedef struct extent_s {
+    uint maxbits;
+    sized_extent_t range[MAX_CHUNK_SET + 1];
+} extent_t;
+
+/* An extent for each mask/reverse mask combination. */
+extent_t extents[1 << (2 * CHUNK_BITS)];
+/* An extent with bit 0 set, with zero mask and reverse mask, for each width
+ * (with msb set), and one for full width. */
+extent_t start_extents[CHUNK_BITS + 1];
+/* An extent for each mask/reverse mask combination, for each width,
+ * with msb set. */
+extent_t tail_extents[CHUNK_BITS * (1 << (2 * CHUNK_BITS))];
+
 chunk_t self_prod[1 << CHUNK_BITS];
 chunk_t self_prod_reverse[1 << CHUNK_BITS];
 chunk_t cross_prod[3 * (1 << (CHUNK_BITS * 2))];
 
 typedef struct stack_s {
-    chunkset_t *csp;
-    size_t chunk_off;
+    size_t off;
+    size_t end;
     uint bitcount;
     chunk_t exclude[MAXN / (sizeof(chunk_t) << 3) + 1];
 } stack_t;
@@ -163,76 +180,181 @@ static inline chunk_t self_product(chunk_t right) {
     return result;
 }
 
+static inline void push_chunk(chunk_t val) {
+    if (allchunks_i >= allchunks_size) {
+        size_t newsize = (allchunks_size) ? (allchunks_size * 3 / 2) : 1024;
+        allchunks = realloc(allchunks, newsize * sizeof(chunk_t));
+        allchunks_size = newsize;
+    }
+    allchunks[allchunks_i++] = val;
+}
+
+static inline void fill_extent(extent_t *ep) {
+    uint maxbits = ep->maxbits;
+    if (maxbits == 0)
+        return;
+    size_t start = ep->range[0].start;
+    size_t end = ep->range[0].end;
+    /* lexically sorted, 0 will be at the end */
+    ep->range[1].start = start;
+    ep->range[1].end = (allchunks[end - 1] == 0) ? end - 1 : end;
+
+    for (uint bitc = 2; bitc <= maxbits; ++bitc) {
+        size_t next = allchunks_i;
+        for (size_t off = start; off < end; ++off) {
+            chunk_t val = allchunks[off];
+            if (__builtin_popcount((uint32_t)val) < bitc)
+                continue;
+            push_chunk(val);
+        }
+        ep->range[bitc].start = start = next;
+        ep->range[bitc].end = end = allchunks_i;
+    }
+}
+
+/* For middle chunks, we will specify the mask (2^8), the reverse
+ * mask (2^8) and the required minimum number of bits (0 .. 4)
+ * for a total of 5 x 2^16 entries.
+ * For the first chunk, the mask and reverse mask are always zero, but
+ * we will specify the required minimum number of bits (0 .. 4) and
+ * require that all entries set the lsb.
+ * For the last chunk, we will specify the mask, reverse mask and minbits,
+ * and require that all entries set the (floating) msb, for a total of
+ * 5 x 2^19 entries.
+ */
 void init_chunks(void) {
-    for (uint i = 0; i <= CHUNK_BITS; ++i) {
-        size_t count = (size_t)count_allsub(i);
-        chunks[i].count = count;
-        chunks[i].cp = malloc(count * sizeof(chunk_t));
-        /* chunks with bottom bit set all come lexically before those
-         * without, so we share the array just with a lower count.
-         */
-        chunks_bottom[i].cp = chunks[i].cp;
-        /* By symmetry, there are as many with bottom bit as with top bit
-         * set, and by definition count(n with top bit set) is
-         * count(n) - count(n - 1).
-         */
-        if (i) {
-            size_t new = count - chunks[i - 1].count;
-            chunks_bottom[i].count = new;
-            chunks_top[i].count = new;
-            chunks_top[i].cp = malloc(new * sizeof(chunk_t));
+    for (uint i = 0; i <= CHUNK_MASK; ++i) {
+        self_prod[i] = self_product((chunk_t)i);
+        for (uint j = 0; j <= CHUNK_MASK; ++j) {
+            chunk_t *cp = &cross_prod[3 * ((i << CHUNK_BITS) | j)];
+            cross_product(cp, (chunk_t)i, (chunk_t)j);
         }
     }
-    size_t ci[CHUNK_BITS + 1], cti[CHUNK_BITS + 1];
-    memset(ci, 0, sizeof(ci));
-    memset(cti, 0, sizeof(cti));
+    for (uint i = 0; i <= CHUNK_MASK; ++i)
+        self_prod_reverse[i] = revchunk(self_prod[revchunk((chunk_t)i)]);
 
+    uint maxbits0 = 0;
+    size_t start0 = allchunks_i;
     allsub_iter_t *aip = init_iter(CHUNK_BITS);
-    chunkset_t *csp = &chunks[CHUNK_BITS];
     while (1) {
         chunk_t val = (chunk_t)do_iter(aip);
-        csp->cp[ ci[CHUNK_BITS]++ ] = val;
+        push_chunk(val);
+        uint bits = __builtin_popcount((uint32_t)val);
+        if (maxbits0 < bits)
+            maxbits0 = bits;
         if (val == 0)
             break;
     }
     done_iter(aip);
+    size_t end0 = allchunks_i;
 
     /* sort once, then fill all the derived sets in sorted order */
-    qsort(csp->cp, csp->count, sizeof(chunk_t), cmp_lexical);
+    qsort(&allchunks[0], end0 - start0, sizeof(chunk_t), cmp_lexical);
 
-    for (size_t off = 0; off < csp->count; ++off) {
-        chunk_t val = csp->cp[off];
-        uint bi = val ? msb32((uint)val) + 1 : 0;
-        for (uint i = bi; i < CHUNK_BITS; ++i)
-            chunks[i].cp[ ci[i]++ ] = val;
-        if (bi)
-            chunks_top[bi].cp[ cti[bi]++ ] = val;
+    {
+        extent_t *ep = &extents[0];
+        ep->maxbits = maxbits0;
+        ep->range[0].start = start0;
+        ep->range[0].end = end0;
+        fill_extent(ep);
     }
 
-    /* sanity check */
-    for (uint i = 0; i <= CHUNK_BITS; ++i) {
-        if (ci[i] != chunks[i].count) {
-            fprintf(stderr, "for size %u found %llu expecting %llu\n",
-                    i, (ullong)ci[i], (ullong)chunks[i].count);
-            exit(1);
-        }
-        if (cti[i] != chunks_top[i].count) {
-            fprintf(stderr, "for top size %u found %llu expecting %llu\n",
-                    i, (ullong)cti[i], (ullong)chunks_top[i].count);
-            exit(1);
+    for (uint mask = 0; mask <= CHUNK_MASK; ++mask) {
+        for (uint revmask = 0; revmask <= CHUNK_MASK; ++revmask) {
+            if (mask == 0 && revmask == 0)
+                continue;
+            extent_t *ep = &extents[(mask << CHUNK_BITS) | revmask];
+            uint maxbits = 0;
+            size_t start = allchunks_i;
+            for (size_t off = start0; off < end0; ++off) {
+                chunk_t val = allchunks[off];
+                if (val & (chunk_t)mask)
+                    continue;
+                if (self_prod_reverse[val] & (chunk_t)revmask)
+                    continue;
+                push_chunk(val);
+                uint bits = __builtin_popcount((uint32_t)val);
+                if (maxbits < bits)
+                    maxbits = bits;
+            }
+            ep->maxbits = maxbits;
+            ep->range[0].start = start;
+            ep->range[0].end = allchunks_i;
+            fill_extent(ep);
         }
     }
 
-    static_assert(sizeof(uint) > sizeof(chunk_t), "our loop must end");
-    for (uint i = 0; i <= (1 << CHUNK_BITS); ++i) {
-        self_prod[i] = self_product((chunk_t)i);
-        for (uint j = 0; j <= (1 << CHUNK_BITS); ++j) {
-            chunk_t *cp = &cross_prod[3 * ((i << CHUNK_BITS) + j)];
-            cross_product(cp, (chunk_t)i, (chunk_t)j);
+    {
+        extent_t *ep = &start_extents[CHUNK_BITS];
+        uint maxbits = 0;
+        size_t start = allchunks_i;
+        for (size_t off = start0; off < end0; ++off) {
+            chunk_t val = allchunks[off];
+            if ((val & 1) == 0)
+                continue;
+            push_chunk(val);
+            uint bits = __builtin_popcount((uint32_t)val);
+            if (maxbits < bits)
+                maxbits = bits;
+        }
+        ep->maxbits = maxbits;
+        ep->range[0].start = start;
+        ep->range[0].end = allchunks_i;
+        fill_extent(ep);
+    }
+
+    for (uint width = 0; width < CHUNK_BITS; ++width) {
+        chunk_t expect = (1 << width);
+        chunk_t matchmask = 1 + ~expect;
+        extent_t *ep = &start_extents[width];
+        uint maxbits = 0;
+        size_t start = allchunks_i;
+        for (size_t off = start0; off < end0; ++off) {
+            chunk_t val = allchunks[off];
+            if ((val & 1) == 0)
+                continue;
+            if ((val & matchmask) != expect)
+                continue;
+            push_chunk(val);
+            uint bits = __builtin_popcount((uint32_t)val);
+            if (maxbits < bits)
+                maxbits = bits;
+        }
+        ep->maxbits = maxbits;
+        ep->range[0].start = start;
+        ep->range[0].end = allchunks_i;
+        fill_extent(ep);
+    }
+
+    for (uint width = 0; width < CHUNK_BITS; ++width) {
+        chunk_t expect = (1 << width);
+        chunk_t matchmask = 1 + ~expect;
+        for (uint mask = 0; mask <= CHUNK_MASK; ++mask) {
+            for (uint revmask = 0; revmask <= CHUNK_MASK; ++revmask) {
+                extent_t *sep = &extents[(mask << CHUNK_BITS) | revmask];
+                size_t sstart = sep->range[0].start;
+                size_t send = sep->range[0].end;
+                extent_t *ep = &tail_extents[
+                    (((width << CHUNK_BITS) | mask) << CHUNK_BITS) | revmask
+                ];
+                uint maxbits = 0;
+                size_t start = allchunks_i;
+                for (size_t off = sstart; off < send; ++off) {
+                    chunk_t val = allchunks[off];
+                    if ((val & matchmask) != expect)
+                        continue;
+                    push_chunk(val);
+                    uint bits = __builtin_popcount((uint32_t)val);
+                    if (maxbits < bits)
+                        maxbits = bits;
+                }
+                ep->maxbits = maxbits;
+                ep->range[0].start = start;
+                ep->range[0].end = allchunks_i;
+                fill_extent(ep);
+            }
         }
     }
-    for (uint i = 0; i <= (1 << CHUNK_BITS); ++i)
-        self_prod_reverse[i] = revchunk(self_prod[revchunk((chunk_t)i)]);
 }
 
 bool better_sub(uint32_t avail, uint32_t have, f_t need) {
@@ -292,21 +414,12 @@ void init_lookup_sub(void) {
 
 void reset_data(uint n) {
     uint final = (n - 1) / CHUNK_BITS;
-    /* will overwrite below if this chunk is also final */
-    stack[0].csp = &chunks_bottom[CHUNK_BITS];
-    for (uint i = 1; i < final; ++i)
-        stack[i].csp = &chunks[CHUNK_BITS];
-
-    /* For n <= chunk bits, we set stack[0] to fix bottom bit rather than
-     * top bit to save a test in the main loop. It does not seem worth an
-     * extra chunks_bottom_top array just to save a few iterations for
-     * small n.
-     */
-    uint fragchunk = ((n - 1) % CHUNK_BITS) + 1;
-    stack[final].csp = (final == 0)
-            ? &chunks_bottom[fragchunk] : &chunks_top[fragchunk];
-
-    stack[0].chunk_off = 0;
+    extent_t *ep = &start_extents[
+        (n <= CHUNK_BITS) ? (n - 1) : CHUNK_BITS
+    ];
+    /* FIXME: constrain bitcount if we can */
+    stack[0].off = ep->range[0].start;
+    stack[0].end = ep->range[0].end;
     stack[0].bitcount = 0;
     bzero(&stack[0].exclude, sizeof(stack[0].exclude));
     spi = 0;
@@ -317,8 +430,7 @@ char *show_stack(uint sp) {
     uint off = 0;
     for (uint si = 0; si <= sp; ++si) {
         stack_t *sp = &stack[si];
-        chunkset_t *csp = sp->csp;
-        chunk_t val = csp->cp[ sp->chunk_off ];
+        chunk_t val = allchunks[sp->off];
         while (val) {
             uint bi = lsb32((uint32_t)val);
             val ^= (1 << bi);
@@ -336,8 +448,7 @@ char *show_short(uint sp) {
     uint off = 0;
     for (uint si = 0; si <= sp; ++si) {
         stack_t *sp = &stack[si];
-        chunkset_t *csp = sp->csp;
-        chunk_t val = csp->cp[ sp->chunk_off ];
+        chunk_t val = allchunks[sp->off];
         if (off)
             off += snprintf(&bufshort[off], sizeof(bufshort) - off, " ");
         off += snprintf(&bufshort[off], sizeof(bufshort) - off,
@@ -392,40 +503,21 @@ void findmax(void) {
     while (spi >= 0) {
         ++iter;
         stack_t *sp = &stack[spi];
-        chunkset_t *csp = sp->csp;
-        size_t chunk_off = sp->chunk_off;
+        size_t off = sp->off;
 
-        if (chunk_off >= csp->count)
+        if (off >= sp->end)
             goto derecurse;
-        chunk_t val = csp->cp[chunk_off];
+        chunk_t val = allchunks[off];
 #ifdef DEBUG
         if (debug_n && n == debug_n)
             fprintf(stderr, "> <%s> [%s] {%s}\n",
                     show_short(spi), show_stack(spi), show_excl(spi));
 #endif
 
-        if (val & sp->exclude[spi])
-            goto next_iter;
-        /* In the first extent we want to force 1 in the set; lexical
-         * ordering ensures those are grouped at the start.
-         */
-        if (spi == 0 && !(val & 1))
-            goto derecurse;
-
         uint bitcount = sp->bitcount + __builtin_popcount((uint32_t)val);
         if (spi == final) {
             if (bitcount <= max)
                 goto next_iter;
-            if (spi > 0) {
-                /* Our exclude mask told us if any preceding pair of bits
-                 * disallowed a bit in val, now check if a pair of bits in
-                 * val conflicts with a single bit preceding.
-                 */
-                stack_t *prev = &stack[spi - 1];
-                chunk_t mask = self_prod_reverse[val];
-                if (mask & prev->csp->cp[prev->chunk_off])
-                    goto next_iter;
-            }
             /* we have a solution */
             disp_result(1);
             ++max;
@@ -442,30 +534,22 @@ void findmax(void) {
 
         /* block the third element of any new 2-element APs */
         stack_t *nextsp = &stack[spi + 1];
-        chunkset_t *nextcsp = nextsp->csp;
         chunk_t *exclude = nextsp->exclude;
 /* FIXME:
- * copy only up to n;
- * stop loop when low bit would exceed n;
- * ensure we have room for 3 chunks
+ * copy only from spi+1 to final;
+ * stop loop when low bit would exceed final;
+ * apply only up to final
  */
         memcpy(exclude, &sp->exclude, sizeof(sp->exclude));
         exclude[spi + 1] |= self_prod[val];
         for (uint rel = 1; rel <= spi; ++rel) {
             stack_t *relsp = &stack[spi - rel];
-            chunkset_t *relcsp = relsp->csp;
-            chunk_t *mask = &cross_prod[
-                3 * ((relcsp->cp[relsp->chunk_off] << CHUNK_BITS) + val)
-            ];
-            for (uint off = 0; off < 3; ++off)
-                exclude[spi + rel - 1 + off] |= mask[off];
+            chunk_t relval = allchunks[relsp->off];
+            chunk_t *mask = &cross_prod[3 * ((relval << CHUNK_BITS) | val)];
+            for (uint eoff = 0; eoff < 3; ++eoff)
+                exclude[spi + rel - 1 + eoff] |= mask[eoff];
         }
-        if (val & exclude[spi])
-            goto next_iter;
         exclude[final] &= finalmask;
-        /* better solution is not possible unless it include both 1 and n */
-        if (exclude[final] & (1 << finalbit))
-            goto next_iter;
 
         uint maxrest = 0;
         for (uint i = spi + 1; i <= final; ++i) {
@@ -480,7 +564,16 @@ void findmax(void) {
 
         /* advance for next element */
         ++spi;
-        nextsp->chunk_off = 0;
+        extent_t *ep;
+        uint mask = (uint)exclude[spi];
+        if (spi == final) {
+            ep = &tail_extents[(((finalbit << CHUNK_BITS) | mask) << CHUNK_BITS) | val];
+        } else {
+            ep = &extents[(mask << CHUNK_BITS) | val];
+        }
+/* FIXME: determine minbits required */
+        nextsp->off = ep->range[0].start;
+        nextsp->end = ep->range[0].end;
         nextsp->bitcount = bitcount;
         continue;
 
@@ -488,7 +581,7 @@ void findmax(void) {
         --spi;
         sp = &stack[spi];
       next_iter:
-        ++sp->chunk_off;
+        ++sp->off;
         continue;
     }
     /* no solution: f(n) = f(n-1) */
