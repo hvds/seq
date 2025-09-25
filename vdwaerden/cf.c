@@ -412,17 +412,40 @@ void init_lookup_sub(void) {
     }
 }
 
+static inline uint min_needed(uint bitcount, chunk_t *exclude, chunk_t mask) {
+    uint final = (n - 1) / CHUNK_BITS;
+    uint finalbit = (n - 1) % CHUNK_BITS;
+    uint bits_needed = max + 1 - bitcount;
+    uint max_avail = bits_needed;
+    uint known_avail = 0;
+    for (uint i = spi + 1; i <= final; ++i) {
+        signed int theoretical = f3[n - i * CHUNK_BITS];
+        if (max_avail > theoretical + known_avail)
+            max_avail = theoretical + known_avail;
+        chunk_t mask = exclude[i];
+        extent_t *aep = (i == final)
+            ? &tail_extents[(((finalbit << CHUNK_BITS) | mask) << CHUNK_BITS) | 0]
+            : &extents[(mask << CHUNK_BITS) | 0];
+        known_avail += aep->maxbits;
+    }
+    if (max_avail > known_avail)
+        max_avail = known_avail;
+    return (bits_needed > max_avail) ? bits_needed - max_avail : 0;
+}
+
 void reset_data(uint n) {
     uint final = (n - 1) / CHUNK_BITS;
+    bzero(&stack[0].exclude, sizeof(stack[0].exclude));
+    spi = 0;
+    uint need = min_needed(0, stack[0].exclude, (chunk_t)0);
     extent_t *ep = &start_extents[
         (n <= CHUNK_BITS) ? (n - 1) : CHUNK_BITS
     ];
-    /* FIXME: constrain bitcount if we can */
-    stack[0].off = ep->range[0].start;
-    stack[0].end = ep->range[0].end;
+    if (need > ep->maxbits)
+        need = ep->maxbits;
+    stack[0].off = ep->range[need].start;
+    stack[0].end = ep->range[need].end;
     stack[0].bitcount = 0;
-    bzero(&stack[0].exclude, sizeof(stack[0].exclude));
-    spi = 0;
 }
 
 char bufstack[4096];
@@ -523,7 +546,6 @@ void findmax(void) {
             ++max;
             f3[n] = max;
             ++n;
-            /* FIXME: don't try to continue from where we are, for now */
             goto TRY_NEXT;
         }
 
@@ -551,17 +573,6 @@ void findmax(void) {
         }
         exclude[final] &= finalmask;
 
-        uint maxrest = 0;
-        for (uint i = spi + 1; i <= final; ++i) {
-            chunk_t v = exclude[i];
-            if (i == final)
-                v |= ~finalmask;
-            maxrest += bits_avail(v);
-        }
-
-        if (bitcount + maxrest <= max)
-            goto next_iter;
-
         /* advance for next element */
         ++spi;
         extent_t *ep;
@@ -571,9 +582,11 @@ void findmax(void) {
         } else {
             ep = &extents[(mask << CHUNK_BITS) | val];
         }
-/* FIXME: determine minbits required */
-        nextsp->off = ep->range[0].start;
-        nextsp->end = ep->range[0].end;
+        uint need = min_needed(bitcount, exclude, mask);
+        if (need > ep->maxbits)
+            goto derecurse;
+        nextsp->off = ep->range[need].start;
+        nextsp->end = ep->range[need].end;
         nextsp->bitcount = bitcount;
         continue;
 
