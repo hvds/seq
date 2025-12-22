@@ -1,0 +1,61 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use Math::Prime::Util qw{ inverse_totient euler_phi };
+use lib '../lib';
+use H::Diag qw{ diag keep_diag };
+
+=head1 totient-signature
+
+By analogy with oeis:A309981, we define the totient-signature a(n)
+as the length of the shortest list [ \phi(n + i) ]_i=0^{a(n)-1} that
+uniquely identifies n.
+
+Since we calculate this using inverse_totient(t) for increasing values of
+t, the results are safe only for n <= max(t).
+
+=cut
+
+for (my $t = 2; 1; $t += 2) {
+    diag($t) unless $t & 0xffff;    # show progress
+    my @v = inverse_totient($t);
+    next unless @v;
+    try(\@v, 1);
+}
+exit 0;
+
+sub try {
+    my($v, $d) = @_;
+    my %td;
+    push @{ $td{euler_phi($_ + $d)} }, $_ for @$v;
+    my @tail;
+    for my $va (values %td) {
+        if (@$va > 1) {
+            try($va, $d + 1);
+        } else {
+            push @tail, @$va if $d > 1;
+        }
+    }
+    if (@tail) {
+        keep_diag();
+        printf "%s [%s]\n", $d + 1, join ' ', @tail;
+    }
+}
+__END__
+With MPU-0.73 under perl-5.34.0, we show t=32,505,856 before the OOM killer
+kills us.
+
+a(n) = 2 for nearly all small values of n.
+a(n) = 1 requires | \phi^{-1}(\phi(n)) | = 1; to the best of my knowledge
+it is an open question whether such n exists.
+
+n: a(n) = 3, n < 1e3:
+    7   9  43  49  72  79 112 143 144 155
+  156 168 225 231 287 305 327 351 371 387
+  395 399 403 441 480 510 520 549 582 612
+  627 675 688 712 720 736 784 790 792 802
+  924
+
+Early examples of a(n) = 4:
+  2601630 2613510 [unsafe: 32324236 32365816 61376256 61454592]
+
