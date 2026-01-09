@@ -1,0 +1,343 @@
+#!/opt/maths/bin/perl
+use warnings;
+use strict;
+use Math::BigRat;
+
+=head1 Colinear
+
+For a polyomino S, let c(S) be the greatest number of points (at the centre
+of the unit squares comprising the shape) that lie on any single line.
+Find a(n, k), the number of k-ominoes S with c(S) <= n.
+
+=cut
+
+my $n = $ARGV[0] || 2;
+my $last = Shapes->new_empty;
+my $dup;
+for (my $k = 1; $last->size; ++$k) {
+    my $cur = Shapes->new;
+    $dup = 0;
+    for my $src ($last->all) {
+# warn "try to extend shape (@{[ $src->count ]}): @{[ $src->disp ]}\n";
+        $src->expand;
+        my @good = map {
+            $src->colinear(@$_) <= $n
+                ? ($_)
+                : do { $src->disallow(@$_); () }
+        } $src->neighbours;
+        for (@good) {
+            my $next = $src->add_new(@$_);
+            $src->disallow(@$_);
+            $cur->add($next);
+        }
+    }
+    printf "a(%s, %s) = %s [%s dup] (%.2f)\n",
+            $n, $k, $cur->size, $dup, (times)[0];
+    $last = $cur;
+}
+exit 0;
+
+package Shapes {
+    sub new {
+        my($class) = @_;
+        return bless {}, $class;
+    }
+    sub new_empty {
+        my($class) = @_;
+        my $self = $class->new;
+        $self->add(Shape->new_empty);
+        return $self;
+    }
+    sub size {
+        my($self) = @_;
+        return scalar keys %$self;
+    }
+    sub add {
+        my($self, $shape) = @_;
+        my $sig = $shape->canonical;
+        ++$dup, return if $self->{$sig};
+#warn "add new $sig\n";
+        $self->{$sig} //= $shape;
+        return;
+    }
+    sub all {
+        my($self) = @_;
+        return values %$self;
+    }
+};
+
+package Shape {
+    sub new {
+        my($class, $data) = @_;
+        return bless $data, $class;
+    }
+    sub new_empty {
+        my($class) = @_;
+        my $self = $class->new({
+            xmin => 0,
+            xmax => -1,
+            ymin => 0,
+            ymax => -1,
+            point => [],
+            disallowed => [],
+            neighbour => [('') x 2],
+            count => 0,
+        });
+        # set a seed neighbour
+        $self->setv($self->neighbour, 1, 1);
+        return $self;
+    }
+    sub count { shift->{count} }
+    sub point { shift->{point} }
+    sub neighbour { shift->{neighbour} }
+    sub disallowed { shift->{disallowed} }
+    sub clone {
+        my($self) = @_;
+        return ref($self)->new({
+            %$self,
+            point => [ @{ $self->point } ],
+            disallowed => [ @{ $self->disallowed } ],
+            neighbour => [ @{ $self->neighbour } ],
+        });
+    }
+    sub neighbours {
+        my($self) = @_;
+        return $self->allv($self->neighbour);
+    }
+    sub disallow {
+        my($self, $x, $y) = @_;
+        $self->setv($self->disallowed, $x, $y);
+        return;
+    }
+    sub canonical {
+        my($self) = @_;
+        return '' if $self->count == 0;
+        my($xmin, $xmax, $ymin, $ymax) = @$self{qw{ xmin xmax ymin ymax }};
+        my($xspan, $yspan) = ($xmax - $xmin, $ymax - $ymin);
+        my($s, $t);
+        my $pt = $self->point;
+        if ($xspan <= $yspan) {
+            $s = $self->disp($pt);
+#warn "test canonical $s\n";
+            my $tx = $self->invx($pt, $xmin, $xmax);
+
+            $t = $self->disp($tx);
+#warn ".. tx $t\n";
+            $s = $t if $s gt $t;
+
+            my $tr = $self->revx($pt, $ymin, $ymax);
+            $t = $self->disp($tr);
+#warn ".. tr $t\n";
+            $s = $t if $s gt $t;
+
+            my $trx = $self->invx($tr, $xmin, $xmax);
+#warn "t3 (@{[ join q{/}, map unpack(q{b*}, $_), @$trx ]})\n";
+            $t = $self->disp($trx);
+#warn ".. trx $t\n";
+            $s = $t if $s gt $t;
+        }
+
+        if ($yspan <= $xspan) {
+            local @$self{qw{ xmin xmax ymin ymax }} = ($ymin, $ymax, $xmin, $xmax);
+            my $ty = $self->trans($pt, $xmin, $xmax, $ymin, $ymax);
+            $t = $self->disp($ty);
+#warn ".. ty $t\n";
+            $s = $t if !defined($s) || $s gt $t;
+
+            my $tyx = $self->invx($ty, $ymin, $ymax);
+            $t = $self->disp($tyx);
+#warn ".. tyx $t\n";
+            $s = $t if $s gt $t;
+
+            my $tyr = $self->revx($ty, $xmin, $xmax);
+            $t = $self->disp($tyr);
+#warn ".. tyr $t\n";
+            $s = $t if $s gt $t;
+
+            my $tyrx = $self->invx($tyr, $ymin, $ymax);
+            $t = $self->disp($tyrx);
+#warn ".. tyrx $t\n";
+            $s = $t if $s gt $t;
+        }
+        return $s;
+    }
+    sub add_new {
+        my($self, $x, $y) = @_;
+        $self = $self->clone;
+# warn "adding [$x-$self->{xmin}, $y-$self->{ymin}] to ($self->{count}): @{[ $self->disp ]}\n";
+        if ($self->{count} == 0) {
+            @$self{qw{ xmin xmax ymin ymax }} = ($x, $x, $y, $y);
+        } else {
+            $self->{xmin} = $x if $self->{xmin} > $x;
+            $self->{xmax} = $x if $self->{xmax} < $x;
+            $self->{ymin} = $y if $self->{ymin} > $y;
+            $self->{ymax} = $y if $self->{ymax} < $y;
+        }
+        $self->setv($self->point, $x, $y);
+# warn ".. getting @{[ $self->disp ]}\n";
+        my $disallowed = $self->disallowed;
+        $self->setv($disallowed, $x, $y);
+        my $nb = $self->neighbour;
+        $self->unsetv($nb, $x, $y);
+        for ([-1, 0], [1, 0], [0, -1], [0, 1]) {
+            my($xn, $yn) = ($x + $_->[0], $y + $_->[1]);
+            $self->setv($nb, $xn, $yn)
+                    unless $self->hasv($disallowed, $xn, $yn);
+        }
+        ++$self->{count};
+        return $self;
+    }
+    sub expand {
+        my($self) = @_;
+        return if $self->count == 0;
+        while ($self->{xmin} < 2) {
+            unshift @{ $self->point }, '';
+            unshift @{ $self->disallowed }, '';
+            unshift @{ $self->neighbour }, '';
+            ++$self->{xmin};
+            ++$self->{xmax};
+        }
+        if ($self->{ymin} < 2) {
+            for ($self->point, $self->disallowed, $self->neighbour) {
+                @$_ = map "\x{0}" . $_, @$_;
+            }
+            $self->{ymin} += 8;
+            $self->{ymax} += 8;
+        }
+        return;
+    }
+    sub colinear {
+        my($self, $x, $y) = @_;
+        my %seen;
+        my $high = 0;
+        for ($self->allv($self->point)) {
+            my($x2, $y2) = @$_;
+            my $v = ($y == $y2) ? "oo" : Math::BigRat->new($x - $x2, $y - $y2);
+            ++$seen{$v};
+            $high = $seen{$v} if $high < $seen{$v};
+        }
+# $x -= $self->{xmin}; $y -= $self->{ymin}; warn "col $high for [$x,$y] in @{[ $self->disp ]}\n";
+        return $high + 1;
+    }
+    sub disp {
+        my($self, $data) = @_;
+        $data //= $self->{point};
+        return join '/', map {
+            my $x = $_;
+            join '', map {
+                $self->hasv($data, $x, $_) ? '*' : '.'
+            } $self->{ymin} .. $self->{ymax};
+        } $self->{xmin} .. $self->{xmax};
+    }
+    sub hasv {
+        my($self, $v, $x, $y) = @_;
+        return 0 if $#$v < $x;
+        return vec($v->[$x], $y, 1) ? 1 : 0;
+    }
+    sub setv {
+        my($self, $v, $x, $y) = @_;
+        push @$v, '' while @$v < $x;
+        vec($v->[$x], $y, 1) = 1;
+        return;
+    }
+    sub unsetv {
+        my($self, $v, $x, $y) = @_;
+        return if $#$v < $x;
+        vec($v->[$x], $y, 1) = 0;
+        if ($#$v == $x) {
+            pop @$v while @$v && $v->[-1] !~ /[^\x{0}]/;
+        }
+        return;
+    }
+    sub allv {
+        my($self, $v) = @_;
+        return map {
+            my $i = $_;
+            my $vi = $v->[$i];
+            my $len = 8 * length($vi);
+            map [ $i, $_ ], grep vec($vi, $_, 1), 0 .. $len - 1;
+        } 0 .. $#$v;
+    }
+    sub invx {
+        my($self, $v, $xmin, $xmax) = @_;
+        return [ ('') x $xmin, reverse @$v[ $xmin .. $xmax ] ];
+    }
+    sub revx {
+        my($self, $v, $ymin, $ymax) = @_;
+        my $w = [ ('') x @$v ];
+        for my $i (0 .. $#$v) {
+            my $src = $v->[$i];
+            next if $src =~ /^\x{0}*\z/;
+            my $dest = $w->[$i];
+            for my $j (0 .. $ymax - $ymin) {
+                vec($dest, $ymin + $j, 1) = vec($src, $ymax - $j, 1);
+            }
+            $w->[$i] = $dest;
+        }
+        return $w;
+    }
+    sub trans {
+        my($self, $v, $xmin, $xmax, $ymin, $ymax) = @_;
+        my $w = [ ('') x ($ymax + 1) ];
+        for my $i ($xmin .. $xmax) {
+            for my $j ($ymin .. $ymax) {
+                vec($w->[$j], $i, 1) = vec($v->[$i], $j, 1);
+            }
+        }
+        return $w;
+    }
+};
+
+__END__
+
+a(n) (A380991) = [1, 4, 15, 48, ...]
+a(3, k) (A378169) = [
+    1, 1, 2, 4, 9, 18, 37, 62,
+    86, 78, 61, 34, 14, 4, 1, 0
+]
+a(4, k) (A380990) = [
+    1, 1, 2, 5, 11, 31, 85, 262,
+    764, 2255, 6341, 17221, 43994, 106205, 239367, 502611,
+    977791, 1771624, 2989373, 4687803, 6819069, 9234529, 11622453, 13527854,
+    14571011, 14643347, 13747913, 12041014, 9905945, 7763985, 5805906, 4139266,
+    2858796, 1971455, 1368967, 942226, 618148, 368480, 186275, 73649,
+    20236, 3476, 400, 96, 27, 12, 2, 1,
+    0
+]
+a(5, k) = [
+    1, 1, 2, 5, 12, 34, 104, 339,
+    1133, 3845, 13080, 44374, 149495, 
+    ...
+]
+
+number of polyominoes (A000105) = [
+    1 1 2 5 12 35 108 369
+    1285 4655 17073 63600 238591 901971 3426576 13079255
+    50107909 192622052 742624232 2870671950 11123060678 43191857688 168047007728 654999700403
+    2557227044764 9999088822075 39153010938487 153511100594603 602621953061978 2368347037571252 9317706529987950 36695016991712879
+    144648268175306702 570694242129491412 2253491528465905342 8905339105809603405 35218318816847951974 139377733711832678648 551961891896743223274 2187263896664830239467
+    8672737591212363420225 34408176607279501779592 136585913609703198598627 542473001706357882732070 2155600091107324229254415 8569720333296834568434605 34085105553123831158180217 135629410647775553284438364
+    539916438668093786698843965 2150182610161041739167164220 8566301646855786503391647670 34140832502065121824070942627 136116710694919148806231527457 542874683702992552434145546370 2165873377717239478407665345440 8643839320316615721187562237534
+    34507662858721137395351058631991 137801831798576866546096116428465 550453451340976338599795923539996
+]
+
+peak a(3,k) at k= 9 is A105(k)^0.6222
+peak a(4,k) at k=26 is A105(k)^0.5512
+
+% ./colinear 4
+a(4, 1) = 1 (0.06)
+a(4, 2) = 1 (0.06)
+a(4, 3) = 2 (0.06)
+a(4, 4) = 5 (0.07)
+a(4, 5) = 11 (0.08)
+a(4, 6) = 31 (0.12)
+a(4, 7) = 85 (0.28)
+a(4, 8) = 262 (0.86)
+a(4, 9) = 764 (3.14)
+a(4, 10) = 2255 (13.20)
+a(4, 11) = 6341 (54.36)
+a(4, 12) = 17221 (182.10)
+a(4, 13) = 43994 (678.54)
+a(4, 14) = 106205 (2172.64)
+a(4, 15) = 239367 (6276.87)
+
