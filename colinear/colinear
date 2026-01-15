@@ -9,62 +9,113 @@ For a polyomino S, let c(S) be the greatest number of points (at the centre
 of the unit squares comprising the shape) that lie on any single line.
 Find a(n, k), the number of k-ominoes S with c(S) <= n.
 
+My initial estimate of max(a(5,k)) is in the range 10^9 to 10^11, so we
+will write found k-ominoes to a file in a format that lets us use unix
+utilities 'sort' and 'uniq' to find the duplicates.
+
+A significant optimization is to associate a bitmap of disallowed points
+with each shape, inherited by any child shapes generated from that parent.
+We mark any point found to exceed our colinearity limit as disallowed, but
+when we extend a shape by adding one of its neighbours we will also mark
+the added point as disallowed in the parent, so that further child shapes
+derived from it won't attempt to add that same neighbour. This ensures that
+if from shape S we find two new shapes S+A and S+B, we will later attempt
+to extend the first as S+A+B, but will not also attempt to extend the
+second as S+B+A.
+
+This approach is valid only if we handle parent shapes in the same order
+they were generated; as such, we include an index in the entries we write,
+and after sorting on the canonicalized shape for deduplication (using
+a stable sort so that the earliest copy generated is the one retained),
+we then sort the deduplicated results again on the index value.
+
+We must also traverse the neighbours in a consistent order, so even
+though we use the canonicalized orientation for deduplication we must
+retain (or recover) the original orientation for further processing.
+
 =cut
 
 my $n = $ARGV[0] || 2;
-my $last = Shapes->new_empty;
-my $dup;
-for (my $k = 1; $last->size; ++$k) {
-    my $cur = Shapes->new;
-    $dup = 0;
-    for my $src ($last->all) {
-# warn "try to extend shape (@{[ $src->count ]}): @{[ $src->disp ]}\n";
-        $src->expand;
+for (my $k = 1; 1; ++$k) {
+    my $fi = input_file($k);
+    my $fo = output_file($k);
+    my($ci, $co) = (0, 0);
+    # For each unique shape of size one smaller ...
+    while (my $src = fetch($fi)) {
+        ++$ci;
+        # Find neighbours of this shape that satisfy colinearity constraint;
+        # mark each failing neighbour as always disallowed, for this shape
+        # and any children.
         my @good = map {
             $src->colinear(@$_) <= $n
                 ? ($_)
                 : do { $src->disallow(@$_); () }
         } $src->neighbours;
-        for (@good) {
-            my $next = $src->add_new(@$_);
-            $src->disallow(@$_);
-            $cur->add($next);
+        # For each of the good neighbours, create the new shape, and mark
+        # the new point disallowed for future children of the source -
+        # this avoids adding points (B, A) when we already add (A, B).
+        for my $point (@good) {
+            my $next = $src->add_new(@$point);
+            $src->disallow(@$point);
+            # We check duplicates on read, not on write.
+            write_new($fo, $next, $point, $co);
+            ++$co;
         }
     }
-    printf "a(%s, %s) = %s [%s dup] (%.2f)\n",
-            $n, $k, $cur->size, $dup, (times)[0];
-    $last = $cur;
+    close($fo);
+    close($fi) unless ref($fi) eq 'ARRAY';
+    # Number read of size k-1 is deduplicated count; number written of
+    # size k is with duplicates.
+    printf "a(%s, %s) = %s, wrote %s new (%.2f)\n",
+            $n, $k - 1, $ci, $co, (times)[0];
+    print("a($n, $k) = 0\n"), last if $co == 0;
 }
 exit 0;
 
-package Shapes {
-    sub new {
-        my($class) = @_;
-        return bless {}, $class;
+sub input_file {
+    my($k) = @_;
+    # handle input of size 0 specially
+    return [0] if $k == 1;
+    my $f = sprintf 'log/r%d.%d', $n, $k - 1;
+    my $fs = "${f}s";
+    die "$f: no file found" unless -e $f;
+    # The data has 3 fields: index, data, canonical.
+    # We sort first on the canonical so that we can uniq on it, with
+    # sort stability so that the occurrence with earliest index is kept;
+    # then re-sort (numerically) by index.
+    system(sprintf
+        'sort --stable --key=3,3 <%s'
+            . ' | uniq --skip-fields=2'
+            . ' | sort --key=1n >%s',
+        $f, $fs
+    );
+    open my $fh, '<', $fs or die "$fs: $!";
+    return $fh;
+}
+
+sub output_file {
+    my($k) = @_;
+    my $f = sprintf 'log/r%d.%d', $n, $k;
+    open my $fh, '>', $f or die "$f: $!";
+    return $fh;
+}
+
+sub write_new {
+    my($fh, $s, $point, $index) = @_;
+    print $fh $s->writable($point, $index);
+    return;
+}
+
+sub fetch {
+    my($fh) = @_;
+    if (ref($fh) eq 'ARRAY') {
+        return undef if $fh->[0]++;
+        return Shape->new_empty;
     }
-    sub new_empty {
-        my($class) = @_;
-        my $self = $class->new;
-        $self->add(Shape->new_empty);
-        return $self;
-    }
-    sub size {
-        my($self) = @_;
-        return scalar keys %$self;
-    }
-    sub add {
-        my($self, $shape) = @_;
-        my $sig = $shape->canonical;
-        ++$dup, return if $self->{$sig};
-#warn "add new $sig\n";
-        $self->{$sig} //= $shape;
-        return;
-    }
-    sub all {
-        my($self) = @_;
-        return values %$self;
-    }
-};
+    my $off = tell($fh);
+    my $line = <$fh> // return undef;
+    return Shape->parse($line, $off);
+}
 
 package Shape {
     sub new {
@@ -82,9 +133,59 @@ package Shape {
             disallowed => [],
             neighbour => [('') x 2],
             count => 0,
+            off => 0,
         });
         # set a seed neighbour
         $self->setv($self->neighbour, 1, 1);
+        return $self;
+    }
+    sub parse {
+        my($class, $line, $off) = @_;
+        chomp $line;
+        my($index, $other, $canonical) = split ' ', $line, 3;
+        # source data used only on recovery for alignment
+        my($orig, $disallowed, $src) = split ';', $other, 3;
+        die "parse error" unless $orig =~ s{^(\d+):(\d+):}{};
+        my($xspan, $yspan) = ($1, $2);
+        my @pt_rows = split m{/}, $orig;
+        my @dis_rows = split m{/}, $disallowed;
+        # build pre-expanded
+        my $self = $class->new({
+            xmin => 2,
+            xmax => $xspan + 1,
+            ymin => 2,
+            ymax => $yspan + 1,
+            count => 0,
+            point => [],
+            disallowed => [],
+            neighbour => [],
+            off => $off,
+        });
+        my($pt, $dis, $nb) = @$self{qw{ point disallowed neighbour }};
+        for my $i (0 .. $#pt_rows) {
+            my $row = $pt_rows[$i];
+            for my $j (0 .. length($row)) {
+                next unless substr($row, $j, 1) eq '*';
+                my($x, $y) = ($i + 2, $j + 2);
+                $self->setv($pt, $x, $y);
+                $self->unsetv($nb, $x, $y);
+                for ([-1, 0], [1, 0], [0, -1], [0, 1]) {
+                    my($xn, $yn) = ($x + $_->[0], $y + $_->[1]);
+                    $self->setv($nb, $xn, $yn)
+                            unless $self->hasv($pt, $xn, $yn);
+                }
+                ++$self->{count};
+            }
+        }
+        for my $i (0 .. $#dis_rows) {
+            my $row = $dis_rows[$i];
+            for my $j (0 .. length($row)) {
+                next unless substr($row, $j, 1) eq '*';
+                my($x, $y) = ($i + 1, $j + 1);
+                $self->setv($dis, $x, $y);
+                $self->unsetv($nb, $x, $y);
+            }
+        }
         return $self;
     }
     sub count { shift->{count} }
@@ -109,6 +210,14 @@ package Shape {
         $self->setv($self->disallowed, $x, $y);
         return;
     }
+    sub writable {
+        my($self, $point, $index) = @_;
+        my $raw = $self->disp;
+        my $dis = $self->rdd;
+        my $canon = $self->canonical;
+        return sprintf "%s %s %s\n",
+                $index, join(';', $raw, $dis, $self->{off}, @$point), $canon;
+    }
     sub canonical {
         my($self) = @_;
         return '' if $self->count == 0;
@@ -118,22 +227,17 @@ package Shape {
         my $pt = $self->point;
         if ($xspan <= $yspan) {
             $s = $self->disp($pt);
-#warn "test canonical $s\n";
             my $tx = $self->invx($pt, $xmin, $xmax);
 
             $t = $self->disp($tx);
-#warn ".. tx $t\n";
             $s = $t if $s gt $t;
 
             my $tr = $self->revx($pt, $ymin, $ymax);
             $t = $self->disp($tr);
-#warn ".. tr $t\n";
             $s = $t if $s gt $t;
 
             my $trx = $self->invx($tr, $xmin, $xmax);
-#warn "t3 (@{[ join q{/}, map unpack(q{b*}, $_), @$trx ]})\n";
             $t = $self->disp($trx);
-#warn ".. trx $t\n";
             $s = $t if $s gt $t;
         }
 
@@ -141,22 +245,18 @@ package Shape {
             local @$self{qw{ xmin xmax ymin ymax }} = ($ymin, $ymax, $xmin, $xmax);
             my $ty = $self->trans($pt, $xmin, $xmax, $ymin, $ymax);
             $t = $self->disp($ty);
-#warn ".. ty $t\n";
             $s = $t if !defined($s) || $s gt $t;
 
             my $tyx = $self->invx($ty, $ymin, $ymax);
             $t = $self->disp($tyx);
-#warn ".. tyx $t\n";
             $s = $t if $s gt $t;
 
             my $tyr = $self->revx($ty, $xmin, $xmax);
             $t = $self->disp($tyr);
-#warn ".. tyr $t\n";
             $s = $t if $s gt $t;
 
             my $tyrx = $self->invx($tyr, $ymin, $ymax);
             $t = $self->disp($tyrx);
-#warn ".. tyrx $t\n";
             $s = $t if $s gt $t;
         }
         return $s;
@@ -164,7 +264,6 @@ package Shape {
     sub add_new {
         my($self, $x, $y) = @_;
         $self = $self->clone;
-# warn "adding [$x-$self->{xmin}, $y-$self->{ymin}] to ($self->{count}): @{[ $self->disp ]}\n";
         if ($self->{count} == 0) {
             @$self{qw{ xmin xmax ymin ymax }} = ($x, $x, $y, $y);
         } else {
@@ -174,7 +273,6 @@ package Shape {
             $self->{ymax} = $y if $self->{ymax} < $y;
         }
         $self->setv($self->point, $x, $y);
-# warn ".. getting @{[ $self->disp ]}\n";
         my $disallowed = $self->disallowed;
         $self->setv($disallowed, $x, $y);
         my $nb = $self->neighbour;
@@ -219,15 +317,53 @@ package Shape {
 # $x -= $self->{xmin}; $y -= $self->{ymin}; warn "col $high for [$x,$y] in @{[ $self->disp ]}\n";
         return $high + 1;
     }
-    sub disp {
-        my($self, $data) = @_;
-        $data //= $self->{point};
+    sub Dump {
+        my($self) = @_;
+        my @r = @$self{qw{ xmin xmax ymin ymax }};
+        my @s = ($self->rdp, $self->rdd, $self->rdn);
+        return sprintf <<EOS, $self->{count}, @r, @s;
+count %s; xmin %s; xmax %s; ymin %s; ymax %s
+pt: %s
+ds: %s
+nb: %s
+EOS
+    }
+    sub rdisp {
+        my($self, $data, $xmin, $xmax, $ymin, $ymax) = @_;
         return join '/', map {
             my $x = $_;
             join '', map {
                 $self->hasv($data, $x, $_) ? '*' : '.'
-            } $self->{ymin} .. $self->{ymax};
-        } $self->{xmin} .. $self->{xmax};
+            } $ymin .. $ymax;
+        } $xmin .. $xmax;
+    }
+    sub rdp {
+        my($self) = @_;
+        return $self->rdisp($self->point, @$self{qw{ xmin xmax ymin ymax }});
+    }
+    sub rdd {
+        my($self) = @_;
+        return $self->rdisp($self->disallowed,
+            $self->{xmin} - 1, $self->{xmax} + 1,
+            $self->{ymin} - 1, $self->{ymax} + 1
+        );
+    }
+    sub rdn {
+        my($self) = @_;
+        return $self->rdisp($self->neighbour,
+            $self->{xmin} - 1, $self->{xmax} + 1,
+            $self->{ymin} - 1, $self->{ymax} + 1
+        );
+    }
+    sub disp {
+        my($self, $data) = @_;
+        $data //= $self->{point};
+        my($xmin, $xmax, $ymin, $ymax) = @$self{qw{ xmin xmax ymin ymax }};
+        my $xspan = $xmax - $xmin + 1;
+        my $yspan = $ymax - $ymin + 1;
+        return sprintf '%d:%d:%s',
+                $xmax - $xmin + 1, $ymax - $ymin + 1,
+                $self->rdisp($data, $xmin, $xmax, $ymin, $ymax);
     }
     sub hasv {
         my($self, $v, $x, $y) = @_;
@@ -281,7 +417,7 @@ package Shape {
         my $w = [ ('') x ($ymax + 1) ];
         for my $i ($xmin .. $xmax) {
             for my $j ($ymin .. $ymax) {
-                vec($w->[$j], $i, 1) = vec($v->[$i], $j, 1);
+                vec($w->[$j], $i, 1) = vec($v->[$i] //= '', $j, 1);
             }
         }
         return $w;
