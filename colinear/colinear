@@ -2,6 +2,7 @@
 use warnings;
 use strict;
 use Math::BigRat;
+use Fcntl qw{ SEEK_SET };
 
 =head1 Colinear
 
@@ -35,11 +36,20 @@ retain (or recover) the original orientation for further processing.
 
 =cut
 
+my $recover = 0;
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    $recover = 1, next if $arg eq '-r';
+    die "unknown option '$arg'";
+}
 my $n = $ARGV[0] || 2;
-for (my $k = 1; 1; ++$k) {
-    my $fi = input_file($k);
-    my $fo = output_file($k);
-    my($ci, $co) = (0, 0);
+my $t0 = (times)[0];
+my $recover_struct;
+my $k = $recover ? recover() : 1;
+while (1) {
+    my($fi, $ci, $co) = input_file($k, $recover);
+    my $fo = output_file($k, $recover);
     # For each unique shape of size one smaller ...
     while (my $src = fetch($fi)) {
         ++$ci;
@@ -62,41 +72,160 @@ for (my $k = 1; 1; ++$k) {
             ++$co;
         }
     }
+    print $fo Shape->end_writable($co);
     close($fo);
     close($fi) unless ref($fi) eq 'ARRAY';
     # Number read of size k-1 is deduplicated count; number written of
     # size k is with duplicates.
     printf "a(%s, %s) = %s, wrote %s new (%.2f)\n",
-            $n, $k - 1, $ci, $co, (times)[0];
+            $n, $k - 1, $ci, $co, (times)[0] - $t0;
     print("a($n, $k) = 0\n"), last if $co == 0;
+    ++$k;
 }
 exit 0;
 
-sub input_file {
+sub logpath {
+    my($i) = @_;
+    return sprintf 'log/r%d.%d', $n, $i;
+}
+
+# Check the log files in ordered pairs, unsorted and sorted.
+# For any non-empty unsorted file not ending with a valid terminator,
+# determine the restart point from the last complete line and continue
+# from there.
+# For any non-empty sorted file not ending with a valid terminator,
+# remove the file and redo the sort.
+# Else continue from the point of the first missing file.
+sub recover {
+    my $i = 1;
+    while (1) {
+        return $i if recover_u($i);
+        if (recover_s($i)) {
+            make_sorted($i);
+            return $i + 1;
+        }
+        ++$i;
+    }
+}
+
+sub last_line {
+    my($path, $trunc) = @_;
+    return undef unless -e $path;
+    open my $fi, '<', $path or die "$path: $!";
+    my $size = (stat($fi))[7];
+    my($term_off, $line_off);
+    goto LAST_LINE_FAIL if $size == 0;
+    my $buf = '';
+    my $off = $size;
+    my $block_size = 4096;
+    while (!defined $line_off) {
+        my($rsize, $off) = ($off < $block_size)
+            ? ($off, 0)
+            : ($block_size, $off - $block_size);
+        seek($fi, $off, SEEK_SET) or die "seek $fi $off: $!";
+        my $r;
+        my $got = read($fi, $r, $rsize);
+        die "read $rsize from $off in $path got $got: $!"
+                if $got < $rsize;
+        unless ($term_off) {
+            if (substr($r, -1, 1) eq "\n") {
+                $term_off = $off + $rsize;
+            } elsif ($r =~ /.*(\n)/s) {
+                $term_off = $off + $+[1];
+            }
+        }
+        $buf = "$r$buf";
+        $line_off = $off + $+[1] if $term_off
+                && substr($buf, 0, $term_off - $off - 1) =~ /.*(\n)/s;
+        $line_off //= 0 if $off == 0;
+    }
+  LAST_LINE_FAIL:
+    close $fi;
+    if (!defined $term_off) {
+        # no valid data found
+        unlink($path);
+        return undef;
+    }
+    if ($term_off < $size) {
+        truncate($path, $term_off) or die "truncate $path to $term_off: $!";
+    }
+    return (defined $term_off)
+        ? substr($buf, $line_off - $off, $term_off - $line_off)
+        : undef;
+}
+
+sub recover_u {
+    my($i) = @_;
+    my $ip = logpath($i);
+    my $last = last_line($ip, 1) // return 1;
+    if ($last =~ /^(\d+) ([\d.]+) end$/) {
+        my($count, $time) = ($1, $2);
+        printf "${i}_u $count\n";
+        # if an unsorted file was complete with index 0, we're all done
+        warn("nothing to do\n"), exit 0 unless $count;
+        $t0 = (times)[0] - $time;
+        return 0;               # this part was complete
+    }
+    $recover_struct = Shape->parse_recover($last, $i);
+    return 1;
+}
+
+sub recover_s {
+    my($i) = @_;
+    my $ip = logpath($i) . 's';
+    my $last = last_line($ip, 0) // return 1;
+    if ($last =~ /^0 ([\d.]+) end$/) {
+        my $time = $1;
+        printf "${i}_s complete\n";
+        $t0 = (times)[0] - $time;
+        return 0;
+    }
+    unlink($ip);
+    return 1;
+}
+
+sub make_sorted {
     my($k) = @_;
-    # handle input of size 0 specially
-    return [0] if $k == 1;
-    my $f = sprintf 'log/r%d.%d', $n, $k - 1;
+    unlink logpath($k);
+    my $f = logpath($k - 1);
     my $fs = "${f}s";
     die "$f: no file found" unless -e $f;
     # The data has 3 fields: index, data, canonical.
     # We sort first on the canonical so that we can uniq on it, with
     # sort stability so that the occurrence with earliest index is kept;
     # then re-sort (numerically) by index.
+    my $pre_time = (times)[2];
     system(sprintf
         'sort --stable --key=3,3 <%s'
             . ' | uniq --skip-fields=2'
             . ' | sort --key=1n >%s',
         $f, $fs
     );
-    open my $fh, '<', $fs or die "$fs: $!";
-    return $fh;
+    $t0 -= (times)[2] - $pre_time;
+    open my $fo, '>>', $fs or die "$fs: $!";
+    print $fo Shape->end_writable(0);
+    close $fo;
+}
+
+sub input_file {
+    my($k) = @_;
+    # handle input of size 0 specially
+    return +([0], 0, 0) if $k == 1;
+    if ($recover_struct) {
+        my($fi, $ci, $co, $time) = delete @$recover_struct{qw{ fi ci co time }};
+        $t0 = (times)[0] - $time;
+        return +($fi, $ci, $co);
+    }
+    make_sorted($k);
+    my $fs = logpath($k - 1) . 's';
+    open my $fi, '<', $fs or die "$fs: $!";
+    return +($fi, 0, 0);
 }
 
 sub output_file {
     my($k) = @_;
-    my $f = sprintf 'log/r%d.%d', $n, $k;
-    open my $fh, '>', $f or die "$f: $!";
+    my $f = logpath($k);
+    open my $fh, '>>', $f or die "$f: $!";
     return $fh;
 }
 
@@ -112,12 +241,19 @@ sub fetch {
         return undef if $fh->[0]++;
         return Shape->new_empty;
     }
+    if ($recover_struct) {
+        my $shape = $recover_struct->{shape};
+        $recover_struct = undef;
+        return $shape;
+    }
     my $off = tell($fh);
-    my $line = <$fh> // return undef;
+    my $line = <$fh> // die "Reached end without terminator";
+    return undef if $line =~ /end$/;
     return Shape->parse($line, $off);
 }
 
 package Shape {
+    use Fcntl qw{ SEEK_SET };
     sub new {
         my($class, $data) = @_;
         return bless $data, $class;
@@ -138,6 +274,37 @@ package Shape {
         # set a seed neighbour
         $self->setv($self->neighbour, 1, 1);
         return $self;
+    }
+    sub parse_recover {
+        my($class, $line, $i) = @_;
+        chomp $line;
+        my($index, $other, $canonical) = split ' ', $line, 3;
+        my($orig, $disallowed, $off, $nbx, $nby, $time) = split ';', $other;
+warn "recover $line\n";
+        my $pi = ::logpath($i - 1) . 's';
+        open my $fi, '<', $pi or die "$pi: $!";
+        seek($fi, $off, SEEK_SET) or die "seek $pi $off: $!";
+        my $parent_line = <$fi> // die "read $pi $off: $!";
+        $parent_line =~ /^(\d+) / or die "read $pi $off: no leading index";
+        my $ci = $1 + 1;
+        my $parent = $class->parse($parent_line, $off);
+warn "recover parent @{[ $parent->disp ]}\n";
+        my($pnb, $pdis) = ($parent->neighbour, $parent->disallowed);
+        for ($parent->allv($pnb)) {
+            my($x, $y) = @$_;
+            last if $x > $nbx || ($x == $nbx && $y > $nby);
+warn "remove nb $x $y\n";
+            $parent->setv($pdis, $x, $y);
+            $parent->unsetv($pnb, $x, $y);
+        }
+warn "keep nb [@{[ join q{ }, map qq{$_->[0].$_->[1]}, $parent->allv($pnb) ]}]\n";
+        return {
+            fi => $fi,
+            shape => $parent,
+            time => $time,
+            ci => $ci,
+            co => $index + 1,
+        };
     }
     sub parse {
         my($class, $line, $off) = @_;
@@ -215,8 +382,14 @@ package Shape {
         my $raw = $self->disp;
         my $dis = $self->rdd;
         my $canon = $self->canonical;
-        return sprintf "%s %s %s\n",
-                $index, join(';', $raw, $dis, $self->{off}, @$point), $canon;
+        my $other = join ';', $raw, $dis, $self->{off}, @$point,
+                sprintf('%.2f', (times)[0] - $t0);
+        return sprintf "%s %s %s\n", $index, $other, $canon;
+    }
+    sub end_writable {
+        my($class, $index) = @_;
+        my $other = sprintf('%.2f', (times)[0] - $t0);
+        return sprintf "%s %s %s\n", $index, $other, 'end';
     }
     sub canonical {
         my($self) = @_;
