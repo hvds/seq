@@ -30,35 +30,22 @@ sub new_empty {
 sub parse_recover {
     my($class, $line, $i, $fetcher) = @_;
     chomp $line;
-    my($index, $other, $canonical) = split ' ', $line, 3;
-    my($orig, $disallowed, $off, $nbx, $nby, $time) = split ';', $other;
+    my($off, $time) = $line =~ m{^A (\d+) ([\d.]+)$}
+            or die "parse error '$line'";
 warn "recover $line\n";
     my $struct = {};
     my $parent_line = $fetcher->($i, $off, $struct);
-    $parent_line =~ /^(\d+) / or die "parent line: no leading index";
-    my $ci = $1 + 1;
     my $parent = $class->parse($parent_line, $off);
 warn "recover parent @{[ $parent->disp ]}\n";
-    my($pnb, $pdis) = ($parent->neighbour, $parent->disallowed);
-    for ($parent->allv($pnb)) {
-        my($x, $y) = @$_;
-        last if $x > $nbx || ($x == $nbx && $y > $nby);
-warn "remove nb $x $y\n";
-        $parent->setv($pdis, $x, $y);
-        $parent->unsetv($pnb, $x, $y);
-    }
-warn "keep nb [@{[ join q{ }, map qq{$_->[0].$_->[1]}, $parent->allv($pnb) ]}]\n";
-    @$struct{qw{ shape time ci co }} = ($parent, $time, $ci, $index + 1);
+    @$struct{qw{ shape time }} = ($parent, $time);
     return $struct;
 }
 
 sub parse {
     my($class, $line, $off) = @_;
     chomp $line;
-    my($index, $other, $canonical) = split ' ', $line, 3;
-    # source data used only on recovery for alignment
-    my($orig, $disallowed, $src) = split ';', $other, 3;
-    die "parse error" unless $orig =~ s{^(\d+):(\d+):}{};
+    my($orig, $disallowed) = split ';', $line, 2;
+    die "parse error ($line)" unless $orig =~ s{^(\d+):(\d+):}{};
     my($xspan, $yspan) = ($1, $2);
     my @pt_rows = split m{/}, $orig;
     my @dis_rows = split m{/}, $disallowed;
@@ -132,19 +119,18 @@ sub disallow {
 }
 
 sub writable {
-    my($self, $point, $index, $t0) = @_;
-    my $raw = $self->disp;
-    my $dis = $self->rdd;
-    my $canon = $self->canonical;
-    my $other = join ';', $raw, $dis, $self->{off}, @$point,
-            sprintf('%.2f', (times)[0] - $t0);
-    return sprintf "%s %s %s\n", $index, $other, $canon;
+    my($self) = @_;
+    return sprintf "%s;%s\n", $self->disp, $self->rdd;
+}
+
+sub aligner {
+    my($self, $t0) = @_;
+    return sprintf "A %s %s\n", $self->{off}, sprintf '%.2f', (times)[0] - $t0;
 }
 
 sub end_writable {
-    my($class, $index, $t0) = @_;
-    my $other = sprintf('%.2f', (times)[0] - $t0);
-    return sprintf "%s %s %s\n", $index, $other, 'end';
+    my($class, $t0) = @_;
+    return sprintf "E %s\n", sprintf '%.2f', (times)[0] - $t0;
 }
 
 sub canonical {

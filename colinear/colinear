@@ -3,6 +3,7 @@ use warnings;
 use strict;
 use Math::BigRat;
 use Fcntl qw{ SEEK_SET };
+use Time::HiRes qw{ time };
 use lib 'lib';
 use Shape;
 
@@ -10,6 +11,8 @@ my $recover = 0;
 while (@ARGV && $ARGV[0] =~ /^-/) {
     my $arg = shift @ARGV;
     last if $arg eq '--';
+    goto do_expand if $arg eq '-b';     # pipeline prefix
+    goto do_reduce if $arg eq '-a';     # pipeline postfix
     $recover = 1, next if $arg eq '-r';
     die "unknown option '$arg'";
 }
@@ -45,17 +48,42 @@ We must also traverse the neighbours in a consistent order, so even
 though we use the canonicalized orientation for deduplication we must
 retain (or recover) the original orientation for further processing.
 
+=item packing
+
+We want to pack the data as compactly as possible. To that end, we'd
+like to:
+- write only shape data, with occasional alignment records;
+- prefix the sort pipeline with a process that adds index and canonical,
+  and strips out alignment records;
+- postfix the sort pipeline to strip out the index and canonical again,
+  and add a termination record with count and time.
+
+sort(1) allows us to specify a field separator, but uniq(1) does not.
+However both support '--zero-terminated' to set the record separator.
+
+For unaligned shape data, I think we need only size, point and disallowed.
+That's a three-valued matrix, which we can encode base-3 as 5 locations per
+byte. The prefix will need to modify the encoding to avoid 0x20 and either
+0x00 or 0x0a, and the postfix can reverse that.
+
 =cut
 
 my $t0 = (times)[0];
+my $align_time = 60;    # they are actually quite cheap, could do more
 my $recover_struct;
 my $k = $recover ? recover() : 1;
 while (1) {
-    my($fi, $ci, $co) = input_file($k, $recover);
+    my($ci, $co) = (0, 0);
+    my $fi = input_file($k, $recover);
     my $fo = output_file($k, $recover);
+    my $align_next = (times)[0] + $align_time;
     # For each unique shape of size one smaller ...
     while (my $src = fetch($fi)) {
         ++$ci;
+        if ((times)[0] > $align_next) {
+            print $fo $src->aligner($t0);
+            $align_next = (times)[0] + $align_time;
+        }
         # Find neighbours of this shape that satisfy colinearity constraint;
         # mark each failing neighbour as always disallowed, for this shape
         # and any children.
@@ -70,22 +98,54 @@ while (1) {
         for my $point (@good) {
             my $next = $src->add_new(@$point);
             $src->disallow(@$point);
-            # We check duplicates on read, not on write.
-            write_new($fo, $next, $point, $co);
+            print $fo $next->writable;
             ++$co;
         }
     }
-    print $fo Shape->end_writable($co, $t0);
+    print $fo Shape->end_writable($t0);
     close($fo);
     close($fi) unless ref($fi) eq 'ARRAY';
     # Number read of size k-1 is deduplicated count; number written of
     # size k is with duplicates.
-    printf "a(%s, %s) = %s, wrote %s new (%.2f)\n",
-            $n, $k - 1, $ci, $co, (times)[0] - $t0;
-    print("a($n, $k) = 0\n"), last if $co == 0;
+    printf "a(%s, %s) read %s, wrote %s (%.2f)\n",
+            $n, $k, $ci, $co, (times)[0] - $t0;
+    last unless $co;
     ++$k;
 }
 exit 0;
+
+do_expand:
+{
+    my $index = 0;
+    while (<STDIN>) {
+        next if /^A/;
+        if (/^E/) {
+            print "$index $_";
+            exit 0;
+        }
+        chomp;
+        my $s = Shape->parse($_);
+        printf "%s %s %s\n", $index++, $_, $s->canonical;
+    }
+    die "No terminator seen in expand\n";
+}
+
+do_reduce:
+{
+    my $pre_time = $ARGV[0];
+    my $index = 0;
+    while (<STDIN>) {
+        my @f = split ' ';
+        if ($f[1] eq 'E') {
+            my $time = time() - $pre_time + $f[2];
+            printf "E %s %.2f\n", $index, time() - $pre_time + $f[2];
+            exit 0;
+        }
+        print "$f[1]\n";
+        ++$index;
+    }
+    die "No terminator seen in reduce\n";
+}
 
 sub logpath {
     my($i) = @_;
@@ -112,7 +172,7 @@ sub recover {
 }
 
 sub last_line {
-    my($path, $trunc) = @_;
+    my($path, $align) = @_;
     return undef unless -e $path;
     open my $fi, '<', $path or die "$path: $!";
     my $size = (stat($fi))[7];
@@ -121,8 +181,9 @@ sub last_line {
     my $buf = '';
     my $off = $size;
     my $block_size = 4096;
+    my $rsize;
     while (!defined $line_off) {
-        my($rsize, $off) = ($off < $block_size)
+        ($rsize, $off) = ($off < $block_size)
             ? ($off, 0)
             : ($block_size, $off - $block_size);
         seek($fi, $off, SEEK_SET) or die "seek $fi $off: $!";
@@ -138,9 +199,20 @@ sub last_line {
             }
         }
         $buf = "$r$buf";
-        $line_off = $off + $+[1] if $term_off
-                && substr($buf, 0, $term_off - $off - 1) =~ /.*(\n)/s;
-        $line_off //= 0 if $off == 0;
+        if ($term_off && $align) {
+            while ($buf =~ /.*(\n)(.)/s) {
+                if ($2 eq 'A' || $2 eq 'E') {
+                    $line_off = $off + $+[1];
+                    last;
+                } else {
+                    $term_off = $off + $+[1];
+                    $buf = substr($buf, 0, $term_off - $off);
+                }
+            }
+        } else {
+            $line_off = $off + $+[1] if $term_off && $buf =~ /.*(\n)./s;
+        }
+        $line_off = 0 if !defined($line_off) && $off == 0;
     }
   LAST_LINE_FAIL:
     close $fi;
@@ -149,26 +221,31 @@ sub last_line {
         unlink($path);
         return undef;
     }
-    if ($term_off < $size) {
+    if ($align && $term_off < $size) {
         truncate($path, $term_off) or die "truncate $path to $term_off: $!";
     }
     return (defined $term_off)
-        ? substr($buf, $line_off - $off, $term_off - $line_off)
+        ? +(substr($buf, $line_off - $off, $term_off - $line_off), $line_off)
         : undef;
 }
 
 sub recover_u {
     my($i) = @_;
     my $ip = logpath($i);
-    my $last = last_line($ip, 1) // return 1;
-    if ($last =~ /^(\d+) ([\d.]+) end$/) {
-        my($count, $time) = ($1, $2);
-        printf "${i}_u $count\n";
+    print "checking $ip\n";
+    my($last, $off) = last_line($ip, 1);
+    print("  no line found, continuing from here\n"),
+            return 1 unless defined $last;
+    if ($last =~ /^E ([\d.]+)$/) {
+        my $time = $1;
+        print "  completed at $time\n";
         # if an unsorted file was complete with index 0, we're all done
-        warn("nothing to do\n"), exit 0 unless $count;
+        print("nothing to do\n"), exit 0 if $off == 0;
         $t0 = (times)[0] - $time;
         return 0;               # this part was complete
     }
+    chomp $last;
+    print "  aligner found, continuing from $last\n";
     $recover_struct = Shape->parse_recover($last, $i, \&fetch_parent);
     return 1;
 }
@@ -176,53 +253,56 @@ sub recover_u {
 sub recover_s {
     my($i) = @_;
     my $ip = logpath($i) . 's';
-    my $last = last_line($ip, 0) // return 1;
-    if ($last =~ /^0 ([\d.]+) end$/) {
-        my $time = $1;
-        printf "${i}_s complete\n";
+    print "checking $ip\n";
+    my($last) = last_line($ip, 0);
+    if (defined($last) && $last =~ /^E (\d+) ([\d.]+)$/) {
+        my($count, $time) = ($1, $2);
+        print "  completed at $time with $count records\n";
         $t0 = (times)[0] - $time;
         return 0;
     }
+    print("  no terminator found, continuing from here\n"),
+            return 1 unless defined $last;
     unlink($ip);
     return 1;
 }
 
 sub make_sorted {
     my($k) = @_;
-    unlink logpath($k);
-    my $f = logpath($k - 1);
+    unlink logpath($k + 1);
+    my $f = logpath($k);
     my $fs = "${f}s";
     die "$f: no file found" unless -e $f;
     # The data has 3 fields: index, data, canonical.
     # We sort first on the canonical so that we can uniq on it, with
     # sort stability so that the occurrence with earliest index is kept;
     # then re-sort (numerically) by index.
-    my $pre_time = (times)[2];
+    my $pre_time = time();
     system(sprintf
-        'sort --stable --key=3,3 <%s'
+        './colinear -b <%s'
+            . ' | sort --stable --key=3,3'
             . ' | uniq --skip-fields=2'
-            . ' | sort --key=1n >%s',
-        $f, $fs
+            . ' | sort --key=1n'
+            . ' | ./colinear -a %.2f >%s',
+        $f, $pre_time, $fs
     );
-    $t0 -= (times)[2] - $pre_time;
-    open my $fo, '>>', $fs or die "$fs: $!";
-    print $fo Shape->end_writable(0, $t0);
-    close $fo;
+    $t0 -= time() - $pre_time;
+    return;
 }
 
 sub input_file {
     my($k) = @_;
     # handle input of size 0 specially
-    return +([0], 0, 0) if $k == 1;
+    return [0] if $k == 1;
     if ($recover_struct) {
-        my($fi, $ci, $co, $time) = delete @$recover_struct{qw{ fi ci co time }};
+        my($fi, $time) = delete @$recover_struct{qw{ fi time }};
         $t0 = (times)[0] - $time;
-        return +($fi, $ci, $co);
+        return $fi;
     }
-    make_sorted($k);
+    make_sorted($k - 1);
     my $fs = logpath($k - 1) . 's';
     open my $fi, '<', $fs or die "$fs: $!";
-    return +($fi, 0, 0);
+    return $fi;
 }
 
 sub output_file {
@@ -230,12 +310,6 @@ sub output_file {
     my $f = logpath($k);
     open my $fh, '>>', $f or die "$f: $!";
     return $fh;
-}
-
-sub write_new {
-    my($fh, $s, $point, $index) = @_;
-    print $fh $s->writable($point, $index, $t0);
-    return;
 }
 
 sub fetch {
@@ -251,7 +325,7 @@ sub fetch {
     }
     my $off = tell($fh);
     my $line = <$fh> // die "Reached end without terminator";
-    return undef if $line =~ /end$/;
+    return undef if $line =~ /^E/;
     return Shape->parse($line, $off);
 }
 
@@ -301,19 +375,21 @@ peak a(3,k) at k= 9 is A105(k)^0.6222
 peak a(4,k) at k=26 is A105(k)^0.5512
 
 % ./colinear 4
-a(4, 1) = 1 (0.06)
-a(4, 2) = 1 (0.06)
-a(4, 3) = 2 (0.06)
-a(4, 4) = 5 (0.07)
-a(4, 5) = 11 (0.08)
-a(4, 6) = 31 (0.12)
-a(4, 7) = 85 (0.28)
-a(4, 8) = 262 (0.86)
-a(4, 9) = 764 (3.14)
-a(4, 10) = 2255 (13.20)
-a(4, 11) = 6341 (54.36)
-a(4, 12) = 17221 (182.10)
-a(4, 13) = 43994 (678.54)
-a(4, 14) = 106205 (2172.64)
-a(4, 15) = 239367 (6276.87)
+a(4, 1) read 1, wrote 1 (0.00)
+a(4, 2) read 1, wrote 4 (0.00)
+a(4, 3) read 1, wrote 6 (0.00)
+a(4, 4) read 2, wrote 14 (0.00)
+a(4, 5) read 5, wrote 32 (0.02)
+a(4, 6) read 11, wrote 67 (0.05)
+a(4, 7) read 31, wrote 175 (0.17)
+a(4, 8) read 85, wrote 442 (0.53)
+a(4, 9) read 262, wrote 1254 (1.92)
+a(4, 10) read 764, wrote 3359 (6.77)
+a(4, 11) read 2255, wrote 9052 (21.23)
+a(4, 12) read 6341, wrote 23412 (57.71)
+a(4, 13) read 17221, wrote 57929 (157.21)
+a(4, 14) read 43994, wrote 135339 (451.99)
+a(4, 15) read 106205, wrote 298597 (1361.41)
+a(4, 16) read 239367, wrote 614277 (3368.89)
+a(4, 17) read 502611, wrote 1178319 (7598.50)
 
