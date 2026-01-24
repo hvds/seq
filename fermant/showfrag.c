@@ -18,7 +18,7 @@
 #include "frag.h"
 #include "calc.h"
 #include "source.h"
-#include "diag.h"
+#include "../inc/diag.h"
 
 /* primary parameters - we are searching for g(na, nb), the expected cost
  * of traversing an (a x b) grid where the cost of each segment varies

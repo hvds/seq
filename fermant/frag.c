@@ -10,7 +10,7 @@
 #include "lincom.h"
 #include "limit.h"
 #include "source.h"
-#include "diag.h"
+#include "../inc/diag.h"
 
 extern inline void reset_frags(void);
 extern inline uint range_size(void);

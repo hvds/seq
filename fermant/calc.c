@@ -6,7 +6,7 @@
 #include "frag.h"
 #include "path.h"
 #include "source.h"
-#include "diag.h"
+#include "../inc/diag.h"
 
 #ifdef DEBUG
 #   define dassert(x) assert(x)

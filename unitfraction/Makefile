@@ -4,8 +4,8 @@ ifeq "${GCC_MAJOR}" "7"
 endif
 CC_OPT = -O6 -fgcse-sm -fgcse-las -fgcse-after-reload -fivopts -ftracer -funroll-loops -fvariable-expansion-in-unroller -freorder-blocks-and-partition -funswitch-loops ${CC_EXTRA_OPT}
 
-C_FILES := unit.c diag.c sieve.c
-H_FILES := unit.h diag.h sieve.h
+C_FILES := unit.c ../inc/diag.c sieve.c
+H_FILES := unit.h ../inc/diag.h sieve.h
 
 dfind_primitive dminset: CC_OPT := -O0
 

@@ -6,7 +6,7 @@
 #include "num.h"
 #include "frag.h"
 #include "source.h"
-#include "diag.h"
+#include "../inc/diag.h"
 
 path_t *paths = NULL;
 uint npaths = 0;

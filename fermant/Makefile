@@ -1,5 +1,5 @@
-CFILES = path.c source.c lincom.c limit.c frag.c calc.c diag.c num.c
-HFILES = int.h path.h source.h lincom.h limit.h frag.h calc.h diag.h num.h
+CFILES = path.c source.c lincom.c limit.c frag.c calc.c ../inc/diag.c num.c
+HFILES = int.h path.h source.h lincom.h limit.h frag.h calc.h ../inc/diag.h num.h
 
 CC_OPT = -O2
 CC_DOPT = -O0 -DDEBUG

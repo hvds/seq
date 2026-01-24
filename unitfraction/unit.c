@@ -1,5 +1,5 @@
 #include "unit.h"
-#include "diag.h"
+#include "../inc/diag.h"
 #include "sieve.h"
 
 #include <stdlib.h>
