@@ -41,7 +41,8 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
     die "unknown option '$arg'";
 }
 
-for (my $n = $start_value; $end_value && $n <= $end_value; ++$n) {
+local $| = 1;
+for (my $n = $start_value; !$end_value || $n <= $end_value; ++$n) {
     report($n);
 }
 exit 0;
