@@ -1,0 +1,174 @@
+#!/opt/maths/bin/perl
+use strict;
+use warnings;
+use Math::Prime::Util qw{ factor_exp gcd lcm };
+use Math::GMP ();
+
+my $start_value = 1;
+my $end_value = 40;     # set to 0 to run forever
+my $base = 10;
+my $skip_boring = 0;    # set to 1 to skip 0 and powers of 10
+my $exponential = 0;    # set to 1 to show 10^6 as "10^6"
+my $allow_zero = 1;     # set to 0 to disallow an answer of 0
+
+=head1 Extend until divisible by n
+
+a(n) is the least non-negative integer such that for all positive
+integers k, appending zero or more copies of a(n) to k will eventually
+result in a value divisible by n.
+
+Command-line options:
+
+  --start-value=<n>: try values of n from this point, default 1;
+  --end-value=<n>: try values of n up to this point (or forever, if
+        set to 0), default 40;
+  --base=<n>: work in this base, default 10;
+  --skip-boring: don't print results that are 0 or a power of the base;
+  --exponential: show powers of the base in exponential form;
+  --disallow-zero: require a(n) > 0.
+
+=cut
+
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $arg = shift @ARGV;
+    last if $arg eq '--';
+    $start_value = $1, next if $arg =~ /^--start-value=(.*)/;
+    $end_value = $1, next if $arg =~ /^--end-value=(.*)/;
+    $base = $1, next if $arg =~ /^--base=(.*)/;
+    $skip_boring = 1, next if $arg eq '--skip-boring';
+    $exponential = 1, next if $arg eq '--exponential';
+    $allow_zero = 0, next if $arg eq '--disallow-zero';
+    die "unknown option '$arg'";
+}
+
+for (my $n = $start_value; $end_value && $n <= $end_value; ++$n) {
+    report($n);
+}
+exit 0;
+
+sub report {
+    my($n) = @_;
+    my $an = extend($n, $base);
+
+    ## optionally skip 0 and powers of 10, show just "interesting" results
+    return if $skip_boring && boring($an, $base);
+
+    ## optionally report powers of 10 in exponential format
+    $an = reduce_exponential($an, $base) if $exponential;
+
+    print "$n: $an\n";
+    return;
+}
+
+sub extend {
+    my($n, $base) = @_;
+
+    # split into primes that divide 10, and the rest
+    my($p10, $rest) = splitter($n, $base);
+
+    # special-case if there is nothing in $rest
+    return 0 if $allow_zero && $rest == 1;
+
+    # find the least x such that 10^x - 1 divides $rest
+    my $length = min_length($rest, $base);
+
+    # our extender must have length a multiple of this, find the first
+    # length that works
+    for (my $multiple = 1; 1; ++$multiple) {
+        my $answer = find_extender($p10, $rest, $base, $length * $multiple);
+        return $answer if $answer;
+    }
+}
+
+#
+# Split n into (x, y) such that n = xy, x is divisible only by primes that
+# divide 10, y is divisible only by primes that do not.
+#
+sub splitter {
+    my($n, $base) = @_;
+    my($x, $y) = (1, $n);
+
+    # Note that we can change the list of factors for "10" in different bases.
+    for my $prime (map $_->[0], factor_exp($base)) {
+        while (($y % $prime) == 0) {
+            $x *= $prime;
+            $y /= $prime;
+        }
+    }
+    return ($x, $y);
+}
+
+#
+# Given n, a product of primes that do not divide 10, find the least k such
+# that 10^k - 1 divides n. This is the LCM of the length for the individual
+# prime powers that multiply to n.
+#
+sub min_length {
+    my($n, $base) = @_;
+    return lcm(map pp_length(@$_, $base), factor_exp($n)) || 1;
+}
+
+#
+# Given p, x, find the least k such that 10^k - 1 divides p^x.
+#
+sub pp_length {
+    my($p, $x, $base) = @_;
+    my $px = $p ** $x;
+
+    # For larger numbers we should do this more efficiently, taking advantage
+    # of the fact that f(p) must divide p-1, and f(p^{x+1}) is either f(p^x)
+    # or p f(p^x). But for small numbers a simple search is fine.
+    my $f = 1;
+    my $mod = $base % $px;
+    while ($mod != 1) {
+        $f += 1;
+        $mod = ($mod * $base) % $px;
+    }
+    return $f;
+}
+
+#
+# Given x, y, L, find the least extender of length L that is valid for x, y.
+# Returns 0 if there is no valid answer of this length.
+#
+sub find_extender {
+    my($x, $y, $base, $L) = @_;
+
+    # Start with the least possible value. We need bigints for this, since
+    # the values quickly become large.
+    my $gbase = Math::GMP->new($base);
+    my $value = $gbase ** ($L - 1);
+    my $limit = $gbase ** $L;
+
+    # Make it a multiple of x
+    my $offset = $value % $x;
+    $value += $x - $offset if $offset > 0;
+
+    # Now iterate over multiples of x until we find a value coprime with y
+    while ($value < $limit) {
+        my $common = gcd($y, $value);
+        return $value if $common == 1;
+        $value += $x;
+    }
+
+    # No valid answer of this length
+    return 0;
+}
+
+# Return true if the input is zero, or a power of the base.
+sub boring {
+    my($an, $base) = @_;
+    return 1 if $an <= 2;
+    $an /= $base while ($an % $base) == 0;
+    return +($an == 1) ? 1 : 0;
+}
+
+# Show powers of the base as b^k
+sub reduce_exponential {
+    my($an, $base) = @_;
+    return $an if $an < $base;
+    my $cur = $an;
+    my $pow = 0;
+    ++$pow, $cur /= $base while ($cur % $base) == 0;
+    return +($cur == 1) ? "$base^$pow" : $an;
+}
