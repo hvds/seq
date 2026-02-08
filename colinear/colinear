@@ -393,3 +393,136 @@ a(4, 15) read 106205, wrote 298597 (1361.41)
 a(4, 16) read 239367, wrote 614277 (3368.89)
 a(4, 17) read 502611, wrote 1178319 (7598.50)
 
+k=1: read 1 unsorted records (0.00s)
+k=1: writing 1 unique records (0.00s)
+k=2: read 4 unsorted records (0.00s)
+k=2: writing 1 unique records (0.00s)
+k=3: read 6 unsorted records (0.00s)
+k=3: writing 2 unique records (0.00s)
+k=4: read 14 unsorted records (0.00s)
+k=4: writing 5 unique records (0.00s)
+k=5: read 32 unsorted records (0.00s)
+k=5: writing 11 unique records (0.00s)
+k=6: read 67 unsorted records (0.00s)
+k=6: writing 31 unique records (0.00s)
+k=7: read 175 unsorted records (0.00s)
+k=7: writing 85 unique records (0.00s)
+k=8: read 442 unsorted records (0.00s)
+k=8: writing 262 unique records (0.00s)
+k=9: read 1254 unsorted records (0.01s)
+k=9: writing 764 unique records (0.01s)
+k=10: read 3359 unsorted records (0.02s)
+k=10: writing 2255 unique records (0.02s)
+k=11: read 9052 unsorted records (0.04s)
+k=11: writing 6341 unique records (0.04s)
+k=12: read 23412 unsorted records (0.09s)
+k=12: writing 17221 unique records (0.10s)
+k=13: read 57933 unsorted records (0.25s)
+k=13: writing 43994 unique records (0.27s)
+k=14: read 135400 unsorted records (0.61s)
+k=14: writing 106205 unique records (0.65s)
+k=15: read 298897 unsorted records (1.46s)
+k=15: writing 239367 unique records (1.56s)
+k=16: read 615424 unsorted records (3.37s)
+k=16: writing 502611 unique records (3.59s)
+k=17: read 1182076 unsorted records (7.23s)
+k=17: writing 977791 unique records (7.70s)
+k=18: read 2121321 unsorted records (14.75s)
+k=18: writing 1771624 unique records (15.67s)
+k=19: read 3560132 unsorted records (28.13s)
+k=19: writing 2989373 unique records (29.74s)
+k=20: read 5559097 unsorted records (50.20s)
+k=20: writing 4687803 unique records (52.96s)
+k=21: read 8064744 unsorted records (84.78s)
+k=21: writing 6819069 unique records (88.94s)
+k=22: read 10899706 unsorted records (134.20s)
+k=22: writing 9234529 unique records (140.23s)
+k=23: read 13707917 unsorted records (200.79s)
+k=23: writing 11622453 unique records (208.51s)
+k=24: read 15957798 unsorted records (283.45s)
+k=24: writing 13527854 unique records (292.76s)
+k=25: read 17226907 unsorted records (378.11s)
+k=25: writing 14571011 unique records (388.37s)
+k=26: read 17371619 unsorted records (478.57s)
+k=26: writing 14643347 unique records (488.93s)
+k=27: read 16371684 unsorted records (579.82s)
+k=27: writing 13747913 unique records (589.59s)
+k=28: read 14397404 unsorted records (673.98s)
+k=28: writing 12041014 unique records (682.56s)
+k=29: read 11908450 unsorted records (756.88s)
+k=29: writing 9905945 unique records (763.85s)
+k=30: read 9413496 unsorted records (824.98s)
+k=30: writing 7763985 unique records (830.42s)
+k=31: read 7133967 unsorted records (878.94s)
+k=31: writing 5805906 unique records (882.95s)
+k=32: read 5167589 unsorted records (919.96s)
+k=32: writing 4139266 unique records (922.77s)
+k=33: read 3625896 unsorted records (949.87s)
+k=33: writing 2858796 unique records (951.76s)
+k=34: read 2527278 unsorted records (970.90s)
+k=34: writing 1971455 unique records (972.19s)
+k=35: read 1760373 unsorted records (985.90s)
+k=35: writing 1368967 unique records (986.76s)
+k=36: read 1204971 unsorted records (996.35s)
+k=36: writing 942226 unique records (996.92s)
+k=37: read 785762 unsorted records (1003.48s)
+k=37: writing 618148 unique records (1003.82s)
+k=38: read 468039 unsorted records (1007.98s)
+k=38: writing 368480 unique records (1008.18s)
+k=39: read 239376 unsorted records (1010.54s)
+k=39: writing 186275 unique records (1010.62s)
+k=40: read 96019 unsorted records (1011.68s)
+k=40: writing 73649 unique records (1011.71s)
+k=41: read 26305 unsorted records (1012.09s)
+k=41: writing 20236 unique records (1012.10s)
+k=42: read 4386 unsorted records (1012.19s)
+k=42: writing 3476 unique records (1012.19s)
+k=43: read 510 unsorted records (1012.21s)
+k=43: writing 400 unique records (1012.21s)
+k=44: read 132 unsorted records (1012.21s)
+k=44: writing 96 unique records (1012.21s)
+k=45: read 46 unsorted records (1012.21s)
+k=45: writing 27 unique records (1012.21s)
+k=46: read 15 unsorted records (1012.21s)
+k=46: writing 12 unique records (1012.21s)
+k=47: read 4 unsorted records (1012.21s)
+k=47: writing 2 unique records (1012.21s)
+k=48: read 1 unsorted records (1012.21s)
+k=48: writing 1 unique records (1012.21s)
+
+index 0: [14 x 18]
+  ....................
+  ...*................
+  ...*................
+  .****...............
+  ....*......***......
+  ....*.....**.*......
+  ....**....*..*......
+  .....*....*..**.....
+  .....*...**...*.....
+  .....**..*....*.....
+  ......*..*....**....
+  ......*.**.....*....
+  ......***......*....
+  ...............****.
+  ................*...
+  ....................
+index 1: [15 x 17]
+  ...................
+  ...*...............
+  ...*...............
+  .****..............
+  ....*......***.....
+  ....*.....**.*.....
+  ....**....*..*.....
+  .....*....*..**....
+  .....*...**...*....
+  .....**..*....*....
+  ......*..*....**...
+  ......*.**.....*...
+  ......***......*...
+  ...............***.
+  ................*..
+  ................*..
+  ...................
+
