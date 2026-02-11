@@ -13,6 +13,7 @@
 
 typedef unsigned char uchar;
 typedef unsigned int uint;
+typedef signed int sint;
 typedef unsigned long ulong;
 typedef unsigned long long ullong;
 typedef unsigned char bool;
@@ -300,40 +301,6 @@ void shape_mark_point(t_shape *s, t_point p) {
 
 void shape_mark_disallowed(t_shape *s, t_point p) {
     shape_mark(s, s->disallowed, p);
-}
-
-t_iter *shape_neighbours(t_shape *s) {
-    t_iter *it = sn_iter;
-    it->x = s->x;
-    it->y = s->y;
-    it->i = 0;
-    it->j = 1;
-    t_poly *nb = &it->p[0];
-    bzero(nb, raw_poly_size(it->x, it->y));
-    bool any = 0;
-    t_point p, q;
-    for (p.x = 1; p.x <= s->x; ++p.x) {
-        for (p.y = 1; p.y <= s->y; ++p.y) {
-            if (!shape_test_point(s, p))
-                continue;
-            any = 1;
-            q = (t_point){ p.x + 1, p.y };
-            if (!shape_test(s, nb, q) && !shape_test_disallowed(s, q))
-                shape_mark(s, nb, q);
-            q = (t_point){ p.x - 1, p.y };
-            if (!shape_test(s, nb, q) && !shape_test_disallowed(s, q))
-                shape_mark(s, nb, q);
-            q = (t_point){ p.x, p.y + 1 };
-            if (!shape_test(s, nb, q) && !shape_test_disallowed(s, q))
-                shape_mark(s, nb, q);
-            q = (t_point){ p.x, p.y - 1 };
-            if (!shape_test(s, nb, q) && !shape_test_disallowed(s, q))
-                shape_mark(s, nb, q);
-        }
-    }
-    if (!any)
-        shape_mark(s, nb, (t_point){ 1, 1 });
-    return it;
 }
 
 void read_error(t_reader *r, char *legend) {
@@ -698,6 +665,72 @@ void bitmove(uchar *dptr, uint doff, uchar *sptr, uint soff, uint len) {
         soff += try;
         len -= try;
     }
+}
+
+void mem_shift_or(uchar *dest, uchar *src, size_t length, sint shift) {
+    if (shift == -1) {
+        for (size_t i = 0; i < length - 1; ++i)
+            dest[i] |= (src[i] >> 1) | ((src[i + 1] & 1) << 7);
+        dest[length - 1] |= src[length - 1] >> 1;
+    } else {
+        dest[0] |= (src[0] & 0x7f) << 1;
+        for (size_t i = 1; i < length; ++i)
+            dest[i] |= ((src[i] & 0x7f) << 1) | (src[i - 1] >> 7);
+    }
+}
+
+void mem_or(uchar *dest, uchar *src, size_t length) {
+    while (length >= sizeof(uint)) {
+        *(uint *)dest |= *(uint *)src;
+        dest += sizeof(uint);
+        src += sizeof(uint);
+        length -= sizeof(uint);
+    }
+    while (length--)
+        *dest++ |= *src++;
+}
+
+void mem_andn(uchar *dest, uchar *src, size_t length) {
+    while (length >= sizeof(uint)) {
+        *(uint *)dest &= ~*(uint *)src;
+        dest += sizeof(uint);
+        src += sizeof(uint);
+        length -= sizeof(uint);
+    }
+    while (length--)
+        *dest++ &= ~*src++;
+}
+
+t_iter *shape_neighbours(t_shape *s) {
+    t_iter *it = sn_iter;
+    it->x = s->x;
+    it->y = s->y;
+    it->i = 0;
+    it->j = 1;
+    t_poly *nb = &it->p[0];
+    if (s == emptied) {
+        bzero(nb, raw_poly_size(it->x, it->y));
+        shape_mark(s, nb, (t_point){ 1, 1 });
+        return it;
+    }
+
+    size_t rowsize = shape_row_size(s);
+    /* the memcpy() below means we only need clear the first two rows */
+    bzero(nb, rowsize * 2);
+    for (uint i = 1; i <= s->x; ++i) {
+        uchar *src = &s->points[i * rowsize];
+        uchar *dest = &nb[i * rowsize];
+        memcpy(dest + rowsize, src, rowsize);   /* neighbour (+1, 0) */
+        mem_or(dest - rowsize, src, rowsize);   /* neighbour (-1, 0) */
+        mem_shift_or(dest, src, rowsize, +1);   /* neighbour (0, +1) */
+        mem_shift_or(dest, src, rowsize, -1);   /* neighbour (0, -1) */
+    }
+    for (uint i = 0; i <= s->x + 1; ++i) {
+        uchar *src = &s->disallowed[i * rowsize];
+        uchar *dest = &nb[i * rowsize];
+        mem_andn(dest, src, rowsize);
+    }
+    return it;
 }
 
 void shape_write_pack2(t_shape *s, t_poly *p, uchar *dptr) {
