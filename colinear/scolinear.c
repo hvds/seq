@@ -811,6 +811,9 @@ size_t shape_write_canonical(t_shape *s, uchar *p2) {
         shape_write_pack2(&t, cur, p2cur);
         if (memcmp(p2, p2cur, p2size) > 0)
             memcpy(p2, p2cur, p2size);
+
+        free(t.points);
+        free(t.disallowed);
     }
     assert(bitcount(p2size, p2) == bitcount(shape_poly_size(s), s->points));
     return 2 + p2size;
@@ -1123,6 +1126,7 @@ ulong gen_appended(uint k) {
             ++count;
         }
         iter_free(i);
+        shape_free(s);
     }
     writer_close(w);
     reader_close(r);
@@ -1136,6 +1140,7 @@ void uniq_direct(uint k, t_reader *r, t_writer *w) {
     while (s = shape_fetch(r)) {
         s->index = count++;
         buffer_shape_canonical(b, s);
+        shape_free(s);
     }
     printf("k=%u: read %zu unsorted records (%.2fs)\n", k, count, elapsed());
     buf_uniq(b);
