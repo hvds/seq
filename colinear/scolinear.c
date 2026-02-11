@@ -52,26 +52,22 @@ typedef struct s_writer {
     FILE *f;
 } t_writer;
 
-typedef uchar t_poly;
 typedef struct s_point {
     uint x;
     uint y;
-} t_point;
+} t_point, t_dim;
 typedef struct s_shape {
-    uint x;
-    uint y;
+    t_dim d;
     size_t index;
-    t_poly *points;
-    t_poly *disallowed;
+    uchar *points;
+    uchar *disallowed;
 } t_shape;
 t_shape *emptied, *fetched, *appended, *transed;
 
 typedef struct s_iter {
-    uint x;
-    uint y;
-    uint i;
-    uint j;
-    t_poly p[0];
+    t_dim d;
+    t_point pos;
+    uchar p[0];
 } t_iter;
 t_iter *sn_iter;
 
@@ -184,45 +180,29 @@ t_writer *writer_uniq(uint k) {
     return w;
 }
 
-size_t raw_row_size(uint x, uint y) {
-    uint bits = y + 2;
+size_t row_size(t_dim d) {
+    uint bits = d.y + 2;
     return (bits + 7) / 8;
 }
 
-size_t shape_row_size(t_shape *s) {
-    return raw_row_size(s->x, s->y);
-}
-
-size_t raw_poly_size(uint x, uint y) {
-    return (x + 2) * raw_row_size(x, y);
-}
-
-size_t shape_poly_size(t_shape *s) {
-    return raw_poly_size(s->x, s->y);
+size_t poly_size(t_dim d) {
+    return (d.x + 2) * row_size(d);
 }
 
 size_t max_poly_size(void) {
-    return raw_poly_size(MAXDIM, MAXDIM);
+    return poly_size((t_dim){ MAXDIM, MAXDIM });
 }
 
-size_t raw_pack3_size(uint x, uint y) {
-    uint bits = (x + 2) * (y + 2);
+size_t pack3_size(t_dim d) {
+    uint bits = (d.x + 2) * (d.y + 2);
     return (bits + 4) / 5;
 }
 
-size_t shape_pack3_size(t_shape *s) {
-    return raw_pack3_size(s->x, s->y);
+size_t pack2_size(t_dim d) {
+    return (d.x * d.y + 7) / 8;
 }
 
-size_t raw_pack2_size(uint x, uint y) {
-    return (x * y + 7) / 8;
-}
-
-size_t shape_pack2_size(t_shape *s) {
-    return raw_pack2_size(s->x, s->y);
-}
-
-size_t raw_rec_size(uint x, uint y, e_rec type) {
+size_t rec_size(t_dim d, e_rec type) {
     uint size = 1;  /* type marker */
     switch (type) {
         default:
@@ -231,20 +211,16 @@ size_t raw_rec_size(uint x, uint y, e_rec type) {
         case REC_C:
             size += 2;                      /* canonical size */
             /* pack2 size is symmetric in (x, y) */
-            size += raw_pack2_size(x, y);   /* canonical data */
+            size += pack2_size(d);          /* canonical data */
         case REC_B:
             size += 5;                      /* index */
         case REC_A:
             size += 2;                      /* oriented size */
-            size += raw_pack3_size(x, y);   /* full data */
+            size += pack3_size(d);          /* full data */
         case REC_ALIGN:
             ;                               /* align is type marker only */
     }
     return size;
-}
-
-size_t shape_rec_size(t_shape *s, e_rec type) {
-    return raw_rec_size(s->x, s->y, type);
 }
 
 void shape_free(t_shape *s) {
@@ -253,9 +229,9 @@ void shape_free(t_shape *s) {
     free(s);
 }
 
-t_shape *shape_new(uint x, uint y) {
+t_shape *shape_new(t_dim d) {
     t_shape *s = malloc(sizeof(t_shape));
-    size_t size = raw_poly_size(x, y);
+    size_t size = poly_size(d);
     s->points = malloc(size);
     s->disallowed = malloc(size);
     return s;
@@ -263,44 +239,43 @@ t_shape *shape_new(uint x, uint y) {
 
 t_shape *shape_empty(void) {
     t_shape *s = emptied;
-    s->x = 1;
-    s->y = 1;
-    bzero(s->points, raw_poly_size(1, 1));
-    bzero(s->disallowed, raw_poly_size(1, 1));
+    s->d = (t_dim){ 1, 1 };
+    bzero(s->points, poly_size(s->d));
+    bzero(s->disallowed, poly_size(s->d));
     return s;
 }
 
-bool shape_test(t_shape *s, t_poly *py, t_point p) {
-    uint bit = p.x * shape_row_size(s) * 8 + p.y;
+bool poly_test(t_dim d, uchar *py, t_point p) {
+    uint bit = p.x * row_size(d) * 8 + p.y;
     return (
-        py[bit / (8 * sizeof(t_poly))] & (1 << (bit % (8 * sizeof(t_poly))))
+        py[bit / 8] & (1 << (bit % 8))
     ) ? 1 : 0;
 }
 
 bool shape_test_point(t_shape *s, t_point p) {
-    return shape_test(s, s->points, p);
+    return poly_test(s->d, s->points, p);
 }
 
 bool shape_test_disallowed(t_shape *s, t_point p) {
-    return shape_test(s, s->disallowed, p);
+    return poly_test(s->d, s->disallowed, p);
 }
 
-void shape_unmark(t_shape *s, t_poly *py, t_point p) {
-    uint bit = p.x * shape_row_size(s) * 8 + p.y;
-    py[bit / (8 * sizeof(t_poly))] &= ~(1 << (bit % (8 * sizeof(t_poly))));
+void poly_unmark(t_dim d, uchar *py, t_point p) {
+    uint bit = p.x * row_size(d) * 8 + p.y;
+    py[bit / 8] &= ~(1 << (bit % 8));
 }
 
-void shape_mark(t_shape *s, t_poly *py, t_point p) {
-    uint bit = p.x * shape_row_size(s) * 8 + p.y;
-    py[bit / (8 * sizeof(t_poly))] |= 1 << (bit % (8 * sizeof(t_poly)));
+void poly_mark(t_dim d, uchar *py, t_point p) {
+    uint bit = p.x * row_size(d) * 8 + p.y;
+    py[bit / 8] |= 1 << (bit % 8);
 }
 
 void shape_mark_point(t_shape *s, t_point p) {
-    shape_mark(s, s->points, p);
+    poly_mark(s->d, s->points, p);
 }
 
 void shape_mark_disallowed(t_shape *s, t_point p) {
-    shape_mark(s, s->disallowed, p);
+    poly_mark(s->d, s->disallowed, p);
 }
 
 void read_error(t_reader *r, char *legend) {
@@ -333,16 +308,15 @@ void read_xy(t_reader *r, t_shape *s) {
     size_t read = fread(in, 1, 2, r->f);
     if (read != 2)
         read_error(r, "xy");
-    s->x = in[0];
-    s->y = in[1];
+    s->d = (t_dim){ in[0], in[1] };
 }
 
 void read_pack3(t_reader *r, t_shape *s) {
-    uint p3size = shape_pack3_size(s);
+    uint p3size = pack3_size(s->d);
     uchar in[p3size];
     if (fread(in, 1, p3size, r->f) != p3size)
         read_error(r, "pack3");
-    uint size = shape_poly_size(s);
+    uint size = poly_size(s->d);
     bzero(s->points, size);
     bzero(s->disallowed, size);
     t_point p = { 0, 0 };
@@ -361,9 +335,9 @@ void read_pack3(t_reader *r, t_shape *s) {
             rot = 0;
         } else
             in[off] /= 3;
-        if (++p.y > s->y + 1) {
+        if (++p.y > s->d.y + 1) {
             p.y = 0;
-            if (++p.x > s->x + 1)
+            if (++p.x > s->d.x + 1)
                 break;
         }
     }
@@ -446,11 +420,11 @@ void explodecpy(uchar *dest, uchar *src, uint width, uint rows) {
 }
 
 void diag_shape(t_shape *s, char *legend) {
-    fprintf(stderr, "%s [%u x %u]\n", legend, s->x, s->y);
+    fprintf(stderr, "%s [%u x %u]\n", legend, s->d.x, s->d.y);
     t_point p;
-    for (p.x = 0; p.x <= s->x + 1; ++p.x) {
+    for (p.x = 0; p.x <= s->d.x + 1; ++p.x) {
         fprintf(stderr, "  ");
-        for (p.y = 0; p.y <= s->y + 1; ++p.y) {
+        for (p.y = 0; p.y <= s->d.y + 1; ++p.y) {
             if (shape_test_point(s, p))
                 fprintf(stderr, "*");
             else if (shape_test_disallowed(s, p))
@@ -464,17 +438,16 @@ void diag_shape(t_shape *s, char *legend) {
 
 t_shape *shape_append(t_shape *s0, t_point p) {
     bool shiftx = 0, shifty = 0;
-    if (p.x == 0 || p.x > s0->x)
+    if (p.x == 0 || p.x > s0->d.x)
         shiftx = 1;
-    if (p.y == 0 || p.y > s0->y)
+    if (p.y == 0 || p.y > s0->d.y)
         shifty = 1;
     t_shape *s = appended;
-    s->x = s0->x + shiftx;
-    s->y = s0->y + shifty;
+    s->d = (t_dim){ s0->d.x + shiftx, s0->d.y + shifty };
 
-    size_t psize = shape_poly_size(s0);
-    size_t rsize = shape_row_size(s0);
-    bool shiftr = (shape_row_size(s) != rsize);
+    size_t psize = poly_size(s0->d);
+    size_t rsize = row_size(s0->d);
+    bool shiftr = (row_size(s->d) != rsize);
     if (!shifty || (!shiftr && p.y != 0)) {
         if (!shiftx) {
             /* straight copy */
@@ -516,39 +489,39 @@ t_shape *shape_append(t_shape *s0, t_point p) {
         /* rows are a byte longer, but no shift */
         if (!shiftx) {
             /* just expand row */
-            expandcpy(s->points, s0->points, rsize, s0->x + 2);
-            expandcpy(s->disallowed, s0->disallowed, rsize, s0->x + 2);
+            expandcpy(s->points, s0->points, rsize, s0->d.x + 2);
+            expandcpy(s->disallowed, s0->disallowed, rsize, s0->d.x + 2);
         } else if (p.x != 0) {
             /* expand, then append row */
-            expandcpy(s->points, s0->points, rsize, s0->x + 2);
-            expandcpy(s->disallowed, s0->disallowed, rsize, s0->x + 2);
+            expandcpy(s->points, s0->points, rsize, s0->d.x + 2);
+            expandcpy(s->disallowed, s0->disallowed, rsize, s0->d.x + 2);
             bzero(&s->points[psize], rsize + 1);
             bzero(&s->disallowed[psize], rsize + 1);
         } else {
             /* prepend row, then expand */
             bzero(s->points, rsize + 1);
             bzero(s->disallowed, rsize + 1); 
-            expandcpy(&s->points[rsize], s0->points, rsize, s0->x + 2);
-            expandcpy(&s->disallowed[rsize], s0->disallowed, rsize, s0->x + 2);
+            expandcpy(&s->points[rsize], s0->points, rsize, s0->d.x + 2);
+            expandcpy(&s->disallowed[rsize], s0->disallowed, rsize, s0->d.x + 2);
         }
     } else {
         /* rows are a byte longer, and shift */
         if (!shiftx) {
             /* just explode row */
-            explodecpy(s->points, s0->points, rsize, s0->x + 2);
-            explodecpy(s->disallowed, s0->disallowed, rsize, s0->x + 2);
+            explodecpy(s->points, s0->points, rsize, s0->d.x + 2);
+            explodecpy(s->disallowed, s0->disallowed, rsize, s0->d.x + 2);
         } else if (p.x != 0) {
             /* explode, then append row */
-            explodecpy(s->points, s0->points, rsize, s0->x + 2);
-            explodecpy(s->disallowed, s0->disallowed, rsize, s0->x + 2);
+            explodecpy(s->points, s0->points, rsize, s0->d.x + 2);
+            explodecpy(s->disallowed, s0->disallowed, rsize, s0->d.x + 2);
             bzero(&s->points[psize], rsize + 1);
             bzero(&s->disallowed[psize], rsize + 1);
         } else {
             /* prepend row, then explode */
             bzero(s->points, rsize + 1);
             bzero(s->disallowed, rsize + 1); 
-            explodecpy(&s->points[rsize], s0->points, rsize, s0->x + 2);
-            explodecpy(&s->disallowed[rsize], s0->disallowed, rsize, s0->x + 2);
+            explodecpy(&s->points[rsize], s0->points, rsize, s0->d.x + 2);
+            explodecpy(&s->disallowed[rsize], s0->disallowed, rsize, s0->d.x + 2);
         }
     }
     if (p.x == 0)
@@ -562,8 +535,8 @@ t_shape *shape_append(t_shape *s0, t_point p) {
 
 void write_xy(t_writer *w, t_shape *s) {
     uchar out[2];
-    out[0] = (uchar)s->x;
-    out[1] = (uchar)s->y;
+    out[0] = (uchar)s->d.x;
+    out[1] = (uchar)s->d.y;
     if (fwrite(out, 1, 2, w->f) != 2) {
         fprintf(stderr, "write_xy: %s\n", strerror(errno));
         exit(1);
@@ -571,7 +544,7 @@ void write_xy(t_writer *w, t_shape *s) {
 }
 
 void write_pack3(t_writer *w, t_shape *s) {
-    uint size = shape_pack3_size(s);
+    uint size = pack3_size(s->d);
     uchar out[size];
     t_point p = { 0, 0 };
     uint off = 0, rot = 0, mul = 1;
@@ -589,9 +562,9 @@ void write_pack3(t_writer *w, t_shape *s) {
             mul = 1;
         } else
             mul *= 3;
-        if (++p.y > s->y + 1) {
+        if (++p.y > s->d.y + 1) {
             p.y = 0;
-            if (++p.x > s->x + 1)
+            if (++p.x > s->d.x + 1)
                 break;
         }
     }
@@ -609,8 +582,8 @@ size_t shape_write_index(t_shape *s, uchar *p) {
 
 size_t shape_write_data(t_shape *s, uchar *p) {
     size_t off = 0;
-    p[off++] = s->x;
-    p[off++] = s->y;
+    p[off++] = s->d.x;
+    p[off++] = s->d.y;
     t_point pt = { 0, 0 };
     uint rot = 0, mul = 1;
     while (1) {
@@ -627,9 +600,9 @@ size_t shape_write_data(t_shape *s, uchar *p) {
             mul = 1;
         } else
             mul *= 3;
-        if (++pt.y > s->y + 1) {
+        if (++pt.y > s->d.y + 1) {
             pt.y = 0;
-            if (++pt.x > s->x + 1)
+            if (++pt.x > s->d.x + 1)
                 break;
         }
     }
@@ -703,21 +676,19 @@ void mem_andn(uchar *dest, uchar *src, size_t length) {
 
 t_iter *shape_neighbours(t_shape *s) {
     t_iter *it = sn_iter;
-    it->x = s->x;
-    it->y = s->y;
-    it->i = 0;
-    it->j = 1;
-    t_poly *nb = &it->p[0];
+    it->d = s->d;
+    it->pos = (t_point){ 0, 1 };
+    uchar *nb = &it->p[0];
     if (s == emptied) {
-        bzero(nb, raw_poly_size(it->x, it->y));
-        shape_mark(s, nb, (t_point){ 1, 1 });
+        bzero(nb, poly_size(it->d));
+        poly_mark(it->d, nb, (t_point){ 1, 1 });
         return it;
     }
 
-    size_t rowsize = shape_row_size(s);
+    size_t rowsize = row_size(it->d);
     /* the memcpy() below means we only need clear the first two rows */
     bzero(nb, rowsize * 2);
-    for (uint i = 1; i <= s->x; ++i) {
+    for (uint i = 1; i <= s->d.x; ++i) {
         uchar *src = &s->points[i * rowsize];
         uchar *dest = &nb[i * rowsize];
         memcpy(dest + rowsize, src, rowsize);   /* neighbour (+1, 0) */
@@ -725,7 +696,7 @@ t_iter *shape_neighbours(t_shape *s) {
         mem_shift_or(dest, src, rowsize, +1);   /* neighbour (0, +1) */
         mem_shift_or(dest, src, rowsize, -1);   /* neighbour (0, -1) */
     }
-    for (uint i = 0; i <= s->x + 1; ++i) {
+    for (uint i = 0; i <= s->d.x + 1; ++i) {
         uchar *src = &s->disallowed[i * rowsize];
         uchar *dest = &nb[i * rowsize];
         mem_andn(dest, src, rowsize);
@@ -733,41 +704,41 @@ t_iter *shape_neighbours(t_shape *s) {
     return it;
 }
 
-void shape_write_pack2(t_shape *s, t_poly *p, uchar *dptr) {
-    uint size = shape_row_size(s);
+void shape_write_pack2(t_shape *s, uchar *p, uchar *dptr) {
+    uint size = row_size(s->d);
     uint doff = 0;
-    for (uint i = 1; i <= s->x; ++i) {
-        bitmove(dptr, doff, (uchar *)&p[i * size], 1, s->y);
-        doff += s->y;
+    for (uint i = 1; i <= s->d.x; ++i) {
+        bitmove(dptr, doff, (uchar *)&p[i * size], 1, s->d.y);
+        doff += s->d.y;
     }
 }
 
-void shape_poly_invert(t_shape *s, t_poly *src, t_poly *dest) {
-    uint size = shape_row_size(s);
+void shape_poly_invert(t_shape *s, uchar *src, uchar *dest) {
+    uint size = row_size(s->d);
     if (src == dest) {
         uchar temp[size];
-        for (uint i = 0; i + i < s->x + 1; ++i) {
-            uint j = s->x + 1 - i;
+        for (uint i = 0; i + i < s->d.x + 1; ++i) {
+            uint j = s->d.x + 1 - i;
             memcpy(temp, src + i * size, size);
             memcpy(dest + i * size, src + j * size, size);
             memcpy(dest + j * size, temp, size);
         }
     } else {
-        for (uint i = 0; i <= s->x + 1; ++i) {
-            uint j = s->x + 1 - i;
+        for (uint i = 0; i <= s->d.x + 1; ++i) {
+            uint j = s->d.x + 1 - i;
             memcpy(dest + j * size, src + i * size, size);
         }
     }
 }
 
-void shape_poly_reverse(t_shape *s, t_poly *src, t_poly *dest) {
-    uint size = shape_row_size(s);
+void shape_poly_reverse(t_shape *s, uchar *src, uchar *dest) {
+    uint size = row_size(s->d);
     uchar temp[size + 1];
-    uint shift = 7 - ((s->y + 1) & 7);
-    for (uint i = 0; i <= s->x + 1; ++i) {
+    uint shift = 7 - ((s->d.y + 1) & 7);
+    for (uint i = 0; i <= s->d.x + 1; ++i) {
         if (shift) {
             temp[0] = 0;
-            bitmove(temp, shift, src + i * size, 0, s->y + 1);
+            bitmove(temp, shift, src + i * size, 0, s->d.y + 1);
         } else
             memmove(temp, src + i * size, size);
         for (uint j = 0; j < size; ++j) {
@@ -777,15 +748,13 @@ void shape_poly_reverse(t_shape *s, t_poly *src, t_poly *dest) {
     }
 }
 
-void shape_poly_trans(t_shape *s, t_poly *src, t_poly *dest) {
-    t_shape t;
-    t.x = s->y;
-    t.y = s->x;
-    bzero(dest, shape_poly_size(&t));
-    for (uint i = 1; i <= s->x; ++i)
-        for (uint j = 1; j <= s->y; ++j)
+void shape_poly_trans(t_shape *s, uchar *src, uchar *dest) {
+    t_dim td = (t_dim){ s->d.y, s->d.x };
+    bzero(dest, poly_size(td));
+    for (uint i = 1; i <= s->d.x; ++i)
+        for (uint j = 1; j <= s->d.y; ++j)
             if (shape_test_point(s, (t_point){ i, j }))
-                shape_mark(&t, dest, (t_point){ j, i });
+                poly_mark(td, dest, (t_point){ j, i });
 }
 
 uint bitcount(size_t size, uchar *poly) {
@@ -796,22 +765,22 @@ uint bitcount(size_t size, uchar *poly) {
 }
 
 size_t shape_write_canonical(t_shape *s, uchar *p2) {
-    uint x = s->x, y = s->y;
-    bool do_trans = (x > y) ? 1 : 0;
-    size_t size = raw_poly_size(x, y);
+    t_dim d = s->d;
+    bool do_trans = (d.x > d.y) ? 1 : 0;
+    size_t size = poly_size(d);
     if (do_trans) {
         /* poly size is asymmetric in (x, y), make sure we have room */
-        size_t tsize = raw_poly_size(y, x);
+        size_t tsize = poly_size((t_dim){ d.y, d.x });
         if (tsize > size)
             size = tsize;
     }
-    *p2++ = (uchar)(do_trans ? y : x);
-    *p2++ = (uchar)(do_trans ? x : y);
+    *p2++ = (uchar)(do_trans ? d.y : d.x);
+    *p2++ = (uchar)(do_trans ? d.x : d.y);
 
-    size_t p2size = shape_pack2_size(s);
+    size_t p2size = pack2_size(d);
     uchar p2cur[p2size], cur[size];
 
-    if (x <= y) {
+    if (d.x <= d.y) {
         shape_write_pack2(s, s->points, p2);
 
         shape_poly_invert(s, s->points, cur);
@@ -829,13 +798,12 @@ size_t shape_write_canonical(t_shape *s, uchar *p2) {
         if (memcmp(p2, p2cur, p2size) > 0)
             memcpy(p2, p2cur, p2size);
     }
-    if (x >= y) {
+    if (d.x >= d.y) {
         t_shape *t = transed;
-        t->x = y;
-        t->y = x;
+        t->d = (t_dim){ d.y, d.x };
         shape_poly_trans(s, s->points, t->points);
 
-        if (s->x > s->y) {
+        if (d.x > d.y) {
             shape_write_pack2(t, t->points, p2);
         } else {
             shape_write_pack2(t, t->points, p2cur);
@@ -858,7 +826,7 @@ size_t shape_write_canonical(t_shape *s, uchar *p2) {
         if (memcmp(p2, p2cur, p2size) > 0)
             memcpy(p2, p2cur, p2size);
     }
-    assert(bitcount(p2size, p2) == bitcount(shape_poly_size(s), s->points));
+    assert(bitcount(p2size, p2) == bitcount(poly_size(d), s->points));
     return 2 + p2size;
 }
 
@@ -881,54 +849,47 @@ void shape_write(t_shape *s, t_writer *w) {
     }
 }
 
-void iter_free(t_iter *i) {
-    ;
-}
-
 t_point shape_iter(t_iter *i) {
-    t_shape t;
-    t.x = i->x;
-    t.y = i->y;
-    t_poly *p = &i->p[0];
-    while (i->i <= i->x + 1) {
-        while (i->j <= i->y + 1) {
-            if (shape_test(&t, p, (t_point){ i->i, i->j }))
-                return (t_point){ i->i, i->j++ };
-            ++i->j;
+    t_dim d = i->d;
+    t_point pos = i->pos;
+    uchar *p = &i->p[0];
+    while (pos.x <= d.x + 1) {
+        while (pos.y <= d.y + 1) {
+            if (poly_test(d, p, pos)) {
+                i->pos = (t_point){ pos.x, pos.y + 1 };
+                return pos;
+            }
+            ++pos.y;
         }
-        ++i->i;
-        i->j = 0;
+        ++pos.x;
+        pos.y = 0;
     }
     return (t_point){ 0, 0 };
 }
 
 void iter_remove(t_iter *i, t_point p) {
-    t_shape t;
-    t.x = i->x;
-    t.y = i->y;
-    shape_unmark(&t, &i->p[0], p);
+    poly_unmark(i->d, &i->p[0], p);
 }
 
 void iter_reset(t_iter *i) {
-    i->i = 0;
-    i->j = 1;
+    i->pos = (t_point){ 0, 1 };
 }
 
 /* Returns false if the suggested point would form any line of more than opt_n
  * points in the shape, else true.
  */
 bool test_colinear(t_shape *s, t_point p) {
-    /* existing points are in the range {1, 1} .. {s->x, s->y} */
-    uint exp = (p.x < s->x) ? s->x - p.x : 0;
+    /* existing points are in the range {1, 1} .. {s->d.x, s->d.y} */
+    uint exp = (p.x < s->d.x) ? s->d.x - p.x : 0;
     uint exm = (p.x > 1) ? p.x - 1 : 0;
-    uint eyp = (p.y < s->y) ? s->y - p.y : 0;
+    uint eyp = (p.y < s->d.y) ? s->d.y - p.y : 0;
     uint eym = (p.y > 1) ? p.y - 1 : 0;
     t_point q;
     uint seen;
     for (uint fx = 1; (exp / fx) + (exm / fx) >= opt_n; ++fx) {
         for (uint fy = 1; (eyp / fy) + (eym / fy) >= opt_n; ++fy) {
             seen = 0;
-            for (uint m = 1; p.x + m * fx <= s->x && p.y + m * fy <= s->y; ++m) {
+            for (uint m = 1; p.x + m * fx <= s->d.x && p.y + m * fy <= s->d.y; ++m) {
                 q = (t_point){ p.x + m * fx, p.y + m * fy };
                 if (!shape_test_point(s, q))
                     continue;
@@ -946,7 +907,7 @@ bool test_colinear(t_shape *s, t_point p) {
             }
 
             seen = 0;
-            for (uint m = 1; p.x + m * fx <= s->x && p.y >= m * fy + 1; ++m) {
+            for (uint m = 1; p.x + m * fx <= s->d.x && p.y >= m * fy + 1; ++m) {
                 q = (t_point){ p.x + m * fx, p.y - m * fy };
                 if (!shape_test_point(s, q))
                     continue;
@@ -954,7 +915,7 @@ bool test_colinear(t_shape *s, t_point p) {
                 if (seen >= opt_n)
                     return 0;
             }
-            for (uint m = 1; p.x >= m * fx + 1 && p.y + m * fy <= s->y; ++m) {
+            for (uint m = 1; p.x >= m * fx + 1 && p.y + m * fy <= s->d.y; ++m) {
                 q = (t_point){ p.x - m * fx, p.y + m * fy };
                 if (!shape_test_point(s, q))
                     continue;
@@ -964,9 +925,9 @@ bool test_colinear(t_shape *s, t_point p) {
             }
         }
     }
-    if (p.x >= 1 && p.x <= s->x) {
+    if (p.x >= 1 && p.x <= s->d.x) {
         seen = 0;
-        for (uint qy = 1; qy <= s->y; ++qy) {
+        for (uint qy = 1; qy <= s->d.y; ++qy) {
             q = (t_point){ p.x, qy };
             if (qy == p.y || !shape_test_point(s, q))
                 continue;
@@ -975,9 +936,9 @@ bool test_colinear(t_shape *s, t_point p) {
                 return 0;
         }
     }
-    if (p.y >= 1 && p.y <= s->y) {
+    if (p.y >= 1 && p.y <= s->d.y) {
         seen = 0;
-        for (uint qx = 1; qx <= s->x; ++qx) {
+        for (uint qx = 1; qx <= s->d.x; ++qx) {
             q = (t_point){ qx, p.y };
             if (qx == p.x || !shape_test_point(s, q))
                 continue;
@@ -1038,7 +999,7 @@ int canon_comparator(const void *va, const void *vb) {
     uchar *b = &context[*(ssize_t *)vb];
     bytecmp(1);
     bytecmp(2);
-    uint p2size = raw_pack2_size(a[1], a[2]);
+    uint p2size = pack2_size((t_dim){ a[1], a[2] });
     for (uint i = 0; i < p2size; ++i)
         bytecmp(3 + i);
     /* shapes are canonically identical, order by index */
@@ -1081,7 +1042,7 @@ void buf_uniq(t_buf *b) {
         ssize_t s2 = b->ptr[i];
         if (buf[s1 + 1] != buf[s2 + 1] || buf[s1 + 2] != buf[s2 + 2])
             continue;
-        uint p2size = raw_pack2_size(buf[s1 + 1], buf[s1 + 2]);
+        uint p2size = pack2_size((t_dim){ buf[s1 + 1], buf[s1 + 2] });
         if (memcmp(&buf[s1 + 3], &buf[s2 + 3], p2size))
             continue;
         /* keep first pointer, but move it down so loop can continue */
@@ -1097,20 +1058,20 @@ void buf_write(t_buf *b, t_writer *w) {
     uchar *buf = b->buf;
     for (size_t i = 0; i < b->ccount; ++i) {
         uchar *s = &buf[b->ptr[i]];
-        uint x = s[1], y = s[2];
-        uint rsize = raw_rec_size(x, y, w->type);
+        t_dim d = (t_dim){ s[1], s[2] };
+        uint rsize = rec_size(d, w->type);
         switch (w->type) {
           case REC_C:
             /* ok, write rsize bytes from s */
             break;
           case REC_B:
             /* skip (x, y, pack2) */
-            s += 2 + raw_pack2_size(x, y);
+            s += 2 + pack2_size(d);
             s[0] = (uchar)REC_B;
             break;
           case REC_A:
             /* skip (x, y, pack2, index) */
-            s += 2 + raw_pack2_size(x, y) + 5;
+            s += 2 + pack2_size(d) + 5;
             s[0] = (uchar)REC_A;
             break;
           default:
@@ -1126,7 +1087,7 @@ void buf_write(t_buf *b, t_writer *w) {
 }
 
 void buffer_shape_canonical(t_buf *b, t_shape *s) {
-    buf_grow(b, shape_rec_size(s, REC_C));
+    buf_grow(b, rec_size(s->d, REC_C));
     uchar *bp = b->buf;
     size_t off = b->bcount;
     b->ptr[b->ccount++] = (ssize_t)off;
@@ -1143,7 +1104,7 @@ ulong gen_appended(uint k) {
     ulong count = 0;
     t_shape *s;
     while (s = shape_fetch(r)) {
-        assert(bitcount(shape_poly_size(s), s->points) == k - 1);
+        assert(bitcount(poly_size(s->d), s->points) == k - 1);
         t_iter *i = shape_neighbours(s);
         while (1) {
             t_point p = shape_iter(i);
@@ -1163,11 +1124,10 @@ ulong gen_appended(uint k) {
                 break;
             shape_mark_disallowed(s, p);
             t_shape *s2 = shape_append(s, p);
-            assert(bitcount(shape_poly_size(s2), s2->points) == k);
+            assert(bitcount(poly_size(s2->d), s2->points) == k);
             shape_write(s2, w);
             ++count;
         }
-        iter_free(i);
     }
     writer_close(w);
     reader_close(r);
@@ -1215,10 +1175,10 @@ void run(void) {
 void init(void) {
     init_rev();
     sn_iter = malloc(sizeof(t_iter) + max_poly_size());
-    emptied = shape_new(1, 1);
-    fetched = shape_new(MAXDIM, MAXDIM);
-    appended = shape_new(MAXDIM, MAXDIM);
-    transed = shape_new(MAXDIM, MAXDIM);
+    emptied = shape_new((t_dim){ 1, 1 });
+    fetched = shape_new((t_dim){ MAXDIM, MAXDIM });
+    appended = shape_new((t_dim){ MAXDIM, MAXDIM });
+    transed = shape_new((t_dim){ MAXDIM, MAXDIM });
 }
 
 void done(void) {
