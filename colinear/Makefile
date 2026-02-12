@@ -1,7 +1,7 @@
-all: dcolinear scolinear
+all: dbreadth obreadth
 
-scolinear: Makefile scolinear.c
-	gcc -g -O6 -o scolinear scolinear.c
+obreadth: Makefile breadth.c poly.c poly.h
+	gcc -g -O6 -o obreadth breadth.c poly.c
 
-dcolinear: Makefile scolinear.c
-	gcc -g -O0 -o dcolinear scolinear.c
+dbreadth: Makefile breadth.c poly.c poly.h
+	gcc -g -O0 -o dbreadth breadth.c poly.c
