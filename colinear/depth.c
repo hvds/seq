@@ -27,7 +27,8 @@ typedef struct s_level {
     uint cur;
     uint max;
 } t_level;
-t_level levels[MAXDEPTH];
+t_level *levels = NULL;
+uint maxdepth = 0;
 uint level;
 
 double t0 = 0;
@@ -128,6 +129,15 @@ void init_time(void) {
     }
 }
 
+void resize_levels(uint depth) {
+    levels = realloc(levels, depth * sizeof(t_level));
+    for (uint i = maxdepth; i < depth; ++i) {
+        levels[i].s = shape_new((t_dim){ MAXDIM, MAXDIM });
+        levels[i].i = malloc(sizeof(t_iter) + max_poly_size());
+    }
+    maxdepth = depth;
+}
+
 void run(void) {
     shape_empty(levels[0].s);
     level = 0;
@@ -150,6 +160,10 @@ void run(void) {
         }
         ++cur->cur;
         shape_mark_disallowed(cur->s, p);
+        if (level + 1 >= maxdepth) {
+            resize_levels(maxdepth * 3 / 2);
+            cur = &levels[level];
+        }
         ++level;
         next = &levels[level];
         shape_append(next->s, cur->s, p);
@@ -185,14 +199,11 @@ void init(void) {
     init_diag();
     init_time();
     init_poly();
-    for (uint i = 0; i < MAXDEPTH; ++i) {
-        levels[i].s = shape_new((t_dim){ MAXDIM, MAXDIM });
-        levels[i].i = malloc(sizeof(t_iter) + max_poly_size());
-    }
+    resize_levels(100);
 }
 
 void done(void) {
-    for (uint i = 0; i < MAXDEPTH; ++i) {
+    for (uint i = 0; i < maxdepth; ++i) {
         shape_free(levels[i].s);
         free(levels[i].i);
     }
@@ -213,8 +224,8 @@ int main(int argc, char **argv) {
         exit(1);
     }
     opt_n = strtoul(argv[argi], 0, 10);
-    if (opt_n < 2 || opt_n > 5) {
-        fprintf(stderr, "Expected 2 <= n <= 5, not %u\n", opt_n);
+    if (opt_n < 2 || opt_n > 8) {
+        fprintf(stderr, "Expected 2 <= n <= 8, not %u\n", opt_n);
         exit(1);
     }
     init();
