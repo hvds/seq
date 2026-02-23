@@ -41,10 +41,14 @@ void done_poly(void) {
     shape_free(transed);
 }
 
-void shape_empty(t_shape *s) {
-    s->d = (t_dim){ 1, 1 };
+void shape_reset(t_shape *s) {
     bzero(s->points, poly_size(s->d));
     bzero(s->disallowed, poly_size(s->d));
+}
+
+void shape_empty(t_shape *s) {
+    s->d = (t_dim){ 1, 1 };
+    shape_reset(s);
 }
 
 bool shiftcpy(uchar *dest, uchar *src, size_t n) {
@@ -98,20 +102,39 @@ void explodecpy(uchar *dest, uchar *src, uint width, uint rows) {
     }
 }
 
-void diag_shape(t_shape *s, char *legend) {
-    fprintf(stderr, "%s [%u x %u]\n", legend, s->d.x, s->d.y);
+void report_shape(char *buf, size_t bufsize, t_shape *s) {
     t_point p;
+    uint off = 0;
+    off += snprintf(&buf[off], bufsize - off,
+            "%u:%u:", s->d.x, s->d.y);
     for (p.x = 0; p.x <= s->d.x + 1; ++p.x) {
-        fprintf(stderr, "  ");
+        if (p.x)
+            off += snprintf(&buf[off], bufsize - off, "/");
         for (p.y = 0; p.y <= s->d.y + 1; ++p.y) {
             if (shape_test_point(s, p))
-                fprintf(stderr, "*");
+                off += snprintf(&buf[off], bufsize - off, "*");
             else if (shape_test_disallowed(s, p))
-                fprintf(stderr, "o");
+                off += snprintf(&buf[off], bufsize - off, "o");
             else
-                fprintf(stderr, ".");
+                off += snprintf(&buf[off], bufsize - off, ".");
         }
-        fprintf(stderr, "\n");
+    }
+}
+
+void diag_shape(t_shape *s, char *legend) {
+    printf("%s [%u x %u]\n", legend, s->d.x, s->d.y);
+    t_point p;
+    for (p.x = 0; p.x <= s->d.x + 1; ++p.x) {
+        printf("  ");
+        for (p.y = 0; p.y <= s->d.y + 1; ++p.y) {
+            if (shape_test_point(s, p))
+                printf("*");
+            else if (shape_test_disallowed(s, p))
+                printf("o");
+            else
+                printf(".");
+        }
+        printf("\n");
     }
 }
 

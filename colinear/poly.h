@@ -46,6 +46,15 @@ static inline size_t pack2_size(t_dim d) {
     return (d.x * d.y + 7) / 8;
 }
 
+static inline size_t report_size(t_dim d) {
+    /* "X:Y:<bits>\0" */
+#if MAXDIM < 1000
+    return 3 + 1 + 3 + (d.x + 2) * (d.y + 3) + 1;
+#else
+#   error "check MAXDIM"
+#endif
+}
+
 static inline bool poly_test(t_dim d, uchar *py, t_point p) {
     uint bit = p.x * row_size(d) * 8 + p.y;
     return (
@@ -99,6 +108,8 @@ extern void done_poly(void);
 extern void shape_free(t_shape *s);
 extern t_shape *shape_new(t_dim d);
 extern void shape_empty(t_shape *s);
+extern void shape_reset(t_shape *s);
+extern void report_shape(char *buf, size_t bufsize, t_shape *s);
 extern void diag_shape(t_shape *s, char *legend);
 extern t_shape *shape_append(t_shape *dest, t_shape *src, t_point p);
 extern void shape_neighbours(t_iter *it, t_shape *s);
