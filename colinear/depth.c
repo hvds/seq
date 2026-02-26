@@ -30,6 +30,7 @@ typedef struct s_level {
 t_level *levels = NULL;
 uint maxdepth = 0;
 uint level;
+uint bestsize = 0;
 uint maxsize = 0;
 uint *rstack = NULL;
 uint rstacksize = 0;
@@ -47,6 +48,9 @@ FILE *rfp = NULL;   /* file handle to log file */
 double diag_delay = 1, log_delay = 600;
 timer_t diag_timerid, log_timerid;
 volatile bool need_work, need_diag, need_log;
+uint timed_level = 0;
+uint timed_delay;
+uint next_timed;
 
 double seconds(double t1) {
     return (t1 - t0);
@@ -90,7 +94,7 @@ void report(char *format, ...) {
 }
 
 char buf[4096];
-void diag_prog(uint level) {
+uint diag_prog(uint level) {
     double t1 = utime();
     size_t off = 0;
     for (uint i = 0; i < level; ++i) {
@@ -108,6 +112,12 @@ void diag_prog(uint level) {
         need_log = 0;
     }
     need_work = 0;
+    if (timed_level && --next_timed == 0) {
+        next_timed = timed_delay;
+        maxsize = (timed_level < level) ? timed_level : level;
+        return maxsize;
+    }
+    return level;
 }
 
 void parse_305(char *s) {
@@ -141,9 +151,12 @@ void report_best(uint size, t_shape *shape, bool running) {
         need_diag = 1;
         need_log = 1;
         diag_prog(size);
+        next_timed = timed_delay;
     }
     keep_diag();
-    printf("size %u (%.2f)", size, seconds(t1));
+    if (bestsize < size)
+        bestsize = size;
+    printf("size %u/%u (%.2f)", size, bestsize, seconds(t1));
     diag_shape(shape, ":");
     maxsize = size;
 
@@ -361,7 +374,7 @@ void run(void) {
     while (1) {
       next_neighbour:
         if (need_diag)
-            diag_prog(level);
+            level = diag_prog(level);
         cur = &levels[level];
         t_point p = shape_iter(cur->i);
         if (p.x == 0 && p.y == 0) {
@@ -406,6 +419,8 @@ void init(void) {
             fail("%s: %s", rpath, strerror(errno));
         setlinebuf(rfp);
     }
+    if (timed_level)
+        next_timed = timed_delay;
 }
 
 void done(void) {
@@ -428,6 +443,16 @@ int main(int argc, char **argv) {
         if (arg[1] == 'r') {
             rpath = malloc(strlen(&arg[2]) + 1);
             strcpy(rpath, &arg[2]);
+        } else if (arg[1] == 't') {
+            char *s = strchr(&arg[2], '=');
+            if (s == NULL) {
+                fprintf(stderr, "Expected '-t<level>=<seconds>', not '%s'\n",
+                        arg);
+                exit(1);
+            }
+            *s++ = 0;
+            timed_level = strtoul(&arg[2], NULL, 10);
+            timed_delay = strtoul(s, NULL, 10);
         } else {
             fprintf(stderr, "Unknown option '%s'\n", arg);
             exit(1);
